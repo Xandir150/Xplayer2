@@ -36,138 +36,230 @@
             <!-- Handle opening media from file managers and other apps -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:mimeType="video/*" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:mimeType="audio/*" />
             </intent-filter>
             <!-- HLS playlists (some file managers use these specific MIME types) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:mimeType="application/x-mpegURL" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:mimeType="application/vnd.apple.mpegurl" />
             </intent-filter>
             <!-- Catch http/https HLS links by URL extension when MIME type is missing -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="http" android:sspPattern=".*\\.m3u8(\?.*)?" />
+
+                <data
+                    android:scheme="http"
+                    android:sspPattern=".*\\.m3u8(\?.*)?" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:sspPattern=".*\\.m3u8(\?.*)?" />
+
+                <data
+                    android:scheme="https"
+                    android:sspPattern=".*\\.m3u8(\?.*)?" />
             </intent-filter>
             <!-- Same, but allow unknown MIME via */* -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:mimeType="*/*" />
-                <data android:scheme="http" android:sspPattern=".*\\.m3u8(\?.*)?" />
+                <data
+                    android:scheme="http"
+                    android:sspPattern=".*\\.m3u8(\?.*)?" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:mimeType="*/*" />
-                <data android:scheme="https" android:sspPattern=".*\\.m3u8(\?.*)?" />
+                <data
+                    android:scheme="https"
+                    android:sspPattern=".*\\.m3u8(\?.*)?" />
             </intent-filter>
             <!-- Some apps send VIEW with application/octet-stream or text/plain -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:mimeType="application/octet-stream" />
-                <data android:scheme="http" android:sspPattern=".*\\.m3u8(\?.*)?" />
+                <data
+                    android:scheme="http"
+                    android:sspPattern=".*\\.m3u8(\?.*)?" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:mimeType="application/octet-stream" />
-                <data android:scheme="https" android:sspPattern=".*\\.m3u8(\?.*)?" />
+                <data
+                    android:scheme="https"
+                    android:sspPattern=".*\\.m3u8(\?.*)?" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:mimeType="text/plain" />
-                <data android:scheme="http" android:sspPattern=".*\\.m3u8(\?.*)?" />
+                <data
+                    android:scheme="http"
+                    android:sspPattern=".*\\.m3u8(\?.*)?" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:mimeType="text/plain" />
-                <data android:scheme="https" android:sspPattern=".*\\.m3u8(\?.*)?" />
+                <data
+                    android:scheme="https"
+                    android:sspPattern=".*\\.m3u8(\?.*)?" />
             </intent-filter>
             <!-- Host-specific fallback for cdn2site.com if app omits extension in data -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="cdn2site.com" />
+
+                <data
+                    android:scheme="https"
+                    android:host="cdn2site.com" />
             </intent-filter>
 
             <!-- Selective: common direct video links over HTTP/HTTPS (no MIME required) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="http" android:sspPattern=".*\\.(mp4|MP4)(\?.*)?" />
-                <data android:scheme="http" android:sspPattern=".*\\.(mkv|MKV)(\?.*)?" />
-                <data android:scheme="http" android:sspPattern=".*\\.(avi|AVI)(\?.*)?" />
-                <data android:scheme="http" android:sspPattern=".*\\.(mov|MOV)(\?.*)?" />
-                <data android:scheme="http" android:sspPattern=".*\\.(webm|WEBM)(\?.*)?" />
-                <data android:scheme="http" android:sspPattern=".*\\.(ts|TS)(\?.*)?" />
-                <data android:scheme="http" android:sspPattern=".*\\.(m4v|M4V)(\?.*)?" />
-                <data android:scheme="http" android:sspPattern=".*\\.(flv|FLV)(\?.*)?" />
-                <data android:scheme="http" android:sspPattern=".*\\.(mpg|MPG)(\?.*)?" />
-                <data android:scheme="http" android:sspPattern=".*\\.(mpeg|MPEG)(\?.*)?" />
+
+                <data
+                    android:scheme="http"
+                    android:sspPattern=".*\\.(mp4|MP4)(\?.*)?" />
+                <data
+                    android:scheme="http"
+                    android:sspPattern=".*\\.(mkv|MKV)(\?.*)?" />
+                <data
+                    android:scheme="http"
+                    android:sspPattern=".*\\.(avi|AVI)(\?.*)?" />
+                <data
+                    android:scheme="http"
+                    android:sspPattern=".*\\.(mov|MOV)(\?.*)?" />
+                <data
+                    android:scheme="http"
+                    android:sspPattern=".*\\.(webm|WEBM)(\?.*)?" />
+                <data
+                    android:scheme="http"
+                    android:sspPattern=".*\\.(ts|TS)(\?.*)?" />
+                <data
+                    android:scheme="http"
+                    android:sspPattern=".*\\.(m4v|M4V)(\?.*)?" />
+                <data
+                    android:scheme="http"
+                    android:sspPattern=".*\\.(flv|FLV)(\?.*)?" />
+                <data
+                    android:scheme="http"
+                    android:sspPattern=".*\\.(mpg|MPG)(\?.*)?" />
+                <data
+                    android:scheme="http"
+                    android:sspPattern=".*\\.(mpeg|MPEG)(\?.*)?" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:sspPattern=".*\\.(mp4|MP4)(\?.*)?" />
-                <data android:scheme="https" android:sspPattern=".*\\.(mkv|MKV)(\?.*)?" />
-                <data android:scheme="https" android:sspPattern=".*\\.(avi|AVI)(\?.*)?" />
-                <data android:scheme="https" android:sspPattern=".*\\.(mov|MOV)(\?.*)?" />
-                <data android:scheme="https" android:sspPattern=".*\\.(webm|WEBM)(\?.*)?" />
-                <data android:scheme="https" android:sspPattern=".*\\.(ts|TS)(\?.*)?" />
-                <data android:scheme="https" android:sspPattern=".*\\.(m4v|M4V)(\?.*)?" />
-                <data android:scheme="https" android:sspPattern=".*\\.(flv|FLV)(\?.*)?" />
-                <data android:scheme="https" android:sspPattern=".*\\.(mpg|MPG)(\?.*)?" />
-                <data android:scheme="https" android:sspPattern=".*\\.(mpeg|MPEG)(\?.*)?" />
+
+                <data
+                    android:scheme="https"
+                    android:sspPattern=".*\\.(mp4|MP4)(\?.*)?" />
+                <data
+                    android:scheme="https"
+                    android:sspPattern=".*\\.(mkv|MKV)(\?.*)?" />
+                <data
+                    android:scheme="https"
+                    android:sspPattern=".*\\.(avi|AVI)(\?.*)?" />
+                <data
+                    android:scheme="https"
+                    android:sspPattern=".*\\.(mov|MOV)(\?.*)?" />
+                <data
+                    android:scheme="https"
+                    android:sspPattern=".*\\.(webm|WEBM)(\?.*)?" />
+                <data
+                    android:scheme="https"
+                    android:sspPattern=".*\\.(ts|TS)(\?.*)?" />
+                <data
+                    android:scheme="https"
+                    android:sspPattern=".*\\.(m4v|M4V)(\?.*)?" />
+                <data
+                    android:scheme="https"
+                    android:sspPattern=".*\\.(flv|FLV)(\?.*)?" />
+                <data
+                    android:scheme="https"
+                    android:sspPattern=".*\\.(mpg|MPG)(\?.*)?" />
+                <data
+                    android:scheme="https"
+                    android:sspPattern=".*\\.(mpeg|MPEG)(\?.*)?" />
             </intent-filter>
 
             <!-- Aggressive: appear for nearly any http/https link regardless of MIME/type -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:scheme="http" />
                 <data android:mimeType="*/*" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:scheme="https" />
                 <data android:mimeType="*/*" />
             </intent-filter>
@@ -186,15 +278,19 @@
             <!-- Allow file:// scheme in addition to content:// -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:scheme="file" />
                 <data android:mimeType="video/*" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
+
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+
                 <data android:scheme="file" />
                 <data android:mimeType="audio/*" />
             </intent-filter>

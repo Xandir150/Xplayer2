@@ -85,7 +85,8 @@ class SbsMirrorLayout @JvmOverloads constructor(
         val cur = bufferBitmap
         if (cur == null || cur.width != w || cur.height != h) {
             cur?.recycle()
-            bufferBitmap = if (w > 0 && h > 0) Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888) else null
+            bufferBitmap =
+                if (w > 0 && h > 0) Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888) else null
             bufferCanvas = bufferBitmap?.let { Canvas(it) }
         }
     }
@@ -216,12 +217,14 @@ class SbsMirrorLayout @JvmOverloads constructor(
             val cur = buf
             if (cur == null || cur.width != w || cur.height != h) {
                 cur?.recycle()
-                buf = if (w > 0 && h > 0) Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888) else null
+                buf =
+                    if (w > 0 && h > 0) Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888) else null
                 bufCanvas = buf?.let { Canvas(it) }
             }
         }
 
-        override fun gatherTransparentRegion(region: Region?): Boolean = super.gatherTransparentRegion(region)
+        override fun gatherTransparentRegion(region: Region?): Boolean =
+            super.gatherTransparentRegion(region)
     }
 
     override fun generateLayoutParams(attrs: AttributeSet?): LayoutParams {

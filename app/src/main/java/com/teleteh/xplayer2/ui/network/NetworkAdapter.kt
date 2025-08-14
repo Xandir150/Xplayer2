@@ -25,14 +25,17 @@ class NetworkAdapter(
                     oldItem is NetworkItem.DlnaDevice && newItem is NetworkItem.DlnaDevice -> oldItem.usn == newItem.usn && oldItem.location == newItem.location
                     oldItem is NetworkItem.DlnaContainer && newItem is NetworkItem.DlnaContainer ->
                         oldItem.id == newItem.id && oldItem.controlUrl == newItem.controlUrl
+
                     oldItem is NetworkItem.DlnaMedia && newItem is NetworkItem.DlnaMedia ->
                         oldItem.url == newItem.url
+
                     oldItem is NetworkItem.DlnaUp && newItem is NetworkItem.DlnaUp -> true
                     else -> false
                 }
             }
 
-            override fun areContentsTheSame(oldItem: NetworkItem, newItem: NetworkItem): Boolean = oldItem == newItem
+            override fun areContentsTheSame(oldItem: NetworkItem, newItem: NetworkItem): Boolean =
+                oldItem == newItem
         }
     }
 
@@ -45,15 +48,18 @@ class NetworkAdapter(
         holder.bind(getItem(position))
     }
 
-    class VH(itemView: View, private val onClick: (NetworkItem) -> Unit) : RecyclerView.ViewHolder(itemView) {
+    class VH(itemView: View, private val onClick: (NetworkItem) -> Unit) :
+        RecyclerView.ViewHolder(itemView) {
         private val title: TextView = itemView.findViewById(R.id.tvTitle)
         private val sub: TextView = itemView.findViewById(R.id.tvSubtitle)
         private val iconBg: ImageView = itemView.findViewById(R.id.ivIconBg)
         private val icon: ImageView = itemView.findViewById(R.id.ivIcon)
         private var current: NetworkItem? = null
+
         init {
             itemView.setOnClickListener { current?.let(onClick) }
         }
+
         fun bind(item: NetworkItem) {
             current = item
             when (item) {
@@ -63,6 +69,7 @@ class NetworkAdapter(
                     iconBg.setImageResource(R.drawable.bg_circle_smb)
                     icon.setImageResource(R.drawable.ic_smb_24)
                 }
+
                 is NetworkItem.DlnaDevice -> {
                     title.text = item.friendlyName.ifBlank { "DLNA Device" }
                     sub.text = formatHttpSubtitle(item.location)
@@ -78,18 +85,21 @@ class NetworkAdapter(
                         icon.setImageResource(R.drawable.ic_dlna_24)
                     }
                 }
+
                 is NetworkItem.DlnaUp -> {
                     title.text = "…"
                     sub.text = "Вверх"
                     iconBg.setImageResource(R.drawable.bg_circle_dlna)
                     icon.setImageResource(R.drawable.ic_folder_24)
                 }
+
                 is NetworkItem.DlnaContainer -> {
                     title.text = item.title
                     sub.text = "Папка"
                     iconBg.setImageResource(R.drawable.bg_circle_dlna)
                     icon.setImageResource(R.drawable.ic_folder_24)
                 }
+
                 is NetworkItem.DlnaMedia -> {
                     title.text = item.title
                     sub.text = item.mime ?: item.url

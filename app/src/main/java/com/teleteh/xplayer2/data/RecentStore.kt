@@ -75,7 +75,9 @@ class RecentStore(private val context: Context) {
             framePacking = if (has("framePacking") && !isNull("framePacking")) optInt("framePacking") else null,
             sbsEnabled = if (has("sbsEnabled") && !isNull("sbsEnabled")) optBoolean("sbsEnabled") else null
         )
-    } catch (_: Throwable) { null }
+    } catch (_: Throwable) {
+        null
+    }
 
     private fun RecentEntry.toJson(): JSONObject = JSONObject().apply {
         put("uri", uri)
@@ -94,7 +96,13 @@ class RecentStore(private val context: Context) {
         val uri = runCatching { Uri.parse(entry.uri) }.getOrNull() ?: return t
         // Try DISPLAY_NAME
         try {
-            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )
                 ?.use { c ->
                     val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                     if (idx >= 0 && c.moveToFirst()) {
@@ -102,7 +110,8 @@ class RecentStore(private val context: Context) {
                         if (!name.isNullOrBlank()) return name
                     }
                 }
-        } catch (_: Throwable) { /* ignore */ }
+        } catch (_: Throwable) { /* ignore */
+        }
         val last = uri.lastPathSegment ?: entry.uri
         return runCatching { java.net.URLDecoder.decode(last, "UTF-8") }.getOrElse { last }
     }

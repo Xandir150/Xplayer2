@@ -44,7 +44,14 @@ class DlnaDiscovery {
                         if (seen.add(key)) {
                             val info = fetchDeviceInfo(location)
                             withContext(Dispatchers.Main) {
-                                onDevice(NetworkItem.DlnaDevice(info.first ?: "", location, usn, info.second))
+                                onDevice(
+                                    NetworkItem.DlnaDevice(
+                                        info.first ?: "",
+                                        location,
+                                        usn,
+                                        info.second
+                                    )
+                                )
                             }
                         }
                     } catch (_: Exception) {
@@ -100,7 +107,11 @@ class DlnaDiscovery {
                         val uEnd = block.indexOf("</url>")
                         if (uStart >= 0 && uEnd > uStart) {
                             val rel = block.substring(uStart + 5, uEnd).trim()
-                            try { URL(URL(location), rel).toString() } catch (_: Exception) { rel }
+                            try {
+                                URL(URL(location), rel).toString()
+                            } catch (_: Exception) {
+                                rel
+                            }
                         } else null
                     } else null
                 }

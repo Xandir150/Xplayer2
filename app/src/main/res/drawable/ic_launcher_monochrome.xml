@@ -11,12 +11,12 @@
         android:scaleY="3.5">
         <path
             android:fillColor="#000000"
-            android:pathData="M0,12a6,6 0 1,0 12,0a6,6 0 1,0 -12,0z"/>
+            android:pathData="M0,12a6,6 0 1,0 12,0a6,6 0 1,0 -12,0z" />
         <path
             android:fillColor="#000000"
-            android:pathData="M12,12a6,6 0 1,0 12,0a6,6 0 1,0 -12,0z"/>
+            android:pathData="M12,12a6,6 0 1,0 12,0a6,6 0 1,0 -12,0z" />
         <path
             android:fillColor="#000000"
-            android:pathData="M6,11h6v2H6z"/>
+            android:pathData="M6,11h6v2H6z" />
     </group>
 </vector>

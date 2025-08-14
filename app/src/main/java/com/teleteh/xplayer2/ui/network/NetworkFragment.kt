@@ -125,6 +125,7 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
                 // For now, just copy URI to URL field so user can try open (later: SMB browser)
                 view?.findViewById<EditText>(R.id.etUrl)?.setText(item.uri)
             }
+
             is NetworkItem.DlnaUp -> {
                 val control = currentDlnaControlUrl
                 if (control != null && dlnaBackStack.isNotEmpty()) {
@@ -139,13 +140,16 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
                     rebuildInitialList()
                 }
             }
+
             is NetworkItem.DlnaDevice -> {
                 // Resolve control URL and browse root
                 browseDlnaDevice(item)
             }
+
             is NetworkItem.DlnaContainer -> {
                 browseDlnaContainer(item)
             }
+
             is NetworkItem.DlnaMedia -> {
                 // Play media url with better title from DIDL metadata
                 playMediaUrl(item.url, item.title)
@@ -198,7 +202,8 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
         acquireMulticast()
         discovery.discover(viewLifecycleOwner.lifecycleScope) { device ->
             // Append if not already present
-            val exists = items.any { it is NetworkItem.DlnaDevice && it.location == device.location }
+            val exists =
+                items.any { it is NetworkItem.DlnaDevice && it.location == device.location }
             if (!exists) {
                 discoveredDevices.add(device)
                 // Only update list if we are not browsing a DLNA device
@@ -236,19 +241,30 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
                         val url = base + c
                         // Try a lightweight GET; many servers return 405 for GET on control, still proves endpoint exists
                         val ok = com.teleteh.xplayer2.util.Net.pingHttp(url)
-                        if (ok) { control = url; break }
+                        if (ok) {
+                            control = url; break
+                        }
                     }
-                } catch (_: Exception) { }
+                } catch (_: Exception) {
+                }
             }
             if (control == null) {
-                Toast.makeText(requireContext(), "DLNA: ContentDirectory not found", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    requireContext(),
+                    "DLNA: ContentDirectory not found",
+                    Toast.LENGTH_SHORT
+                ).show()
                 return@launch
             }
             currentDlnaControlUrl = control
             try {
                 browseAndShow(control, "0")
             } catch (t: Throwable) {
-                Toast.makeText(requireContext(), "DLNA browse failed: ${t.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    requireContext(),
+                    "DLNA browse failed: ${t.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -313,13 +329,15 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
             }
             DisplayUtils.startOnBestDisplay(requireActivity(), i)
         } catch (e: Exception) {
-            Toast.makeText(requireContext(), "Не удалось открыть: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(requireContext(), "Не удалось открыть: ${e.message}", Toast.LENGTH_SHORT)
+                .show()
         }
     }
 
     private fun acquireMulticast() {
         if (multicastLock == null) {
-            val wifi = requireContext().applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            val wifi =
+                requireContext().applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
             multicastLock = wifi.createMulticastLock("xplayer2-ssdp").apply {
                 setReferenceCounted(false)
                 acquire()

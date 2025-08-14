@@ -28,10 +28,9 @@
                 app:surface_type="none"
                 app:use_controller="true"
                 app:show_buffering="when_playing" />
-            
+
         </FrameLayout>
     </com.teleteh.xplayer2.ui.SbsMirrorLayout>
 
-    
 
 </FrameLayout>

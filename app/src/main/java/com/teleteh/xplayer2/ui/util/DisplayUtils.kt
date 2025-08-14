@@ -14,7 +14,8 @@ object DisplayUtils {
     fun findUltraWideExternalDisplay(context: Context): Display? {
         val dm = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         // Prefer presentation displays
-        val candidates = (dm.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION).asList() + dm.displays.asList())
+        val candidates = (dm.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
+            .asList() + dm.displays.asList())
             .distinctBy { it.displayId }
             .filter { it.displayId != Display.DEFAULT_DISPLAY }
         for (d in candidates) {

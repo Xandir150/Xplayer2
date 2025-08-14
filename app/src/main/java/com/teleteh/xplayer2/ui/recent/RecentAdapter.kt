@@ -21,15 +21,18 @@ class RecentAdapter(
     object Diff : DiffUtil.ItemCallback<RecentEntry>() {
         override fun areItemsTheSame(oldItem: RecentEntry, newItem: RecentEntry): Boolean =
             oldItem.uri == newItem.uri
+
         override fun areContentsTheSame(oldItem: RecentEntry, newItem: RecentEntry): Boolean =
             oldItem == newItem
     }
 
-    class VH(view: View, val onClick: (Int) -> Unit, val onDeleteIdx: (Int) -> Unit) : RecyclerView.ViewHolder(view) {
+    class VH(view: View, val onClick: (Int) -> Unit, val onDeleteIdx: (Int) -> Unit) :
+        RecyclerView.ViewHolder(view) {
         val title: TextView = view.findViewById(R.id.tvTitle)
         val subtitle: TextView = view.findViewById(R.id.tvSubtitle)
         val badge: TextView = view.findViewById(R.id.tvBadge)
         val sbsState: TextView? = view.findViewById(R.id.tvSbsState)
+
         init {
             view.setOnClickListener { onClick(bindingAdapterPosition) }
             view.findViewById<View?>(R.id.btnDelete)?.setOnClickListener {
@@ -40,7 +43,8 @@ class RecentAdapter(
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
         val v = LayoutInflater.from(parent.context).inflate(R.layout.item_recent, parent, false)
-        return VH(v,
+        return VH(
+            v,
             onClick = { pos -> if (pos != RecyclerView.NO_POSITION) onClick(getItem(pos)) },
             onDeleteIdx = { pos -> if (pos != RecyclerView.NO_POSITION) onDelete(getItem(pos)) }
         )
@@ -78,7 +82,13 @@ class RecentAdapter(
         val uri = Uri.parse(entry.uri)
         // 2) Try DISPLAY_NAME from provider
         try {
-            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )
                 ?.use { c ->
                     val idx = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                     if (idx >= 0 && c.moveToFirst()) {
@@ -86,10 +96,15 @@ class RecentAdapter(
                         if (!name.isNullOrBlank()) return name
                     }
                 }
-        } catch (_: Throwable) { /* ignore */ }
+        } catch (_: Throwable) { /* ignore */
+        }
         // 3) Fallback to decoded lastPathSegment
         val last = uri.lastPathSegment ?: entry.uri
-        return try { java.net.URLDecoder.decode(last, "UTF-8") } catch (_: Throwable) { last }
+        return try {
+            java.net.URLDecoder.decode(last, "UTF-8")
+        } catch (_: Throwable) {
+            last
+        }
     }
 
     private fun formatMs(ms: Long): String {
@@ -97,6 +112,10 @@ class RecentAdapter(
         val h = totalSec / 3600
         val m = (totalSec % 3600) / 60
         val s = totalSec % 60
-        return if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%02d:%02d", m, s)
+        return if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format(
+            "%02d:%02d",
+            m,
+            s
+        )
     }
 }

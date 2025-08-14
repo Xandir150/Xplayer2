@@ -85,14 +85,16 @@ class PlayerActivity : AppCompatActivity() {
         // Ensure PlayerView's internal Surface/Texture view doesn't render over GL
         playerView.videoSurfaceView?.visibility = View.GONE
         // Inflate custom overlay controls into PlayerView's overlay container
-        val overlay = playerView.findViewById<android.widget.FrameLayout>(androidx.media3.ui.R.id.exo_overlay)
+        val overlay =
+            playerView.findViewById<android.widget.FrameLayout>(androidx.media3.ui.R.id.exo_overlay)
         LayoutInflater.from(this).inflate(R.layout.player_controls_overlay, overlay, true)
         overlay.visibility = View.GONE
         // Ensure overlay is above the built-in controller
-        playerView.findViewById<View>(androidx.media3.ui.R.id.exo_controller)?.let { controllerView ->
-            val base = if (controllerView.elevation != 0f) controllerView.elevation else 2f
-            overlay.elevation = base + 2f
-        }
+        playerView.findViewById<View>(androidx.media3.ui.R.id.exo_controller)
+            ?.let { controllerView ->
+                val base = if (controllerView.elevation != 0f) controllerView.elevation else 2f
+                overlay.elevation = base + 2f
+            }
         overlay.bringToFront()
         val btnBack = overlay.findViewById<MaterialButton>(R.id.btnBack)
         val btnSbs = overlay.findViewById<MaterialButton>(R.id.btnSbs)
@@ -125,7 +127,11 @@ class PlayerActivity : AppCompatActivity() {
             Intent.ACTION_SEND -> {
                 // Try URL in EXTRA_TEXT first
                 val text = intent?.getStringExtra(Intent.EXTRA_TEXT)
-                val parsed = try { if (!text.isNullOrBlank()) text.toUri() else null } catch (_: Throwable) { null }
+                val parsed = try {
+                    if (!text.isNullOrBlank()) text.toUri() else null
+                } catch (_: Throwable) {
+                    null
+                }
                 val stream = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent?.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
                 } else {
@@ -134,6 +140,7 @@ class PlayerActivity : AppCompatActivity() {
                 }
                 parsed ?: stream
             }
+
             else -> intent?.data
         }
         if (sourceUri == null) {
@@ -215,7 +222,8 @@ class PlayerActivity : AppCompatActivity() {
                 }
                 // Initialize SBS state per item
                 val dm = resources.displayMetrics
-                val ultraWide = (dm.widthPixels.toFloat() / (dm.heightPixels.takeIf { it > 0 } ?: 1).toFloat()) >= 3.2f
+                val ultraWide = (dm.widthPixels.toFloat() / (dm.heightPixels.takeIf { it > 0 }
+                    ?: 1).toFloat()) >= 3.2f
                 val initialSbs = recent?.sbsEnabled ?: ultraWide
                 setStereoSbs(initialSbs)
                 glView?.setSbsEnabled(initialSbs)
@@ -234,6 +242,7 @@ class PlayerActivity : AppCompatActivity() {
                             saveProgress()
                         }
                     }
+
                     override fun onMetadata(metadata: Metadata) {
                         // Extract ID3 title (e.g., HLS ID3 tags)
                         var foundTitle: String? = null
@@ -282,7 +291,6 @@ class PlayerActivity : AppCompatActivity() {
         player = null
     }
 
-    
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         // Not used; we manage menus directly on toolbar
@@ -301,6 +309,7 @@ class PlayerActivity : AppCompatActivity() {
                 ).build().show()
                 true
             }
+
             R.id.menu_subtitle -> {
                 TrackSelectionDialogBuilder(
                     this,
@@ -310,14 +319,17 @@ class PlayerActivity : AppCompatActivity() {
                 ).build().show()
                 true
             }
+
             R.id.menu_stereo -> {
                 toggleStereoMode()
                 true
             }
+
             R.id.menu_back -> {
                 finish()
                 true
             }
+
             else -> super.onOptionsItemSelected(item)
         }
     }
@@ -348,7 +360,9 @@ class PlayerActivity : AppCompatActivity() {
         // Extract optional frame-packing information from URI query (?frame-packing=3|4)
         val framePacking: Int? = try {
             uri.getQueryParameter("frame-packing")?.toIntOrNull()
-        } catch (_: Throwable) { null }
+        } catch (_: Throwable) {
+            null
+        }
         val entry = RecentEntry(
             uri = uri.toString(),
             title = title,

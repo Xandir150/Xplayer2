@@ -9,34 +9,40 @@ import java.net.URL
 import java.util.regex.Pattern
 
 class DlnaBrowser {
-    suspend fun resolveContentDirectoryControlUrl(deviceDescriptionUrl: String): String? = withContext(Dispatchers.IO) {
-        try {
-            val xml = fetchText(deviceDescriptionUrl) ?: return@withContext null
-            // Extract optional base URL (URLBase/baseURL)
-            val base = extractTagCI(xml, "URLBase") ?: extractTagCI(xml, "baseURL")
-            // Iterate all <service> blocks and find ContentDirectory
-            val servicePattern = Pattern.compile("<service[\\s\\S]*?</service>", Pattern.CASE_INSENSITIVE or Pattern.DOTALL)
-            val m = servicePattern.matcher(xml)
-            while (m.find()) {
-                val block = m.group()
-                val type = extractTagCI(block, "serviceType")
-                val serviceId = extractTagCI(block, "serviceId")
-                val isContentDir = (type?.contains("ContentDirectory", ignoreCase = true) == true) ||
-                        (serviceId?.contains("ContentDirectory", ignoreCase = true) == true)
-                if (isContentDir) {
-                    val controlRel = extractTagCI(block, "controlURL") ?: continue
-                    return@withContext resolveControl(deviceDescriptionUrl, base, controlRel)
+    suspend fun resolveContentDirectoryControlUrl(deviceDescriptionUrl: String): String? =
+        withContext(Dispatchers.IO) {
+            try {
+                val xml = fetchText(deviceDescriptionUrl) ?: return@withContext null
+                // Extract optional base URL (URLBase/baseURL)
+                val base = extractTagCI(xml, "URLBase") ?: extractTagCI(xml, "baseURL")
+                // Iterate all <service> blocks and find ContentDirectory
+                val servicePattern = Pattern.compile(
+                    "<service[\\s\\S]*?</service>",
+                    Pattern.CASE_INSENSITIVE or Pattern.DOTALL
+                )
+                val m = servicePattern.matcher(xml)
+                while (m.find()) {
+                    val block = m.group()
+                    val type = extractTagCI(block, "serviceType")
+                    val serviceId = extractTagCI(block, "serviceId")
+                    val isContentDir =
+                        (type?.contains("ContentDirectory", ignoreCase = true) == true) ||
+                                (serviceId?.contains("ContentDirectory", ignoreCase = true) == true)
+                    if (isContentDir) {
+                        val controlRel = extractTagCI(block, "controlURL") ?: continue
+                        return@withContext resolveControl(deviceDescriptionUrl, base, controlRel)
+                    }
                 }
+                null
+            } catch (_: Exception) {
+                null
             }
-            null
-        } catch (_: Exception) {
-            null
         }
-    }
 
-    suspend fun browse(controlUrl: String, objectId: String): BrowseResult = withContext(Dispatchers.IO) {
-        val soapAction = "\"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\""
-        val envelope = """
+    suspend fun browse(controlUrl: String, objectId: String): BrowseResult =
+        withContext(Dispatchers.IO) {
+            val soapAction = "\"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\""
+            val envelope = """
             <?xml version="1.0" encoding="utf-8"?>
             <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
               <s:Body>
@@ -51,32 +57,33 @@ class DlnaBrowser {
               </s:Body>
             </s:Envelope>
         """.trimIndent()
-        val url = URL(controlUrl)
-        val conn = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            connectTimeout = 4000
-            readTimeout = 6000
-            doOutput = true
-            setRequestProperty("Content-Type", "text/xml; charset=utf-8")
-            setRequestProperty("SOAPAction", soapAction)
+            val url = URL(controlUrl)
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 4000
+                readTimeout = 6000
+                doOutput = true
+                setRequestProperty("Content-Type", "text/xml; charset=utf-8")
+                setRequestProperty("SOAPAction", soapAction)
+            }
+            conn.outputStream.use { os ->
+                OutputStreamWriter(os, Charsets.UTF_8).use { it.write(envelope) }
+            }
+            val body = try {
+                conn.inputStream.bufferedReader().use(BufferedReader::readText)
+            } catch (e: Exception) {
+                conn.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: throw e
+            } finally {
+                conn.disconnect()
+            }
+            parseDidlFromSoap(body)
         }
-        conn.outputStream.use { os ->
-            OutputStreamWriter(os, Charsets.UTF_8).use { it.write(envelope) }
-        }
-        val body = try {
-            conn.inputStream.bufferedReader().use(BufferedReader::readText)
-        } catch (e: Exception) {
-            conn.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: throw e
-        } finally {
-            conn.disconnect()
-        }
-        parseDidlFromSoap(body)
-    }
 
     data class BrowseResult(
         val containers: List<Container>,
         val items: List<Item>
     )
+
     data class Container(val id: String, val parentId: String?, val title: String)
     data class Item(val title: String, val resUrl: String, val mime: String?)
 
@@ -94,7 +101,10 @@ class DlnaBrowser {
         val containers = mutableListOf<Container>()
         val items = mutableListOf<Item>()
         // Containers
-        val contPattern = Pattern.compile("<container[^>]*id=\"([^\"]+)\"[^>]*parentID=\"([^\"]*)\"[^>]*>(.*?)</container>", Pattern.DOTALL)
+        val contPattern = Pattern.compile(
+            "<container[^>]*id=\"([^\"]+)\"[^>]*parentID=\"([^\"]*)\"[^>]*>(.*?)</container>",
+            Pattern.DOTALL
+        )
         val contMatcher = contPattern.matcher(didl)
         while (contMatcher.find()) {
             val id = contMatcher.group(1)
