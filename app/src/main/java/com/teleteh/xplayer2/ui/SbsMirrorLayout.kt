@@ -1,17 +1,16 @@
 package com.teleteh.xplayer2.ui
 
 import android.content.Context
-import android.graphics.Canvas
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.Region
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewParent
 import android.view.ViewGroup
-import kotlin.math.max
+import android.view.ViewParent
 
 /**
  * Mirrors its content side-by-side across a wide (e.g., 32:9) screen for SBS UI.

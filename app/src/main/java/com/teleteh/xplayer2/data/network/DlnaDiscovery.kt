@@ -9,8 +9,6 @@ import java.io.InputStreamReader
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
-import java.net.InetSocketAddress
-import java.net.MulticastSocket
 import java.net.URL
 import java.nio.charset.Charset
 import java.util.Locale

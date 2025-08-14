@@ -1,22 +1,22 @@
 package com.teleteh.xplayer2
 
-import androidx.appcompat.app.AppCompatActivity
-import android.os.Bundle
-import com.teleteh.xplayer2.databinding.ActivityMainBinding
-import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.tabs.TabLayoutMediator
-import androidx.viewpager2.widget.ViewPager2
-import com.teleteh.xplayer2.ui.MainPagerAdapter
-import com.google.android.material.button.MaterialButton
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.drawable.BitmapDrawable
 import android.os.Build
+import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import android.graphics.BitmapFactory
-import android.graphics.Bitmap
-import android.graphics.drawable.BitmapDrawable
+import androidx.viewpager2.widget.ViewPager2
+import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.tabs.TabLayoutMediator
+import com.teleteh.xplayer2.databinding.ActivityMainBinding
+import com.teleteh.xplayer2.ui.MainPagerAdapter
 
 class MainActivity : AppCompatActivity() {
 

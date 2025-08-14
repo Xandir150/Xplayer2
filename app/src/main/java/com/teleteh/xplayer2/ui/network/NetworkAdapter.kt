@@ -1,17 +1,17 @@
 package com.teleteh.xplayer2.ui.network
 
+import android.net.Uri
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
-import android.net.Uri
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import coil.load
 import com.teleteh.xplayer2.R
 import com.teleteh.xplayer2.data.network.NetworkItem
-import coil.load
 
 class NetworkAdapter(
     private val onClick: (NetworkItem) -> Unit

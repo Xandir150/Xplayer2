@@ -17,17 +17,17 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.teleteh.xplayer2.R
-import com.teleteh.xplayer2.data.network.DlnaDiscovery
 import com.teleteh.xplayer2.data.network.DlnaBrowser
+import com.teleteh.xplayer2.data.network.DlnaDiscovery
 import com.teleteh.xplayer2.data.network.NetworkItem
 import com.teleteh.xplayer2.data.network.SmbStorage
 import com.teleteh.xplayer2.player.PlayerActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
-import com.google.android.material.floatingactionbutton.FloatingActionButton
+import kotlinx.coroutines.launch
 
 class NetworkFragment : Fragment(R.layout.fragment_network) {
 

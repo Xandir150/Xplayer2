@@ -1,18 +1,25 @@
 package com.teleteh.xplayer2.player
 
 import android.content.Intent
-import android.database.Cursor
+import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.database.Cursor
+import android.graphics.Color
+import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.os.Bundle
 import android.os.Build
+import android.os.Bundle
 import android.provider.OpenableColumns
+import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import android.view.LayoutInflater
 import android.widget.Toast
+import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.edit
+import androidx.core.graphics.toColorInt
+import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -20,29 +27,22 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Metadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.PlayerView.ControllerVisibilityListener
 import androidx.media3.ui.TrackSelectionDialogBuilder
+import com.google.android.material.button.MaterialButton
+import com.teleteh.xplayer2.MainActivity
 import com.teleteh.xplayer2.R
 import com.teleteh.xplayer2.data.RecentEntry
 import com.teleteh.xplayer2.data.RecentStore
-import androidx.core.content.edit
-import androidx.core.net.toUri
-import android.media.MediaMetadataRetriever
-import android.content.res.ColorStateList
-import android.graphics.Color
-import com.google.android.material.button.MaterialButton
-import androidx.media3.common.Metadata
-import androidx.media3.extractor.metadata.id3.TextInformationFrame
-import com.teleteh.xplayer2.MainActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
-import androidx.activity.addCallback
-import androidx.core.graphics.toColorInt
 
 @UnstableApi
 class PlayerActivity : AppCompatActivity() {

@@ -5,16 +5,16 @@ import android.graphics.SurfaceTexture
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
-import android.view.Surface
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
+import android.view.Surface
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
-import android.os.Handler
-import android.os.Looper
 
 /**
  * GLSurfaceView that accepts video frames from ExoPlayer via SurfaceTexture
