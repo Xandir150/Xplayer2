@@ -90,7 +90,8 @@ fi
 if [[ ! -d "${FFMPEG_SRC_DIR}" ]]; then
   echo "Cloning FFmpeg 6.0 into ${FFMPEG_SRC_DIR}..."
   mkdir -p "${ROOT_DIR}/external"
-  git clone https://git.ffmpeg.org/ffmpeg.git "${FFMPEG_SRC_DIR}"
+  # Use GitHub mirror for reliability
+  git clone https://github.com/FFmpeg/FFmpeg "${FFMPEG_SRC_DIR}"
   (cd "${FFMPEG_SRC_DIR}" && git checkout release/6.0)
 else
   echo "FFmpeg already present at ${FFMPEG_SRC_DIR}"
