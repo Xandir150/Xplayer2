@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/menu_audio"
+        android:title="@string/menu_audio" />
+    <item
+        android:id="@+id/menu_subtitle"
+        android:title="@string/menu_subtitle" />
+    <item
+        android:id="@+id/menu_stereo"
+        android:title="@string/menu_stereo_short"
+        android:checkable="true"
+        app:showAsAction="always|withText"
+        app:actionLayout="@layout/action_sbs_toggle" />
+    <item
+        android:id="@+id/menu_back"
+        android:title="@string/menu_back" />
+</menu>

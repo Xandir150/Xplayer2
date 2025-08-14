@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="wrap_content"
+    android:layout_height="match_parent"
+    android:gravity="center"
+    android:orientation="horizontal">
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnSbs"
+        style="@style/Widget.MaterialComponents.Button"
+        android:layout_width="wrap_content"
+        android:layout_height="36dp"
+        android:minHeight="0dp"
+        android:minWidth="0dp"
+        android:paddingLeft="12dp"
+        android:paddingRight="12dp"
+        android:text="@string/menu_stereo_short"
+        android:textAllCaps="false"
+        android:textColor="@color/sbs_button_text"
+        app:backgroundTint="@color/sbs_button_bg"
+        android:checkable="true" />
+</LinearLayout>

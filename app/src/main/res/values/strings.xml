@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">XPlayer2</string>
+    <string name="menu_audio">Audio track</string>
+    <string name="menu_subtitle">Subtitles</string>
+    <string name="select_audio_track">Select audio track</string>
+    <string name="select_subtitle">Select subtitle</string>
+    <string name="menu_stereo">Stereo: toggle</string>
+    <string name="menu_stereo_short">SBS</string>
+    <string name="menu_back">Back</string>
+    <string name="stereo_mode_normal">Stereo mode: Normal</string>
+    <string name="stereo_mode_sbs">Stereo mode: SBS</string>
+    <string name="delete">Delete</string>
+    <string name="network_enter_url">Вставьте ссылку (http, https, msf, content)</string>
+    <string name="network_open">Открыть</string>
+    <string name="network_add_share">Добавить шару</string>
+    <string name="network_smb_name">Имя</string>
+    <string name="network_smb_uri">SMB URI (например smb://server/share)</string>
+    <string name="common_add">Добавить</string>
+    <string name="common_cancel">Отмена</string>
+    <string name="error_invalid_input">Проверьте данные</string>
+</resources>

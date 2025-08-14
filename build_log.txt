@@ -1,0 +1,1519 @@
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by net.rubygrapefruit.platform.internal.NativeLibraryLoader in an unnamed module (file:/Users/alexander.shekhovtsov/.gradle/wrapper/dists/gradle-8.13-bin/5xuhj0ry160q40clulazy9h7d/gradle-8.13/lib/native-platform-0.22-milestone-28.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+Initialized native services in: /Users/alexander.shekhovtsov/.gradle/native
+Initialized jansi services in: /Users/alexander.shekhovtsov/.gradle/native
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.13/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Starting process 'Gradle build daemon'. Working directory: /Users/alexander.shekhovtsov/.gradle/daemon/8.13 Command: /opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home/bin/java --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.prefs/java.util.prefs=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.prefs/java.util.prefs=ALL-UNNAMED --add-opens=java.base/java.nio.charset=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.xml/javax.xml.namespace=ALL-UNNAMED -Xmx2048m -Dfile.encoding=UTF-8 -Duser.country=US -Duser.language=en -Duser.variant -cp /Users/alexander.shekhovtsov/.gradle/wrapper/dists/gradle-8.13-bin/5xuhj0ry160q40clulazy9h7d/gradle-8.13/lib/gradle-daemon-main-8.13.jar -javaagent:/Users/alexander.shekhovtsov/.gradle/wrapper/dists/gradle-8.13-bin/5xuhj0ry160q40clulazy9h7d/gradle-8.13/lib/agents/gradle-instrumentation-agent-8.13.jar org.gradle.launcher.daemon.bootstrap.GradleDaemon 8.13
+Successfully started process 'Gradle build daemon'
+An attempt to start the daemon took 0.632 secs.
+The client will now receive all logging from the daemon (pid: 13606). The daemon log file: /Users/alexander.shekhovtsov/.gradle/daemon/8.13/daemon-13606.out.log
+Daemon will be stopped at the end of the build 
+Using 10 worker leases.
+Received JVM installation metadata from '/opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home': {JAVA_HOME=/opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home, JAVA_VERSION=24.0.1, JAVA_VENDOR=Homebrew, RUNTIME_NAME=OpenJDK Runtime Environment, RUNTIME_VERSION=24.0.1, VM_NAME=OpenJDK 64-Bit Server VM, VM_VERSION=24.0.1, VM_VENDOR=Homebrew, OS_ARCH=aarch64}
+Watching the file system is configured to be enabled if available
+Now considering [/Users/alexander.shekhovtsov/work/3d/XPlayer2] as hierarchies to watch
+File system watching is active
+Starting Build
+Invalidating in-memory cache of /Users/alexander.shekhovtsov/.gradle/caches/journal-1/file-access.bin
+Settings evaluated using settings file '/Users/alexander.shekhovtsov/work/3d/XPlayer2/settings.gradle.kts'.
+Projects loaded. Root project using build file '/Users/alexander.shekhovtsov/work/3d/XPlayer2/build.gradle.kts'.
+Included projects: [root project 'XPlayer2', project ':app']
+
+> Configure project :
+Evaluating root project 'XPlayer2' using build file '/Users/alexander.shekhovtsov/work/3d/XPlayer2/build.gradle.kts'.
+Resolved plugin [id: 'com.android.application', version: '8.12.0', apply: false]
+Resolved plugin [id: 'org.jetbrains.kotlin.android', version: '2.0.21', apply: false]
+
+> Configure project :app
+Evaluating project ':app' using build file '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build.gradle.kts'.
+Resolved plugin [id: 'com.android.application', version: '8.12.0']
+Resolved plugin [id: 'org.jetbrains.kotlin.android', version: '2.0.21']
+Using default execution profile
+Using Kotlin Gradle Plugin gradle85 variant
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+All projects evaluated.
+Task name matched 'clean'
+Task name matched 'assembleDebug'
+Selected primary task 'clean' from project :
+Selected primary task 'assembleDebug' from project :
+Adding -Xuse-inline-scopes-numbers Kotlin compiler flag for task :app:compileDebugKotlin
+Tasks to be executed: [task ':app:externalNativeBuildCleanDebug', task ':app:externalNativeBuildCleanRelease', task ':app:clean', task ':app:preBuild', task ':app:preDebugBuild', task ':app:mergeDebugNativeDebugMetadata', task ':app:checkKotlinGradlePluginConfigurationErrors', task ':app:dataBindingMergeDependencyArtifactsDebug', task ':app:generateDebugResValues', task ':app:generateDebugResources', task ':app:mergeDebugResources', task ':app:packageDebugResources', task ':app:parseDebugLocalResources', task ':app:dataBindingGenBaseClassesDebug', task ':app:checkDebugAarMetadata', task ':app:mapDebugSourceSetPaths', task ':app:createDebugCompatibleScreenManifests', task ':app:extractDeepLinksDebug', task ':app:processDebugMainManifest', task ':app:processDebugManifest', task ':app:processDebugManifestForPackage', task ':app:processDebugResources', task ':app:compileDebugKotlin', task ':app:javaPreCompileDebug', task ':app:compileDebugJavaWithJavac', task ':app:mergeDebugShaders', task ':app:compileDebugShaders', task ':app:generateDebugAssets', task ':app:mergeDebugAssets', task ':app:compressDebugAssets', task ':app:processDebugJavaRes', task ':app:mergeDebugJavaResource', task ':app:checkDebugDuplicateClasses', task ':app:desugarDebugFileDependencies', task ':app:mergeExtDexDebug', task ':app:mergeLibDexDebug', task ':app:dexBuilderDebug', task ':app:mergeProjectDexDebug', task ':app:configureCMakeDebug[arm64-v8a]', task ':app:buildCMakeDebug[arm64-v8a]', task ':app:configureCMakeDebug[armeabi-v7a]', task ':app:buildCMakeDebug[armeabi-v7a]', task ':app:configureCMakeDebug[x86]', task ':app:buildCMakeDebug[x86]', task ':app:configureCMakeDebug[x86_64]', task ':app:buildCMakeDebug[x86_64]', task ':app:mergeDebugJniLibFolders', task ':app:mergeDebugNativeLibs', task ':app:stripDebugDebugSymbols', task ':app:validateSigningDebug', task ':app:writeDebugAppMetadata', task ':app:writeDebugSigningConfigVersions', task ':app:packageDebug', task ':app:createDebugApkListingFileRedirect', task ':app:assembleDebug']
+Tasks that were excluded: []
+Resolve mutations for :app:externalNativeBuildCleanDebug (Thread[#89,Execution worker,5,main]) started.
+:app:externalNativeBuildCleanDebug (Thread[#88,included builds,5,main]) started.
+
+> Task :app:externalNativeBuildCleanDebug
+Caching disabled for task ':app:externalNativeBuildCleanDebug' because:
+  Build cache is disabled
+Task ':app:externalNativeBuildCleanDebug' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+C/C++: starting clean
+C/C++: finding existing JSONs
+C/C++: Json file not found so contents couldn't be cleaned /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86_64/android_gradle_build.json
+C/C++: Json file not found so contents couldn't be cleaned /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/riscv64/android_gradle_build.json
+C/C++: about to execute 3 clean command batches
+Clean xplayer2-armeabi-v7a
+C/C++: /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja \
+  -C \
+  /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/armeabi-v7a \
+  clean
+
+Starting process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja -C /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/armeabi-v7a clean
+Successfully started process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja''
+C/C++: Received process result: 0
+Clean xplayer2-arm64-v8a
+C/C++: /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja \
+  -C \
+  /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/arm64-v8a \
+  clean
+
+Starting process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja -C /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/arm64-v8a clean
+Successfully started process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja''
+C/C++: Received process result: 0
+Clean xplayer2-x86
+C/C++: /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja \
+  -C \
+  /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86 \
+  clean
+
+Starting process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja -C /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86 clean
+Successfully started process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja''
+C/C++: Received process result: 0
+C/C++: clean complete
+Resolve mutations for :app:externalNativeBuildCleanRelease (Thread[#88,included builds,5,main]) started.
+:app:externalNativeBuildCleanRelease (Thread[#88,included builds,5,main]) started.
+
+> Task :app:externalNativeBuildCleanRelease
+Caching disabled for task ':app:externalNativeBuildCleanRelease' because:
+  Build cache is disabled
+Task ':app:externalNativeBuildCleanRelease' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+C/C++: starting clean
+C/C++: finding existing JSONs
+C/C++: Json file not found so contents couldn't be cleaned /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/RelWithDebInfo/vy6ro395/armeabi-v7a/android_gradle_build.json
+C/C++: Json file not found so contents couldn't be cleaned /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/RelWithDebInfo/vy6ro395/arm64-v8a/android_gradle_build.json
+C/C++: Json file not found so contents couldn't be cleaned /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/RelWithDebInfo/vy6ro395/x86/android_gradle_build.json
+C/C++: Json file not found so contents couldn't be cleaned /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/RelWithDebInfo/vy6ro395/x86_64/android_gradle_build.json
+C/C++: Json file not found so contents couldn't be cleaned /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/RelWithDebInfo/vy6ro395/riscv64/android_gradle_build.json
+C/C++: about to execute 0 clean command batches
+C/C++: clean complete
+Resolve mutations for :app:clean (Thread[#88,included builds,5,main]) started.
+:app:clean (Thread[#88,included builds,5,main]) started.
+destroyer locations for task group 0 (Thread[#89,Execution worker,5,main]) started.
+
+> Task :app:clean
+Caching disabled for task ':app:clean' because:
+  Build cache is disabled
+Task ':app:clean' is not up-to-date because:
+  Task has not declared any outputs despite executing actions.
+Resolve mutations for :app:preBuild (Thread[#88,included builds,5,main]) started.
+:app:preBuild (Thread[#88,included builds,5,main]) started.
+
+> Task :app:preBuild UP-TO-DATE
+Skipping task ':app:preBuild' as it has no actions.
+Resolve mutations for :app:preDebugBuild (Thread[#88,included builds,5,main]) started.
+:app:preDebugBuild (Thread[#88,included builds,5,main]) started.
+
+> Task :app:preDebugBuild UP-TO-DATE
+Skipping task ':app:preDebugBuild' as it has no actions.
+Resolve mutations for :app:mergeDebugNativeDebugMetadata (Thread[#88,included builds,5,main]) started.
+:app:mergeDebugNativeDebugMetadata (Thread[#88,included builds,5,main]) started.
+
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+Skipping task ':app:mergeDebugNativeDebugMetadata' as it has no source files and no previous output files.
+Resolve mutations for :app:checkKotlinGradlePluginConfigurationErrors (Thread[#88,included builds,5,main]) started.
+:app:checkKotlinGradlePluginConfigurationErrors (Thread[#88,included builds,5,main]) started.
+
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+Skipping task ':app:checkKotlinGradlePluginConfigurationErrors' as task onlyIf 'errorDiagnostics are present' is false.
+Resolve mutations for :app:dataBindingMergeDependencyArtifactsDebug (Thread[#88,included builds,5,main]) started.
+:app:dataBindingMergeDependencyArtifactsDebug (Thread[#88,included builds,5,main]) started.
+Resolve mutations for :app:generateDebugResValues (Thread[#95,Execution worker Thread 7,5,main]) started.
+:app:generateDebugResValues (Thread[#95,Execution worker Thread 7,5,main]) started.
+
+> Task :app:generateDebugResValues
+Caching disabled for task ':app:generateDebugResValues' because:
+  Build cache is disabled
+Task ':app:generateDebugResValues' is not up-to-date because:
+  Output property 'outputDirectory' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/generated/res/resValues/debug has been removed.
+Resolve mutations for :app:generateDebugResources (Thread[#95,Execution worker Thread 7,5,main]) started.
+:app:generateDebugResources (Thread[#95,Execution worker Thread 7,5,main]) started.
+
+> Task :app:dataBindingMergeDependencyArtifactsDebug
+Caching disabled for task ':app:dataBindingMergeDependencyArtifactsDebug' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:dataBindingMergeDependencyArtifactsDebug' is not up-to-date because:
+  Output property 'outFolder' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/data_binding_dependency_artifacts/debug/dataBindingMergeDependencyArtifactsDebug has been removed.
+
+> Task :app:generateDebugResources
+Caching disabled for task ':app:generateDebugResources' because:
+  Build cache is disabled
+Task ':app:generateDebugResources' is not up-to-date because:
+  Output property 'validationReportFile' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/nested_resources_validation_report/debug/generateDebugResources/nestedResourcesValidationReport.txt has been removed.
+Resolve mutations for :app:mergeDebugResources (Thread[#95,Execution worker Thread 7,5,main]) started.
+:app:mergeDebugResources (Thread[#95,Execution worker Thread 7,5,main]) started.
+Resolve mutations for :app:packageDebugResources (Thread[#93,Execution worker Thread 5,5,main]) started.
+:app:packageDebugResources (Thread[#93,Execution worker Thread 5,5,main]) started.
+
+> Task :app:packageDebugResources
+Caching disabled for task ':app:packageDebugResources' because:
+  Build cache is disabled
+Task ':app:packageDebugResources' is not up-to-date because:
+  Output property 'dataBindingLayoutInfoOutFolder' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/data_binding_layout_info_type_package/debug/packageDebugResources/out has been removed.
+  Output property 'dataBindingLayoutInfoOutFolder' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/data_binding_layout_info_type_package/debug/packageDebugResources/out/activity_main-layout.xml has been removed.
+  Output property 'dataBindingLayoutInfoOutFolder' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/data_binding_layout_info_type_package/debug/packageDebugResources/out/activity_player-layout.xml has been removed.
+  and more...
+The input changes require a full rebuild for incremental task ':app:packageDebugResources'.
+[MergeResources] Inputs are non-incremental full task action.
+Resolve mutations for :app:parseDebugLocalResources (Thread[#93,Execution worker Thread 5,5,main]) started.
+:app:parseDebugLocalResources (Thread[#93,Execution worker Thread 5,5,main]) started.
+Resolve mutations for :app:checkDebugAarMetadata (Thread[#96,Execution worker Thread 8,5,main]) started.
+:app:checkDebugAarMetadata (Thread[#96,Execution worker Thread 8,5,main]) started.
+Resolve mutations for :app:mapDebugSourceSetPaths (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:mapDebugSourceSetPaths (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:parseDebugLocalResources
+Caching disabled for task ':app:parseDebugLocalResources' because:
+  Build cache is disabled
+Task ':app:parseDebugLocalResources' is not up-to-date because:
+  Output property 'librarySymbolsFile' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/local_only_symbol_list/debug/parseDebugLocalResources/R-def.txt has been removed.
+The input changes require a full rebuild for incremental task ':app:parseDebugLocalResources'.
+
+> Task :app:mapDebugSourceSetPaths
+Caching disabled for task ':app:mapDebugSourceSetPaths' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:mapDebugSourceSetPaths' is not up-to-date because:
+  Output property 'filepathMappingFile' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/source_set_path_map/debug/mapDebugSourceSetPaths/file-map.txt has been removed.
+Resolve mutations for :app:createDebugCompatibleScreenManifests (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:createDebugCompatibleScreenManifests (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:createDebugCompatibleScreenManifests
+Caching disabled for task ':app:createDebugCompatibleScreenManifests' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:createDebugCompatibleScreenManifests' is not up-to-date because:
+  Output property 'outputFolder' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/compatible_screen_manifest/debug/createDebugCompatibleScreenManifests has been removed.
+  Output property 'outputFolder' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/compatible_screen_manifest/debug/createDebugCompatibleScreenManifests/output-metadata.json has been removed.
+Resolve mutations for :app:extractDeepLinksDebug (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:extractDeepLinksDebug (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:checkDebugAarMetadata
+Caching disabled for task ':app:checkDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:checkDebugAarMetadata' is not up-to-date because:
+  Output property 'dummyOutputDirectory' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/aar_metadata_check/debug/checkDebugAarMetadata has been removed.
+
+> Task :app:extractDeepLinksDebug
+Caching disabled for task ':app:extractDeepLinksDebug' because:
+  Build cache is disabled
+Task ':app:extractDeepLinksDebug' is not up-to-date because:
+  Output property 'navigationJson' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/navigation_json/debug/extractDeepLinksDebug/navigation.json has been removed.
+Resolve mutations for :app:processDebugMainManifest (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:processDebugMainManifest (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:processDebugMainManifest
+Caching disabled for task ':app:processDebugMainManifest' because:
+  Build cache is disabled
+Task ':app:processDebugMainManifest' is not up-to-date because:
+  Value of input property 'optionalFeatures' has changed for task ':app:processDebugMainManifest'
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/6090e249ef3eb7f86f950ac15c99da53/transformed/viewbinding-8.12.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/1d3ec9b28b30c48410302bb601de679f/transformed/material-1.12.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/a3a405e89bfd95a02cdf35cdc81da4c0/transformed/constraintlayout-2.2.1/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c5dd35032bc2b4542d86186029032684/transformed/appcompat-resources-1.7.1/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/d318cafaa05506780dbf92f83919d95b/transformed/appcompat-1.7.1/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/bdd16bd159a1ab73c86560c8f5ae39e1/transformed/recyclerview-1.3.2/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/2642747ca348e409a6fa9a8b455b6a78/transformed/viewpager2-1.1.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/ca1658dfc0bf3cbf00f5fdbeea68e5a1/transformed/fragment-1.8.3/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/1de37659c9f12124bc688a59779b3fc1/transformed/fragment-ktx-1.8.3/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/e943848aa7885f804d671e598b773a15/transformed/coordinatorlayout-1.2.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/e609420e985bff5ae8295cdad1e71679/transformed/emoji2-views-helper-1.3.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/b66ca37306f5aacecb7fca94fcbe4f01/transformed/emoji2-1.3.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/5f5bb65b83c65618a5fd2c4c60467925/transformed/drawerlayout-1.1.1/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/a7ee957aec69ef3da7513598235a9e99/transformed/transition-1.5.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/e5abcbff78a5e93ef9bd2614745fc9b9/transformed/dynamicanimation-1.0.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/d96c5064e3722e610b6964cbbbd81e27/transformed/vectordrawable-animated-1.1.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/bc65cd9b701982ef728ca58465483349/transformed/vectordrawable-1.1.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/78cd95478be051b744e231f6c49b0bb2/transformed/viewpager-1.0.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/e3b2382489168a4e8729431bab621a62/transformed/customview-1.1.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/f48da05234f2cd386eb65f37d76be44f/transformed/legacy-support-core-utils-1.0.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/4cfe1c029c3c0866fec9bc727f7afb91/transformed/activity-ktx-1.8.1/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/1b4afa5afeb380d1df709171769a6d79/transformed/activity-1.8.1/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/0a72fd5ab010bc20ab6037674c82aa9f/transformed/loader-1.0.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/78144feea12cf182a189ee8f6909a2ec/transformed/core-1.16.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/bae1ac703320d0e84c2bd0a3c866f4f7/transformed/customview-poolingcontainer-1.0.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/12e2a3f42cbdd90eaba6caa783cbb076/transformed/savedstate-ktx-1.2.1/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/202570359e17b25b3ddf2108c5927627/transformed/savedstate-1.2.1/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/d00e160df058532b73afe80fad992e36/transformed/lifecycle-livedata-2.6.2/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/14231c03a5f966e6a3e5a2e39b67ed04/transformed/lifecycle-viewmodel-ktx-2.6.2/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/b4015347523a85d0a39e28bbf9465bde/transformed/lifecycle-viewmodel-2.6.2/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/6560d794244751b45ee204db4dd60c62/transformed/lifecycle-runtime-ktx-2.6.2/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/db26c12208b461f0e75b606bd2c4baaa/transformed/lifecycle-process-2.6.2/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/e2baf079a7602f1c78e58a07901ac8d2/transformed/lifecycle-livedata-core-ktx-2.6.2/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/8ef75ef6cba7c5541e856a4fa4110463/transformed/lifecycle-livedata-core-2.6.2/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/54dff359508b0a947fc82c2948bdc75d/transformed/lifecycle-runtime-2.6.2/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/ed72b373d7d18e4aac3eb2b2457a5235/transformed/lifecycle-viewmodel-savedstate-2.6.2/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/742d6ad373e129f8add3912625138d2a/transformed/core-ktx-1.16.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/f0cdf5a9878afdfac72c550b3003ef6e/transformed/cursoradapter-1.0.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/34b623e644f46e91be66bf25f2a6595d/transformed/cardview-1.0.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/a3153fc30b07491a977f962510ff99c8/transformed/interpolator-1.0.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/6320c294a7fd3323359c3de4a65469ef/transformed/startup-runtime-1.1.1/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/2110ca71ae6ae6318895b1cdcf894fb6/transformed/tracing-1.2.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/191ba4cfed154b0cd81f011d12ec2eb5/transformed/versionedparcelable-1.1.1/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/02f3655107ca180c02846e8f5f6283fa/transformed/core-runtime-2.2.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/434d5710cefac22024d1e30742e54581/transformed/documentfile-1.0.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/58ca2289460cebb37f203221eba8107b/transformed/localbroadcastmanager-1.0.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/2e485564d5c0d8be859063d8b4daffa8/transformed/print-1.0.0/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/16f05de5d4872000dedec2359af5d719/transformed/annotation-experimental-1.4.1/AndroidManifest.xml
+Loading library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/7468290848cf93fea5941c55b9e6f5d9/transformed/core-viewtree-1.0.0/AndroidManifest.xml
+Merging main manifest /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml
+
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/6090e249ef3eb7f86f950ac15c99da53/transformed/viewbinding-8.12.0/AndroidManifest.xml
+Merging manifest with lower [androidx.databinding:viewbinding:8.12.0] AndroidManifest.xml:2:1-7:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.databinding:viewbinding:8.12.0] AndroidManifest.xml:5:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/1d3ec9b28b30c48410302bb601de679f/transformed/material-1.12.0/AndroidManifest.xml
+Merging manifest with lower [com.google.android.material:material:1.12.0] AndroidManifest.xml:17:1-24:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [com.google.android.material:material:1.12.0] AndroidManifest.xml:20:5-44
+application defined in both files...
+Merging application with lower [com.google.android.material:material:1.12.0] AndroidManifest.xml:22:5-20
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/a3a405e89bfd95a02cdf35cdc81da4c0/transformed/constraintlayout-2.2.1/AndroidManifest.xml
+Merging manifest with lower [androidx.constraintlayout:constraintlayout:2.2.1] AndroidManifest.xml:2:1-9:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.constraintlayout:constraintlayout:2.2.1] AndroidManifest.xml:5:5-44
+application defined in both files...
+Merging application with lower [androidx.constraintlayout:constraintlayout:2.2.1] AndroidManifest.xml:7:5-20
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c5dd35032bc2b4542d86186029032684/transformed/appcompat-resources-1.7.1/AndroidManifest.xml
+Merging manifest with lower [androidx.appcompat:appcompat-resources:1.7.1] AndroidManifest.xml:2:1-7:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.appcompat:appcompat-resources:1.7.1] AndroidManifest.xml:5:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/d318cafaa05506780dbf92f83919d95b/transformed/appcompat-1.7.1/AndroidManifest.xml
+Merging manifest with lower [androidx.appcompat:appcompat:1.7.1] AndroidManifest.xml:2:1-7:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.appcompat:appcompat:1.7.1] AndroidManifest.xml:5:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/bdd16bd159a1ab73c86560c8f5ae39e1/transformed/recyclerview-1.3.2/AndroidManifest.xml
+Merging manifest with lower [androidx.recyclerview:recyclerview:1.3.2] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.recyclerview:recyclerview:1.3.2] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/2642747ca348e409a6fa9a8b455b6a78/transformed/viewpager2-1.1.0/AndroidManifest.xml
+Merging manifest with lower [androidx.viewpager2:viewpager2:1.1.0] AndroidManifest.xml:2:1-7:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.viewpager2:viewpager2:1.1.0] AndroidManifest.xml:5:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/ca1658dfc0bf3cbf00f5fdbeea68e5a1/transformed/fragment-1.8.3/AndroidManifest.xml
+Merging manifest with lower [androidx.fragment:fragment:1.8.3] AndroidManifest.xml:2:1-7:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.fragment:fragment:1.8.3] AndroidManifest.xml:5:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/1de37659c9f12124bc688a59779b3fc1/transformed/fragment-ktx-1.8.3/AndroidManifest.xml
+Merging manifest with lower [androidx.fragment:fragment-ktx:1.8.3] AndroidManifest.xml:2:1-7:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.fragment:fragment-ktx:1.8.3] AndroidManifest.xml:5:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/e943848aa7885f804d671e598b773a15/transformed/coordinatorlayout-1.2.0/AndroidManifest.xml
+Merging manifest with lower [androidx.coordinatorlayout:coordinatorlayout:1.2.0] AndroidManifest.xml:17:1-24:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.coordinatorlayout:coordinatorlayout:1.2.0] AndroidManifest.xml:20:5-22:41
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/e609420e985bff5ae8295cdad1e71679/transformed/emoji2-views-helper-1.3.0/AndroidManifest.xml
+Merging manifest with lower [androidx.emoji2:emoji2-views-helper:1.3.0] AndroidManifest.xml:2:1-7:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.emoji2:emoji2-views-helper:1.3.0] AndroidManifest.xml:5:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/b66ca37306f5aacecb7fca94fcbe4f01/transformed/emoji2-1.3.0/AndroidManifest.xml
+Merging manifest with lower [androidx.emoji2:emoji2:1.3.0] AndroidManifest.xml:17:1-35:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.emoji2:emoji2:1.3.0] AndroidManifest.xml:21:5-44
+application defined in both files...
+Merging application with lower [androidx.emoji2:emoji2:1.3.0] AndroidManifest.xml:23:5-33:19
+Adopted [provider: null]
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/5f5bb65b83c65618a5fd2c4c60467925/transformed/drawerlayout-1.1.1/AndroidManifest.xml
+Merging manifest with lower [androidx.drawerlayout:drawerlayout:1.1.1] AndroidManifest.xml:17:1-24:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.drawerlayout:drawerlayout:1.1.1] AndroidManifest.xml:20:5-22:41
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/a7ee957aec69ef3da7513598235a9e99/transformed/transition-1.5.0/AndroidManifest.xml
+Merging manifest with lower [androidx.transition:transition:1.5.0] AndroidManifest.xml:2:1-7:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.transition:transition:1.5.0] AndroidManifest.xml:5:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/e5abcbff78a5e93ef9bd2614745fc9b9/transformed/dynamicanimation-1.0.0/AndroidManifest.xml
+Merging manifest with lower [androidx.dynamicanimation:dynamicanimation:1.0.0] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.dynamicanimation:dynamicanimation:1.0.0] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/d96c5064e3722e610b6964cbbbd81e27/transformed/vectordrawable-animated-1.1.0/AndroidManifest.xml
+Merging manifest with lower [androidx.vectordrawable:vectordrawable-animated:1.1.0] AndroidManifest.xml:17:1-24:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.vectordrawable:vectordrawable-animated:1.1.0] AndroidManifest.xml:20:5-22:41
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/bc65cd9b701982ef728ca58465483349/transformed/vectordrawable-1.1.0/AndroidManifest.xml
+Merging manifest with lower [androidx.vectordrawable:vectordrawable:1.1.0] AndroidManifest.xml:17:1-24:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.vectordrawable:vectordrawable:1.1.0] AndroidManifest.xml:20:5-22:41
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/78cd95478be051b744e231f6c49b0bb2/transformed/viewpager-1.0.0/AndroidManifest.xml
+Merging manifest with lower [androidx.viewpager:viewpager:1.0.0] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.viewpager:viewpager:1.0.0] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/e3b2382489168a4e8729431bab621a62/transformed/customview-1.1.0/AndroidManifest.xml
+Merging manifest with lower [androidx.customview:customview:1.1.0] AndroidManifest.xml:17:1-24:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.customview:customview:1.1.0] AndroidManifest.xml:20:5-22:41
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/f48da05234f2cd386eb65f37d76be44f/transformed/legacy-support-core-utils-1.0.0/AndroidManifest.xml
+Merging manifest with lower [androidx.legacy:legacy-support-core-utils:1.0.0] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.legacy:legacy-support-core-utils:1.0.0] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/4cfe1c029c3c0866fec9bc727f7afb91/transformed/activity-ktx-1.8.1/AndroidManifest.xml
+Merging manifest with lower [androidx.activity:activity-ktx:1.8.1] AndroidManifest.xml:2:1-7:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.activity:activity-ktx:1.8.1] AndroidManifest.xml:5:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/1b4afa5afeb380d1df709171769a6d79/transformed/activity-1.8.1/AndroidManifest.xml
+Merging manifest with lower [androidx.activity:activity:1.8.1] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.activity:activity:1.8.1] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/0a72fd5ab010bc20ab6037674c82aa9f/transformed/loader-1.0.0/AndroidManifest.xml
+Merging manifest with lower [androidx.loader:loader:1.0.0] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.loader:loader:1.0.0] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/78144feea12cf182a189ee8f6909a2ec/transformed/core-1.16.0/AndroidManifest.xml
+Merging manifest with lower [androidx.core:core:1.16.0] AndroidManifest.xml:17:1-30:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.core:core:1.16.0] AndroidManifest.xml:20:5-44
+Adopted [permission: null]
+Adopted [uses-permission: null]
+application defined in both files...
+Merging application with lower [androidx.core:core:1.16.0] AndroidManifest.xml:28:5-89
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/bae1ac703320d0e84c2bd0a3c866f4f7/transformed/customview-poolingcontainer-1.0.0/AndroidManifest.xml
+Merging manifest with lower [androidx.customview:customview-poolingcontainer:1.0.0] AndroidManifest.xml:17:1-23:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.customview:customview-poolingcontainer:1.0.0] AndroidManifest.xml:20:5-21:38
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/12e2a3f42cbdd90eaba6caa783cbb076/transformed/savedstate-ktx-1.2.1/AndroidManifest.xml
+Merging manifest with lower [androidx.savedstate:savedstate-ktx:1.2.1] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.savedstate:savedstate-ktx:1.2.1] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/202570359e17b25b3ddf2108c5927627/transformed/savedstate-1.2.1/AndroidManifest.xml
+Merging manifest with lower [androidx.savedstate:savedstate:1.2.1] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.savedstate:savedstate:1.2.1] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/d00e160df058532b73afe80fad992e36/transformed/lifecycle-livedata-2.6.2/AndroidManifest.xml
+Merging manifest with lower [androidx.lifecycle:lifecycle-livedata:2.6.2] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.lifecycle:lifecycle-livedata:2.6.2] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/14231c03a5f966e6a3e5a2e39b67ed04/transformed/lifecycle-viewmodel-ktx-2.6.2/AndroidManifest.xml
+Merging manifest with lower [androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.2] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/b4015347523a85d0a39e28bbf9465bde/transformed/lifecycle-viewmodel-2.6.2/AndroidManifest.xml
+Merging manifest with lower [androidx.lifecycle:lifecycle-viewmodel:2.6.2] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.lifecycle:lifecycle-viewmodel:2.6.2] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/6560d794244751b45ee204db4dd60c62/transformed/lifecycle-runtime-ktx-2.6.2/AndroidManifest.xml
+Merging manifest with lower [androidx.lifecycle:lifecycle-runtime-ktx:2.6.2] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.lifecycle:lifecycle-runtime-ktx:2.6.2] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/db26c12208b461f0e75b606bd2c4baaa/transformed/lifecycle-process-2.6.2/AndroidManifest.xml
+Merging manifest with lower [androidx.lifecycle:lifecycle-process:2.6.2] AndroidManifest.xml:17:1-35:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.lifecycle:lifecycle-process:2.6.2] AndroidManifest.xml:21:5-44
+application defined in both files...
+Merging application with lower [androidx.lifecycle:lifecycle-process:2.6.2] AndroidManifest.xml:23:5-33:19
+provider#androidx.startup.InitializationProvider defined in both files...
+Merging provider#androidx.startup.InitializationProvider with lower [androidx.lifecycle:lifecycle-process:2.6.2] AndroidManifest.xml:24:9-32:20
+Adopted [meta-data: null]
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/e2baf079a7602f1c78e58a07901ac8d2/transformed/lifecycle-livedata-core-ktx-2.6.2/AndroidManifest.xml
+Merging manifest with lower [androidx.lifecycle:lifecycle-livedata-core-ktx:2.6.2] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.lifecycle:lifecycle-livedata-core-ktx:2.6.2] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/8ef75ef6cba7c5541e856a4fa4110463/transformed/lifecycle-livedata-core-2.6.2/AndroidManifest.xml
+Merging manifest with lower [androidx.lifecycle:lifecycle-livedata-core:2.6.2] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.lifecycle:lifecycle-livedata-core:2.6.2] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/54dff359508b0a947fc82c2948bdc75d/transformed/lifecycle-runtime-2.6.2/AndroidManifest.xml
+Merging manifest with lower [androidx.lifecycle:lifecycle-runtime:2.6.2] AndroidManifest.xml:2:1-7:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.lifecycle:lifecycle-runtime:2.6.2] AndroidManifest.xml:5:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/ed72b373d7d18e4aac3eb2b2457a5235/transformed/lifecycle-viewmodel-savedstate-2.6.2/AndroidManifest.xml
+Merging manifest with lower [androidx.lifecycle:lifecycle-viewmodel-savedstate:2.6.2] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.lifecycle:lifecycle-viewmodel-savedstate:2.6.2] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/742d6ad373e129f8add3912625138d2a/transformed/core-ktx-1.16.0/AndroidManifest.xml
+Merging manifest with lower [androidx.core:core-ktx:1.16.0] AndroidManifest.xml:2:1-7:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.core:core-ktx:1.16.0] AndroidManifest.xml:5:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/f0cdf5a9878afdfac72c550b3003ef6e/transformed/cursoradapter-1.0.0/AndroidManifest.xml
+Merging manifest with lower [androidx.cursoradapter:cursoradapter:1.0.0] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.cursoradapter:cursoradapter:1.0.0] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/34b623e644f46e91be66bf25f2a6595d/transformed/cardview-1.0.0/AndroidManifest.xml
+Merging manifest with lower [androidx.cardview:cardview:1.0.0] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.cardview:cardview:1.0.0] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml
+Merging manifest with lower [androidx.profileinstaller:profileinstaller:1.4.0] AndroidManifest.xml:17:1-55:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.profileinstaller:profileinstaller:1.4.0] AndroidManifest.xml:21:5-44
+application defined in both files...
+Merging application with lower [androidx.profileinstaller:profileinstaller:1.4.0] AndroidManifest.xml:23:5-53:19
+provider#androidx.startup.InitializationProvider defined in both files...
+Merging provider#androidx.startup.InitializationProvider with lower [androidx.profileinstaller:profileinstaller:1.4.0] AndroidManifest.xml:24:9-32:20
+Adopted [meta-data: null]
+Adopted [receiver: null]
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/a3153fc30b07491a977f962510ff99c8/transformed/interpolator-1.0.0/AndroidManifest.xml
+Merging manifest with lower [androidx.interpolator:interpolator:1.0.0] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.interpolator:interpolator:1.0.0] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/6320c294a7fd3323359c3de4a65469ef/transformed/startup-runtime-1.1.1/AndroidManifest.xml
+Merging manifest with lower [androidx.startup:startup-runtime:1.1.1] AndroidManifest.xml:17:1-33:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.startup:startup-runtime:1.1.1] AndroidManifest.xml:21:5-23:41
+application defined in both files...
+Merging application with lower [androidx.startup:startup-runtime:1.1.1] AndroidManifest.xml:25:5-31:19
+provider#androidx.startup.InitializationProvider defined in both files...
+Merging provider#androidx.startup.InitializationProvider with lower [androidx.startup:startup-runtime:1.1.1] AndroidManifest.xml:26:9-30:34
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/2110ca71ae6ae6318895b1cdcf894fb6/transformed/tracing-1.2.0/AndroidManifest.xml
+Merging manifest with lower [androidx.tracing:tracing:1.2.0] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.tracing:tracing:1.2.0] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/191ba4cfed154b0cd81f011d12ec2eb5/transformed/versionedparcelable-1.1.1/AndroidManifest.xml
+Merging manifest with lower [androidx.versionedparcelable:versionedparcelable:1.1.1] AndroidManifest.xml:17:1-27:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.versionedparcelable:versionedparcelable:1.1.1] AndroidManifest.xml:20:5-22:41
+application defined in both files...
+Merging application with lower [androidx.versionedparcelable:versionedparcelable:1.1.1] AndroidManifest.xml:24:5-25:19
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/02f3655107ca180c02846e8f5f6283fa/transformed/core-runtime-2.2.0/AndroidManifest.xml
+Merging manifest with lower [androidx.arch.core:core-runtime:2.2.0] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.arch.core:core-runtime:2.2.0] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/434d5710cefac22024d1e30742e54581/transformed/documentfile-1.0.0/AndroidManifest.xml
+Merging manifest with lower [androidx.documentfile:documentfile:1.0.0] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.documentfile:documentfile:1.0.0] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/58ca2289460cebb37f203221eba8107b/transformed/localbroadcastmanager-1.0.0/AndroidManifest.xml
+Merging manifest with lower [androidx.localbroadcastmanager:localbroadcastmanager:1.0.0] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.localbroadcastmanager:localbroadcastmanager:1.0.0] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/2e485564d5c0d8be859063d8b4daffa8/transformed/print-1.0.0/AndroidManifest.xml
+Merging manifest with lower [androidx.print:print:1.0.0] AndroidManifest.xml:17:1-22:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.print:print:1.0.0] AndroidManifest.xml:20:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/16f05de5d4872000dedec2359af5d719/transformed/annotation-experimental-1.4.1/AndroidManifest.xml
+Merging manifest with lower [androidx.annotation:annotation-experimental:1.4.1] AndroidManifest.xml:2:1-7:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.annotation:annotation-experimental:1.4.1] AndroidManifest.xml:5:5-44
+Merging library manifest /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/7468290848cf93fea5941c55b9e6f5d9/transformed/core-viewtree-1.0.0/AndroidManifest.xml
+Merging manifest with lower [androidx.core:core-viewtree:1.0.0] AndroidManifest.xml:2:1-7:12
+uses-sdk defined in both files...
+Merging uses-sdk with lower [androidx.core:core-viewtree:1.0.0] AndroidManifest.xml:5:5-44
+Merging result: SUCCESS
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.teleteh.xplayer2"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="30"
+9        android:targetSdkVersion="36" />
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:5:5-67
+11-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:5:22-64
+12    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+12-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:6:5-79
+12-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:6:22-76
+13    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+13-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:7:5-76
+13-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:7:22-73
+14    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+14-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:8:5-86
+14-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:8:22-83
+15
+16    <permission
+16-->[androidx.core:core:1.16.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/78144feea12cf182a189ee8f6909a2ec/transformed/core-1.16.0/AndroidManifest.xml:22:5-24:47
+17        android:name="com.teleteh.xplayer2.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+17-->[androidx.core:core:1.16.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/78144feea12cf182a189ee8f6909a2ec/transformed/core-1.16.0/AndroidManifest.xml:23:9-81
+18        android:protectionLevel="signature" />
+18-->[androidx.core:core:1.16.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/78144feea12cf182a189ee8f6909a2ec/transformed/core-1.16.0/AndroidManifest.xml:24:9-44
+19
+20    <uses-permission android:name="com.teleteh.xplayer2.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+20-->[androidx.core:core:1.16.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/78144feea12cf182a189ee8f6909a2ec/transformed/core-1.16.0/AndroidManifest.xml:26:5-97
+20-->[androidx.core:core:1.16.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/78144feea12cf182a189ee8f6909a2ec/transformed/core-1.16.0/AndroidManifest.xml:26:22-94
+21
+22    <application
+22-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:10:5-35:19
+23        android:allowBackup="true"
+23-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:11:9-35
+24        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+24-->[androidx.core:core:1.16.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/78144feea12cf182a189ee8f6909a2ec/transformed/core-1.16.0/AndroidManifest.xml:28:18-86
+25        android:dataExtractionRules="@xml/data_extraction_rules"
+25-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:12:9-65
+26        android:debuggable="true"
+27        android:extractNativeLibs="false"
+28        android:fullBackupContent="@xml/backup_rules"
+28-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:13:9-54
+29        android:icon="@mipmap/ic_launcher"
+29-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:14:9-43
+30        android:label="@string/app_name"
+30-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:15:9-41
+31        android:roundIcon="@mipmap/ic_launcher_round"
+31-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:16:9-54
+32        android:supportsRtl="true"
+32-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:17:9-35
+33        android:theme="@style/Theme.XPlayer2" >
+33-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:18:9-46
+34        <activity
+34-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:19:9-27:20
+35            android:name="com.teleteh.xplayer2.MainActivity"
+35-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:20:13-41
+36            android:exported="true" >
+36-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:21:13-36
+37            <intent-filter>
+37-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:22:13-26:29
+38                <action android:name="android.intent.action.MAIN" />
+38-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:23:17-69
+38-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:23:25-66
+39
+40                <category android:name="android.intent.category.LAUNCHER" />
+40-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:25:17-77
+40-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:25:27-74
+41            </intent-filter>
+42        </activity>
+43        <activity
+43-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:28:9-34:64
+44            android:name="com.teleteh.xplayer2.player.PlayerActivity"
+44-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:29:13-50
+45            android:exported="false"
+45-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:30:13-37
+46            android:resizeableActivity="true"
+46-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:32:13-46
+47            android:screenOrientation="sensorLandscape"
+47-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:31:13-56
+48            android:supportsPictureInPicture="true"
+48-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:33:13-52
+49            android:theme="@style/Theme.XPlayer2.Fullscreen" />
+49-->/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/AndroidManifest.xml:34:13-61
+50
+51        <provider
+51-->[androidx.emoji2:emoji2:1.3.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/b66ca37306f5aacecb7fca94fcbe4f01/transformed/emoji2-1.3.0/AndroidManifest.xml:24:9-32:20
+52            android:name="androidx.startup.InitializationProvider"
+52-->[androidx.emoji2:emoji2:1.3.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/b66ca37306f5aacecb7fca94fcbe4f01/transformed/emoji2-1.3.0/AndroidManifest.xml:25:13-67
+53            android:authorities="com.teleteh.xplayer2.androidx-startup"
+53-->[androidx.emoji2:emoji2:1.3.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/b66ca37306f5aacecb7fca94fcbe4f01/transformed/emoji2-1.3.0/AndroidManifest.xml:26:13-68
+54            android:exported="false" >
+54-->[androidx.emoji2:emoji2:1.3.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/b66ca37306f5aacecb7fca94fcbe4f01/transformed/emoji2-1.3.0/AndroidManifest.xml:27:13-37
+55            <meta-data
+55-->[androidx.emoji2:emoji2:1.3.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/b66ca37306f5aacecb7fca94fcbe4f01/transformed/emoji2-1.3.0/AndroidManifest.xml:29:13-31:52
+56                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+56-->[androidx.emoji2:emoji2:1.3.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/b66ca37306f5aacecb7fca94fcbe4f01/transformed/emoji2-1.3.0/AndroidManifest.xml:30:17-75
+57                android:value="androidx.startup" />
+57-->[androidx.emoji2:emoji2:1.3.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/b66ca37306f5aacecb7fca94fcbe4f01/transformed/emoji2-1.3.0/AndroidManifest.xml:31:17-49
+58            <meta-data
+58-->[androidx.lifecycle:lifecycle-process:2.6.2] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/db26c12208b461f0e75b606bd2c4baaa/transformed/lifecycle-process-2.6.2/AndroidManifest.xml:29:13-31:52
+59                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+59-->[androidx.lifecycle:lifecycle-process:2.6.2] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/db26c12208b461f0e75b606bd2c4baaa/transformed/lifecycle-process-2.6.2/AndroidManifest.xml:30:17-78
+60                android:value="androidx.startup" />
+60-->[androidx.lifecycle:lifecycle-process:2.6.2] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/db26c12208b461f0e75b606bd2c4baaa/transformed/lifecycle-process-2.6.2/AndroidManifest.xml:31:17-49
+61            <meta-data
+61-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:29:13-31:52
+62                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+62-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:30:17-85
+63                android:value="androidx.startup" />
+63-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:31:17-49
+64        </provider>
+65
+66        <receiver
+66-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:34:9-52:20
+67            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+67-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:35:13-76
+68            android:directBootAware="false"
+68-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:36:13-44
+69            android:enabled="true"
+69-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:37:13-35
+70            android:exported="true"
+70-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:38:13-36
+71            android:permission="android.permission.DUMP" >
+71-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:39:13-57
+72            <intent-filter>
+72-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:40:13-42:29
+73                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+73-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:41:17-91
+73-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:41:25-88
+74            </intent-filter>
+75            <intent-filter>
+75-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:43:13-45:29
+76                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+76-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:44:17-85
+76-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:44:25-82
+77            </intent-filter>
+78            <intent-filter>
+78-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:46:13-48:29
+79                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+79-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:47:17-88
+79-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:47:25-85
+80            </intent-filter>
+81            <intent-filter>
+81-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:49:13-51:29
+82                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+82-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:50:17-95
+82-->[androidx.profileinstaller:profileinstaller:1.4.0] /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c837c3932fec55d71e654d87ba0682d2/transformed/profileinstaller-1.4.0/AndroidManifest.xml:50:25-92
+83            </intent-filter>
+84        </receiver>
+85    </application>
+86
+87</manifest>
+
+Merged manifest saved to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_manifest/debug/processDebugMainManifest/AndroidManifest.xml
+Resolve mutations for :app:processDebugManifest (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:processDebugManifest (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:mergeDebugResources
+Caching disabled for task ':app:mergeDebugResources' because:
+  Build cache is disabled
+Task ':app:mergeDebugResources' is not up-to-date because:
+  Output property 'blameLogOutputFolder' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res_blame_folder/debug/mergeDebugResources/out has been removed.
+  Output property 'blameLogOutputFolder' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res_blame_folder/debug/mergeDebugResources/out/multi-v2 has been removed.
+  Output property 'blameLogOutputFolder' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res_blame_folder/debug/mergeDebugResources/out/multi-v2/mergeDebugResources.json has been removed.
+  and more...
+The input changes require a full rebuild for incremental task ':app:mergeDebugResources'.
+[MergeResources] Inputs are non-incremental full task action.
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-watch-v21/values-watch-v21.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-watch-v21_values-watch-v21.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-pt/values-pt.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-pt_values-pt.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-hi/values-hi.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-hi_values-hi.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values/values.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values_values.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-watch-v20/values-watch-v20.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-watch-v20_values-watch-v20.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-hr/values-hr.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-hr_values-hr.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-hu/values-hu.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-hu_values-hu.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-hy/values-hy.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-hy_values-hy.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-h320dp-port-v13/values-h320dp-port-v13.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-h320dp-port-v13_values-h320dp-port-v13.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-is/values-is.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-is_values-is.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-in/values-in.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-in_values-in.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-w360dp-port-v13/values-w360dp-port-v13.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-w360dp-port-v13_values-w360dp-port-v13.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-ldltr-v21/values-ldltr-v21.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-ldltr-v21_values-ldltr-v21.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-ar/values-ar.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-ar_values-ar.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-b+sr+Latn/values-b+sr+Latn.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-b+sr+Latn_values-b+sr+Latn.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-af/values-af.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-af_values-af.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-zh-rHK/values-zh-rHK.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-zh-rHK_values-zh-rHK.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-w320dp-land-v13/values-w320dp-land-v13.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-w320dp-land-v13_values-w320dp-land-v13.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-v17/values-v17.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-v17_values-v17.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-as/values-as.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-as_values-as.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-ja/values-ja.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-ja_values-ja.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-es-rUS/values-es-rUS.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-es-rUS_values-es-rUS.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-v21/values-v21.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-v21_values-v21.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-v24/values-v24.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-v24_values-v24.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-h360dp-land-v13/values-h360dp-land-v13.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-h360dp-land-v13_values-h360dp-land-v13.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-iw/values-iw.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-iw_values-iw.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-be/values-be.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-be_values-be.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-v23/values-v23.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-v23_values-v23.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-bg/values-bg.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-bg_values-bg.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-ro/values-ro.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-ro_values-ro.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-v26/values-v26.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-v26_values-v26.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-pt-rPT/values-pt-rPT.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-pt-rPT_values-pt-rPT.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-az/values-az.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-az_values-az.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-h480dp-land-v13/values-h480dp-land-v13.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-h480dp-land-v13_values-h480dp-land-v13.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-en-rCA/values-en-rCA.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-en-rCA_values-en-rCA.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-ca/values-ca.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-ca_values-ca.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-ka/values-ka.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-ka_values-ka.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-sl/values-sl.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-sl_values-sl.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-v31/values-v31.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-v31_values-v31.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-zu/values-zu.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-zu_values-zu.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-kk/values-kk.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-kk_values-kk.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-bn/values-bn.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-bn_values-bn.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-ru/values-ru.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-ru_values-ru.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-ky/values-ky.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-ky_values-ky.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-kn/values-kn.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-kn_values-kn.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-ta/values-ta.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-ta_values-ta.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-sq/values-sq.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-sq_values-sq.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-bs/values-bs.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-bs_values-bs.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-h720dp-v13/values-h720dp-v13.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-h720dp-v13_values-h720dp-v13.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-en-rAU/values-en-rAU.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-en-rAU_values-en-rAU.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-th/values-th.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-th_values-th.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-sk/values-sk.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-sk_values-sk.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-km/values-km.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-km_values-km.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-pt-rBR/values-pt-rBR.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-pt-rBR_values-pt-rBR.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-tr/values-tr.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-tr_values-tr.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-lt/values-lt.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-lt_values-lt.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-mk/values-mk.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-mk_values-mk.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-sr/values-sr.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-sr_values-sr.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-en-rIN/values-en-rIN.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-en-rIN_values-en-rIN.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-sw/values-sw.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-sw_values-sw.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-de/values-de.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-de_values-de.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-te/values-te.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-te_values-te.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-cs/values-cs.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-cs_values-cs.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-ur/values-ur.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-ur_values-ur.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-fr-rCA/values-fr-rCA.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-fr-rCA_values-fr-rCA.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-es/values-es.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-es_values-es.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-uz/values-uz.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-uz_values-uz.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-da/values-da.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-da_values-da.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-lv/values-lv.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-lv_values-lv.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-nb/values-nb.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-nb_values-nb.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-lo/values-lo.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-lo_values-lo.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-vi/values-vi.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-vi_values-vi.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-fa/values-fa.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-fa_values-fa.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-ml/values-ml.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-ml_values-ml.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-my/values-my.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-my_values-my.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-uk/values-uk.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-uk_values-uk.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-mn/values-mn.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-mn_values-mn.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-mr/values-mr.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-mr_values-mr.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-fi/values-fi.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-fi_values-fi.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-fr/values-fr.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-fr_values-fr.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-et/values-et.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-et_values-et.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-small-v4/values-small-v4.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-small-v4_values-small-v4.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-ne/values-ne.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-ne_values-ne.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-zh-rTW/values-zh-rTW.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-zh-rTW_values-zh-rTW.arsc.flat
+Compiling xml file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir/layout/activity_player.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/layout_activity_player.xml.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-w400dp-port-v13/values-w400dp-port-v13.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-w400dp-port-v13_values-w400dp-port-v13.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-eu/values-eu.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-eu_values-eu.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-nl/values-nl.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-nl_values-nl.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-pa/values-pa.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-pa_values-pa.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-b+es+419/values-b+es+419.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-b+es+419_values-b+es+419.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-land/values-land.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-land_values-land.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-night-v8/values-night-v8.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-night-v8_values-night-v8.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-zh-rCN/values-zh-rCN.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-zh-rCN_values-zh-rCN.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-en-rXC/values-en-rXC.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-en-rXC_values-en-rXC.arsc.flat
+Compiling xml file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/drawable/ic_launcher_foreground.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/drawable_ic_launcher_foreground.xml.flat
+Compiling file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/mipmap-xxhdpi/ic_launcher.webp to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/mipmap-xxhdpi_ic_launcher.webp.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-or/values-or.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-or_values-or.arsc.flat
+Compiling file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/mipmap-xxxhdpi_ic_launcher.webp.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-en-rGB/values-en-rGB.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-en-rGB_values-en-rGB.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-gu/values-gu.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-gu_values-gu.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-gl/values-gl.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-gl_values-gl.arsc.flat
+Compiling xml file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/xml/backup_rules.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/xml_backup_rules.xml.flat
+Compiling xml file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir/layout/fragment_files.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/layout_fragment_files.xml.flat
+Compiling file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/mipmap-xhdpi/ic_launcher.webp to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/mipmap-xhdpi_ic_launcher.webp.flat
+Compiling xml file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/mipmap-anydpi/ic_launcher.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/mipmap-anydpi_ic_launcher.xml.flat
+Compiling file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/mipmap-mdpi/ic_launcher_round.webp to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/mipmap-mdpi_ic_launcher_round.webp.flat
+Compiling file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/mipmap-mdpi/ic_launcher.webp to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/mipmap-mdpi_ic_launcher.webp.flat
+Compiling xml file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir/layout/activity_main.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/layout_activity_main.xml.flat
+Compiling xml file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/drawable/ic_launcher_background.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/drawable_ic_launcher_background.xml.flat
+Compiling xml file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/mipmap-anydpi/ic_launcher_round.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/mipmap-anydpi_ic_launcher_round.xml.flat
+Compiling xml file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir/layout/fragment_network.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/layout_fragment_network.xml.flat
+Compiling file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/mipmap-hdpi/ic_launcher_round.webp to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/mipmap-hdpi_ic_launcher_round.webp.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-v16/values-v16.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-v16_values-v16.arsc.flat
+Compiling file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/mipmap-hdpi/ic_launcher.webp to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/mipmap-hdpi_ic_launcher.webp.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-it/values-it.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-it_values-it.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-v22/values-v22.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-v22_values-v22.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-v28/values-v28.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-v28_values-v28.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-v34/values-v34.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-v34_values-v34.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-sv/values-sv.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-sv_values-sv.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-tl/values-tl.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-tl_values-tl.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-h550dp-port-v13/values-h550dp-port-v13.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-h550dp-port-v13_values-h550dp-port-v13.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-ms/values-ms.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-ms_values-ms.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-port/values-port.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-port_values-port.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-large-v4/values-large-v4.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-large-v4_values-large-v4.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-pl/values-pl.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-pl_values-pl.arsc.flat
+Compiling xml file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/xml/data_extraction_rules.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/xml_data_extraction_rules.xml.flat
+Compiling file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.webp to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/mipmap-xxhdpi_ic_launcher_round.webp.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-v18/values-v18.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-v18_values-v18.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-am/values-am.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-am_values-am.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-v25/values-v25.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-v25_values-v25.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-sw600dp-v13/values-sw600dp-v13.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-sw600dp-v13_values-sw600dp-v13.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-si/values-si.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-si_values-si.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-ko/values-ko.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-ko_values-ko.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-xlarge-v4/values-xlarge-v4.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-xlarge-v4_values-xlarge-v4.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-ldrtl-v17/values-ldrtl-v17.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-ldrtl-v17_values-ldrtl-v17.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-el/values-el.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-el_values-el.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-w600dp-land-v13/values-w600dp-land-v13.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-w600dp-land-v13_values-w600dp-land-v13.arsc.flat
+Compiling XML table /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/merged.dir/values-hdpi-v4/values-hdpi-v4.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/values-hdpi-v4_values-hdpi-v4.arsc.flat
+Compiling xml file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir/layout/fragment_recent.xml to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/layout_fragment_recent.xml.flat
+Compiling file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/mipmap-xhdpi/ic_launcher_round.webp to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/mipmap-xhdpi_ic_launcher_round.webp.flat
+Compiling file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_res/debug/mergeDebugResources/mipmap-xxxhdpi_ic_launcher_round.webp.flat
+
+> Task :app:processDebugManifest
+Caching disabled for task ':app:processDebugManifest' because:
+  Build cache is disabled
+Task ':app:processDebugManifest' is not up-to-date because:
+  Output property 'multiApkManifestOutputDirectory' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_manifests/debug/processDebugManifest has been removed.
+  Output property 'multiApkManifestOutputDirectory' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml has been removed.
+  Output property 'multiApkManifestOutputDirectory' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_manifests/debug/processDebugManifest/output-metadata.json has been removed.
+Resolve mutations for :app:dataBindingGenBaseClassesDebug (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:dataBindingGenBaseClassesDebug (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:dataBindingGenBaseClassesDebug
+Caching disabled for task ':app:dataBindingGenBaseClassesDebug' because:
+  Build cache is disabled
+Task ':app:dataBindingGenBaseClassesDebug' is not up-to-date because:
+  Output property 'classInfoBundleDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/data_binding_base_class_log_artifact/debug/dataBindingGenBaseClassesDebug/out has been removed.
+  Output property 'classInfoBundleDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/data_binding_base_class_log_artifact/debug/dataBindingGenBaseClassesDebug/out/com.teleteh.xplayer2-binding_classes.json has been removed.
+  Output property 'logOutFolder' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/dataBindingGenBaseClassesDebug has been removed.
+  and more...
+The input changes require a full rebuild for incremental task ':app:dataBindingGenBaseClassesDebug'.
+Resolve mutations for :app:processDebugManifestForPackage (Thread[#94,Execution worker Thread 6,5,main]) started.
+:app:processDebugManifestForPackage (Thread[#94,Execution worker Thread 6,5,main]) started.
+Resolve mutations for :app:javaPreCompileDebug (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:javaPreCompileDebug (Thread[#97,Execution worker Thread 9,5,main]) started.
+Resolve mutations for :app:mergeDebugShaders (Thread[#95,Execution worker Thread 7,5,main]) started.
+:app:mergeDebugShaders (Thread[#95,Execution worker Thread 7,5,main]) started.
+
+> Task :app:javaPreCompileDebug
+Caching disabled for task ':app:javaPreCompileDebug' because:
+  Build cache is disabled
+Task ':app:javaPreCompileDebug' is not up-to-date because:
+  Output property 'annotationProcessorListFile' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/annotation_processor_list/debug/javaPreCompileDebug/annotationProcessors.json has been removed.
+
+> Task :app:mergeDebugShaders
+Caching disabled for task ':app:mergeDebugShaders' because:
+  Build cache is disabled
+  Simple merging task
+Task ':app:mergeDebugShaders' is not up-to-date because:
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_shaders/debug/mergeDebugShaders/out has been removed.
+The input changes require a full rebuild for incremental task ':app:mergeDebugShaders'.
+Resolve mutations for :app:compileDebugShaders (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:compileDebugShaders (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:compileDebugShaders NO-SOURCE
+Skipping task ':app:compileDebugShaders' as it has no source files and no previous output files.
+Resolve mutations for :app:generateDebugAssets (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:generateDebugAssets (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:generateDebugAssets UP-TO-DATE
+Skipping task ':app:generateDebugAssets' as it has no actions.
+Resolve mutations for :app:mergeDebugAssets (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:mergeDebugAssets (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:mergeDebugAssets
+Caching disabled for task ':app:mergeDebugAssets' because:
+  Build cache is disabled
+  Simple merging task
+Task ':app:mergeDebugAssets' is not up-to-date because:
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/assets/debug/mergeDebugAssets has been removed.
+The input changes require a full rebuild for incremental task ':app:mergeDebugAssets'.
+Resolve mutations for :app:compressDebugAssets (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:compressDebugAssets (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:compressDebugAssets
+Caching disabled for task ':app:compressDebugAssets' because:
+  Build cache is disabled
+Task ':app:compressDebugAssets' is not up-to-date because:
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/compressed_assets/debug/compressDebugAssets/out has been removed.
+The input changes require a full rebuild for incremental task ':app:compressDebugAssets'.
+Resolve mutations for :app:checkDebugDuplicateClasses (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:checkDebugDuplicateClasses (Thread[#97,Execution worker Thread 9,5,main]) started.
+Resolve mutations for :app:desugarDebugFileDependencies (Thread[#95,Execution worker Thread 7,5,main]) started.
+:app:desugarDebugFileDependencies (Thread[#95,Execution worker Thread 7,5,main]) started.
+
+> Task :app:desugarDebugFileDependencies
+Caching disabled for task ':app:desugarDebugFileDependencies' because:
+  Build cache is disabled
+Task ':app:desugarDebugFileDependencies' is not up-to-date because:
+  Output property 'outputDirectory' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/external_file_lib_dex_archives/debug/desugarDebugFileDependencies has been removed.
+Resolve mutations for :app:configureCMakeDebug[arm64-v8a] (Thread[#95,Execution worker Thread 7,5,main]) started.
+:app:configureCMakeDebug[arm64-v8a] (Thread[#95,Execution worker Thread 7,5,main]) started.
+
+> Task :app:checkDebugDuplicateClasses
+Caching disabled for task ':app:checkDebugDuplicateClasses' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:checkDebugDuplicateClasses' is not up-to-date because:
+  Output property 'dummyOutputDirectory' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/duplicate_classes_check/debug/checkDebugDuplicateClasses has been removed.
+
+> Task :app:configureCMakeDebug[arm64-v8a]
+Caching disabled for task ':app:configureCMakeDebug[arm64-v8a]' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:configureCMakeDebug[arm64-v8a]' is not up-to-date because:
+  Task.upToDateWhen is false.
+C/C++: SDK Manager found the following installed packages: build-tools;35.0.0 build-tools;35.0.1 build-tools;36.0.0 cmake;3.22.1 emulator ndk;27.0.12077973 platform-tools platforms;android-29 platforms;android-35 platforms;android-36 sources;android-29 sources;android-35 system-images;android-36;google_apis_playstore;arm64-v8a
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|arm64-v8a : Start JSON generation. Platform version: 30 min SDK version: arm64-v8a
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|arm64-v8a : JSON '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/arm64-v8a/android_gradle_build.json' was up-to-date
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|arm64-v8a : JSON generation completed without problems
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|arm64-v8a : Writing build model to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/cxx/Debug/2d3z3k3v/logs/arm64-v8a/build_model.json
+Resolve mutations for :app:mergeExtDexDebug (Thread[#95,Execution worker Thread 7,5,main]) started.
+:app:mergeExtDexDebug (Thread[#95,Execution worker Thread 7,5,main]) started.
+Resolve mutations for :app:mergeLibDexDebug (Thread[#96,Execution worker Thread 8,5,main]) started.
+:app:mergeLibDexDebug (Thread[#96,Execution worker Thread 8,5,main]) started.
+Resolve mutations for :app:buildCMakeDebug[arm64-v8a] (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:buildCMakeDebug[arm64-v8a] (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:mergeLibDexDebug
+Caching disabled for task ':app:mergeLibDexDebug' because:
+  Build cache is disabled
+Task ':app:mergeLibDexDebug' is not up-to-date because:
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/dex/debug/mergeLibDexDebug has been removed.
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/dex/debug/mergeLibDexDebug/0 has been removed.
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/dex/debug/mergeLibDexDebug/1 has been removed.
+  and more...
+The input changes require a full rebuild for incremental task ':app:mergeLibDexDebug'.
+
+> Task :app:buildCMakeDebug[arm64-v8a]
+Caching disabled for task ':app:buildCMakeDebug[arm64-v8a]' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:buildCMakeDebug[arm64-v8a]' is not up-to-date because:
+  Task.upToDateWhen is false.
+C/C++: starting build
+C/C++: reading expected JSONs
+C/C++: done reading expected JSONs
+C/C++: executing build commands for targets that produce .so files or executables
+C/C++: evaluate miniconfig
+C/C++: evaluate library xplayer2 (arm64-v8a)
+C/C++: building target library xplayer2 because no targets are specified.
+C/C++: about to build targets xplayer2
+C/C++: Build xplayer2
+C/C++: /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja \
+  -C \
+  /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/arm64-v8a \
+  xplayer2
+
+Starting process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja -C /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/arm64-v8a xplayer2
+Successfully started process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja''
+C/C++: Received process result: 0
+C/C++: check expected build outputs
+C/C++: build complete
+Resolve mutations for :app:configureCMakeDebug[armeabi-v7a] (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:configureCMakeDebug[armeabi-v7a] (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:configureCMakeDebug[armeabi-v7a]
+Caching disabled for task ':app:configureCMakeDebug[armeabi-v7a]' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:configureCMakeDebug[armeabi-v7a]' is not up-to-date because:
+  Task.upToDateWhen is false.
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|armeabi-v7a : Start JSON generation. Platform version: 30 min SDK version: armeabi-v7a
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|armeabi-v7a : JSON '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/armeabi-v7a/android_gradle_build.json' was up-to-date
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|armeabi-v7a : JSON generation completed without problems
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|armeabi-v7a : Writing build model to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/cxx/Debug/2d3z3k3v/logs/armeabi-v7a/build_model.json
+Resolve mutations for :app:buildCMakeDebug[armeabi-v7a] (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:buildCMakeDebug[armeabi-v7a] (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:buildCMakeDebug[armeabi-v7a]
+Caching disabled for task ':app:buildCMakeDebug[armeabi-v7a]' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:buildCMakeDebug[armeabi-v7a]' is not up-to-date because:
+  Task.upToDateWhen is false.
+C/C++: starting build
+C/C++: reading expected JSONs
+C/C++: done reading expected JSONs
+C/C++: executing build commands for targets that produce .so files or executables
+C/C++: evaluate miniconfig
+C/C++: evaluate library xplayer2 (armeabi-v7a)
+C/C++: building target library xplayer2 because no targets are specified.
+C/C++: about to build targets xplayer2
+C/C++: Build xplayer2
+C/C++: /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja \
+  -C \
+  /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/armeabi-v7a \
+  xplayer2
+
+Starting process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja -C /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/armeabi-v7a xplayer2
+Successfully started process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja''
+C/C++: Received process result: 0
+C/C++: check expected build outputs
+C/C++: build complete
+Resolve mutations for :app:configureCMakeDebug[x86] (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:configureCMakeDebug[x86] (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:configureCMakeDebug[x86]
+Caching disabled for task ':app:configureCMakeDebug[x86]' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:configureCMakeDebug[x86]' is not up-to-date because:
+  Task.upToDateWhen is false.
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86 : Start JSON generation. Platform version: 30 min SDK version: x86
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86 : JSON '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86/android_gradle_build.json' was up-to-date
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86 : JSON generation completed without problems
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86 : Writing build model to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/cxx/Debug/2d3z3k3v/logs/x86/build_model.json
+Resolve mutations for :app:buildCMakeDebug[x86] (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:buildCMakeDebug[x86] (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:buildCMakeDebug[x86]
+Caching disabled for task ':app:buildCMakeDebug[x86]' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:buildCMakeDebug[x86]' is not up-to-date because:
+  Task.upToDateWhen is false.
+C/C++: starting build
+C/C++: reading expected JSONs
+C/C++: done reading expected JSONs
+C/C++: executing build commands for targets that produce .so files or executables
+C/C++: evaluate miniconfig
+C/C++: evaluate library xplayer2 (x86)
+C/C++: building target library xplayer2 because no targets are specified.
+C/C++: about to build targets xplayer2
+C/C++: Build xplayer2
+C/C++: /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja \
+  -C \
+  /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86 \
+  xplayer2
+
+Starting process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja -C /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86 xplayer2
+Successfully started process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja''
+C/C++: Received process result: 0
+C/C++: check expected build outputs
+C/C++: build complete
+Resolve mutations for :app:configureCMakeDebug[x86_64] (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:configureCMakeDebug[x86_64] (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:processDebugManifestForPackage
+Custom actions are attached to task ':app:processDebugManifestForPackage'.
+Caching disabled for task ':app:processDebugManifestForPackage' because:
+  Build cache is disabled
+Task ':app:processDebugManifestForPackage' is not up-to-date because:
+  Output property 'packageManifests' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/packaged_manifests/debug/processDebugManifestForPackage has been removed.
+  Output property 'packageManifests' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/packaged_manifests/debug/processDebugManifestForPackage/AndroidManifest.xml has been removed.
+  Output property 'packageManifests' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/packaged_manifests/debug/processDebugManifestForPackage/output-metadata.json has been removed.
+
+> Task :app:configureCMakeDebug[x86_64]
+Caching disabled for task ':app:configureCMakeDebug[x86_64]' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:configureCMakeDebug[x86_64]' is not up-to-date because:
+  Task.upToDateWhen is false.
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86_64 : Start JSON generation. Platform version: 30 min SDK version: x86_64
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86_64 : rebuilding JSON /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86_64/android_gradle_build.json due to:
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86_64 : - no fingerprint file, will remove stale configuration folder
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86_64 : removing stale contents from '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86_64'
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86_64 : created folder '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86_64'
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86_64 : executing cmake /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/cmake \
+  -H/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp \
+  -DCMAKE_SYSTEM_NAME=Android \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+  -DCMAKE_SYSTEM_VERSION=30 \
+  -DANDROID_PLATFORM=android-30 \
+  -DANDROID_ABI=x86_64 \
+  -DCMAKE_ANDROID_ARCH_ABI=x86_64 \
+  -DANDROID_NDK=/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973 \
+  -DCMAKE_ANDROID_NDK=/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973 \
+  -DCMAKE_TOOLCHAIN_FILE=/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973/build/cmake/android.toolchain.cmake \
+  -DCMAKE_MAKE_PROGRAM=/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja \
+  -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/cxx/Debug/2d3z3k3v/obj/x86_64 \
+  -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/cxx/Debug/2d3z3k3v/obj/x86_64 \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -B/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86_64 \
+  -GNinja
+
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86_64 : /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/cmake \
+  -H/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp \
+  -DCMAKE_SYSTEM_NAME=Android \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+  -DCMAKE_SYSTEM_VERSION=30 \
+  -DANDROID_PLATFORM=android-30 \
+  -DANDROID_ABI=x86_64 \
+  -DCMAKE_ANDROID_ARCH_ABI=x86_64 \
+  -DANDROID_NDK=/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973 \
+  -DCMAKE_ANDROID_NDK=/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973 \
+  -DCMAKE_TOOLCHAIN_FILE=/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973/build/cmake/android.toolchain.cmake \
+  -DCMAKE_MAKE_PROGRAM=/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja \
+  -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/cxx/Debug/2d3z3k3v/obj/x86_64 \
+  -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/cxx/Debug/2d3z3k3v/obj/x86_64 \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -B/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86_64 \
+  -GNinja
+
+Starting process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/cmake''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/cmake -H/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp -DCMAKE_SYSTEM_NAME=Android -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_SYSTEM_VERSION=30 -DANDROID_PLATFORM=android-30 -DANDROID_ABI=x86_64 -DCMAKE_ANDROID_ARCH_ABI=x86_64 -DANDROID_NDK=/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973 -DCMAKE_ANDROID_NDK=/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973 -DCMAKE_TOOLCHAIN_FILE=/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973/build/cmake/android.toolchain.cmake -DCMAKE_MAKE_PROGRAM=/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/cxx/Debug/2d3z3k3v/obj/x86_64 -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/cxx/Debug/2d3z3k3v/obj/x86_64 -DCMAKE_BUILD_TYPE=Debug -B/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86_64 -GNinja
+Successfully started process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/cmake''
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86_64 : Received process result: 0
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86_64 : Exiting generation of /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86_64/compile_commands.json.bin normally
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86_64 : done executing cmake
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86_64 : hard linked /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86_64/compile_commands.json to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/tools/debug/x86_64/compile_commands.json
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86_64 : JSON generation completed without problems
+C/C++: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/cpp/CMakeLists.txt debug|x86_64 : Writing build model to /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/cxx/Debug/2d3z3k3v/logs/x86_64/build_model.json
+Resolve mutations for :app:buildCMakeDebug[x86_64] (Thread[#97,Execution worker Thread 9,5,main]) started.
+:app:buildCMakeDebug[x86_64] (Thread[#97,Execution worker Thread 9,5,main]) started.
+
+> Task :app:mergeExtDexDebug
+Caching disabled for task ':app:mergeExtDexDebug' because:
+  Build cache is disabled
+Task ':app:mergeExtDexDebug' is not up-to-date because:
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/dex/debug/mergeExtDexDebug has been removed.
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/dex/debug/mergeExtDexDebug/classes.dex has been removed.
+The input changes require a full rebuild for incremental task ':app:mergeExtDexDebug'.
+Merging to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/dex/debug/mergeExtDexDebug' with D8 from all or a subset of dex files in /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/97241b6e6e6961685e08aea20f9bb22c/transformed/viewbinding-8.12.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/cf4a9944dfac41a4beb7b252e9c11cb8/transformed/material-1.12.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/eaa356bd3e974e360923fcfd22efe0c8/transformed/constraintlayout-2.2.1-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c5f0cd6cb16a0186822af82e448c131c/transformed/appcompat-resources-1.7.1-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/6b405dd6108c04b9ada9946a7a0c160b/transformed/appcompat-1.7.1-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/24c2dc8d76261bfa87a1b47571399524/transformed/recyclerview-1.3.2-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/1eb3be7889b8a163c531259486553a83/transformed/viewpager2-1.1.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/0809980f6292f9de526fc8b36794df93/transformed/fragment-1.8.3-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/08b1d69f2638d763d5428da2fbf95694/transformed/fragment-ktx-1.8.3-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c86c098598737e763772534993272892/transformed/coordinatorlayout-1.2.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/5564bfc36b7a7837759b703cd148481d/transformed/emoji2-views-helper-1.3.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/b1fd6343540873aed9d800dc5555e6d3/transformed/emoji2-1.3.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/53de89f32fa35bc7d783956503c162e8/transformed/drawerlayout-1.1.1-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/20847da0e6a1bce06cbb872f17325ebe/transformed/transition-1.5.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/5dd7320e9fe68686c9071d0ac9196261/transformed/dynamicanimation-1.0.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/e3cc48eb8c2a9a09572bae065ff47f92/transformed/vectordrawable-animated-1.1.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/de1e0efebfb44f292fd98b5b4d661156/transformed/vectordrawable-1.1.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/7984f449f07f4fdbce2a96940e64d40b/transformed/viewpager-1.0.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/19e634045c166157b3121575f56e2355/transformed/customview-1.1.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/7f67a894b571a085072b1d6e529f5fa0/transformed/legacy-support-core-utils-1.0.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c5d77b16622099a89f4c0dc335678ee9/transformed/activity-ktx-1.8.1-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/8a83e18454e7833d783936f4591dd999/transformed/activity-1.8.1-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/ef38a0f849dd646404fe8a94011d9482/transformed/loader-1.0.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/75796214b1bb330e0fd7600b772cde85/transformed/core-1.16.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/765f17a0dc1f753338e36f8c52dcaf08/transformed/customview-poolingcontainer-1.0.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/771293083006cc79be9c9453a3a53e6e/transformed/savedstate-ktx-1.2.1-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/31b72d76688afa4b778ca25ca9c2416d/transformed/savedstate-1.2.1-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/70d8db0dd63bbe02001e6fc659149c1c/transformed/lifecycle-livedata-2.6.2-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/763ad53f860005bb65a850c362c6170a/transformed/lifecycle-viewmodel-ktx-2.6.2-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/5de3214d0900ebd7ef178b202909e605/transformed/lifecycle-viewmodel-2.6.2-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/b1586538c1d8d34c12d52ee755bb4fe5/transformed/lifecycle-runtime-ktx-2.6.2-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/a4179eab4b61695a06c356a86cff9554/transformed/lifecycle-process-2.6.2-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/02ed128feab41ed9ff88b814f0db94de/transformed/lifecycle-livedata-core-ktx-2.6.2-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/4df4211bba94eb0f2df46b44b87ffc80/transformed/lifecycle-livedata-core-2.6.2-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/a5688f1db7b8ab8273811d1518380237/transformed/lifecycle-common-2.6.2, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/cc0a6248c7597d03aee3470802945f33/transformed/lifecycle-runtime-2.6.2-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/93f977fced503cc5708879fc50966afd/transformed/lifecycle-viewmodel-savedstate-2.6.2-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/9e17c711098ed8a02da5b5d283985747/transformed/core-ktx-1.16.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/a3394c0a344bff289376c625487f96ac/transformed/cursoradapter-1.0.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/75c84eafd45a3d7280098af580594541/transformed/resourceinspection-annotation-1.0.1, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/e7e6bc69f5f2c98174044cf291f086b3/transformed/cardview-1.0.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/ca1d28313774e3f48d027559819d832e/transformed/profileinstaller-1.4.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/50fdb0f113ae6546a0008209337e7483/transformed/constraintlayout-core-1.1.1, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/178e2ee27dcc9e30f506b55c51cca668/transformed/interpolator-1.0.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/fc40f4b8c840f54659d813e588952556/transformed/startup-runtime-1.1.1-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/fb627fbc6dd5d22dab854f907671a6a5/transformed/tracing-1.2.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/f43cb5e63fc14ec912ac3ce8c01ae172/transformed/versionedparcelable-1.1.1-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/b1598402444b4859399ee4b7b80d5b3e/transformed/concurrent-futures-1.1.0, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/7cf087b63b93df2976dcec1acab43d5d/transformed/collection-jvm-1.4.2, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/35dc696b76b4df13f6ddaa42a07847b3/transformed/core-runtime-2.2.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/bb0b2cc45b2d2c3462ec6eb94a0d867e/transformed/core-common-2.2.0, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/c3ef64377ce000a48c7fef510537c198/transformed/documentfile-1.0.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/4ce65032c4eb81dcb5f16bbc73f2fd6f/transformed/localbroadcastmanager-1.0.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/1081fa18d12b07e61714326dc7a0b049/transformed/print-1.0.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/751dc5d84ce8f5cf92bc08001875829f/transformed/annotation-jvm-1.8.1, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/0c3668bb7509126ad9ea0fb0aef3a4bf/transformed/annotation-experimental-1.4.1-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/cd48cc35e166345727ead4d53991f2cd/transformed/core-viewtree-1.0.0-runtime, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/2518bceabc94253a5dbcec62173bbd26/transformed/kotlinx-coroutines-core-jvm-1.6.4, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/bdbf9d9b462b783f3dfdb59c61a70dd0/transformed/kotlinx-coroutines-android-1.6.4, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/cf7d77e42b598869156ad36facf017d1/transformed/kotlin-stdlib-2.0.21, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/2dd481c0b49921d2f89e00a12a3f0ea2/transformed/annotations-13.0, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/7da4c45146d48058a772454e6a29d5c9/transformed/error_prone_annotations-2.15.0, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/8bfa9aef1c03dce5802e4d30223fd4f8/transformed/jspecify-1.0.0, /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/708f3f2eae538748f361be9adae00af8/transformed/listenablefuture-1.0, and from all global synthetics files in 
+
+> Task :app:buildCMakeDebug[x86_64]
+Deleting stale output file: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/cxx/Debug/2d3z3k3v/obj/x86_64
+Caching disabled for task ':app:buildCMakeDebug[x86_64]' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:buildCMakeDebug[x86_64]' is not up-to-date because:
+  Task.upToDateWhen is false.
+C/C++: starting build
+C/C++: reading expected JSONs
+C/C++: done reading expected JSONs
+C/C++: executing build commands for targets that produce .so files or executables
+C/C++: evaluate miniconfig
+C/C++: evaluate library xplayer2 (x86_64)
+C/C++: building target library xplayer2 because no targets are specified.
+C/C++: about to build targets xplayer2
+C/C++: Build xplayer2
+C/C++: /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja \
+  -C \
+  /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86_64 \
+  xplayer2
+
+Starting process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja -C /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/.cxx/Debug/2d3z3k3v/x86_64 xplayer2
+Successfully started process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/cmake/3.22.1/bin/ninja''
+C/C++: Received process result: 0
+C/C++: check expected build outputs
+C/C++: build complete
+Resolve mutations for :app:mergeDebugJniLibFolders (Thread[#95,Execution worker Thread 7,5,main]) started.
+:app:mergeDebugJniLibFolders (Thread[#95,Execution worker Thread 7,5,main]) started.
+
+> Task :app:mergeDebugJniLibFolders
+Caching disabled for task ':app:mergeDebugJniLibFolders' because:
+  Build cache is disabled
+  Simple merging task
+Task ':app:mergeDebugJniLibFolders' is not up-to-date because:
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_jni_libs/debug/mergeDebugJniLibFolders/out has been removed.
+The input changes require a full rebuild for incremental task ':app:mergeDebugJniLibFolders'.
+Resolve mutations for :app:mergeDebugNativeLibs (Thread[#95,Execution worker Thread 7,5,main]) started.
+:app:mergeDebugNativeLibs (Thread[#95,Execution worker Thread 7,5,main]) started.
+Resolve mutations for :app:validateSigningDebug (Thread[#88,included builds,5,main]) started.
+:app:validateSigningDebug (Thread[#88,included builds,5,main]) started.
+
+> Task :app:mergeDebugNativeLibs
+Caching disabled for task ':app:mergeDebugNativeLibs' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:mergeDebugNativeLibs' is not up-to-date because:
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out has been removed.
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib has been removed.
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib/arm64-v8a has been removed.
+  and more...
+
+> Task :app:validateSigningDebug
+Caching disabled for task ':app:validateSigningDebug' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:validateSigningDebug' is not up-to-date because:
+  Output property 'dummyOutputDirectory' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/validate_signing_config/debug/validateSigningDebug has been removed.
+Resolve mutations for :app:stripDebugDebugSymbols (Thread[#88,included builds,5,main]) started.
+:app:stripDebugDebugSymbols (Thread[#88,included builds,5,main]) started.
+Resolve mutations for :app:writeDebugAppMetadata (Thread[#95,Execution worker Thread 7,5,main]) started.
+:app:writeDebugAppMetadata (Thread[#95,Execution worker Thread 7,5,main]) started.
+
+> Task :app:writeDebugAppMetadata
+Caching disabled for task ':app:writeDebugAppMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:writeDebugAppMetadata' is not up-to-date because:
+  Output property 'outputFile' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/app_metadata/debug/writeDebugAppMetadata/app-metadata.properties has been removed.
+Resolve mutations for :app:writeDebugSigningConfigVersions (Thread[#95,Execution worker Thread 7,5,main]) started.
+:app:writeDebugSigningConfigVersions (Thread[#95,Execution worker Thread 7,5,main]) started.
+
+> Task :app:writeDebugSigningConfigVersions
+Caching disabled for task ':app:writeDebugSigningConfigVersions' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:writeDebugSigningConfigVersions' is not up-to-date because:
+  Output property 'outputFile' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/signing_config_versions/debug/writeDebugSigningConfigVersions/signing-config-versions.json has been removed.
+Resolve mutations for :app:processDebugResources (Thread[#94,Execution worker Thread 6,5,main]) started.
+:app:processDebugResources (Thread[#94,Execution worker Thread 6,5,main]) started.
+
+> Task :app:stripDebugDebugSymbols
+Caching disabled for task ':app:stripDebugDebugSymbols' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:stripDebugDebugSymbols' is not up-to-date because:
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/stripped_native_libs/debug/stripDebugDebugSymbols/out has been removed.
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/stripped_native_libs/debug/stripDebugDebugSymbols/out/lib has been removed.
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/stripped_native_libs/debug/stripDebugDebugSymbols/out/lib/arm64-v8a has been removed.
+  and more...
+The input changes require a full rebuild for incremental task ':app:stripDebugDebugSymbols'.
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkVersion from module build.gradle is [27.0.12077973]
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: android.ndkPath from module build.gradle is not set
+C/C++: ndk.dir in local.properties is not set
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+C/C++: ndk.dir in local.properties is not set
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: Not considering ANDROID_NDK_HOME because support was removed after deprecation period.
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+C/C++: sdkFolder is /Users/alexander.shekhovtsov/Library/Android/sdk
+Starting process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip --strip-unneeded -o /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/stripped_native_libs/debug/stripDebugDebugSymbols/out/lib/arm64-v8a/libxplayer2.so /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib/arm64-v8a/libxplayer2.so
+Starting process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip --strip-unneeded -o /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/stripped_native_libs/debug/stripDebugDebugSymbols/out/lib/x86_64/libxplayer2.so /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib/x86_64/libxplayer2.so
+Starting process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip --strip-unneeded -o /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/stripped_native_libs/debug/stripDebugDebugSymbols/out/lib/x86/libxplayer2.so /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib/x86/libxplayer2.so
+Starting process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip --strip-unneeded -o /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/stripped_native_libs/debug/stripDebugDebugSymbols/out/lib/armeabi-v7a/libxplayer2.so /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib/armeabi-v7a/libxplayer2.so
+Successfully started process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip''
+Successfully started process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip''
+Successfully started process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip''
+Successfully started process 'command '/Users/alexander.shekhovtsov/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip''
+
+> Task :app:processDebugResources
+Caching disabled for task ':app:processDebugResources' because:
+  Build cache is disabled
+Task ':app:processDebugResources' is not up-to-date because:
+  Value of input property 'useStableIds' has changed for task ':app:processDebugResources'
+The input changes require a full rebuild for incremental task ':app:processDebugResources'.
+AAPT2 aapt2-8.12.0-13700139-osx Daemon #0: starting
+Aapt output file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/linked_resources_binary_format/debug/processDebugResources/linked-resources-binary-format-debug.ap_
+Resolve mutations for :app:compileDebugKotlin (Thread[#94,Execution worker Thread 6,5,main]) started.
+:app:compileDebugKotlin (Thread[#94,Execution worker Thread 6,5,main]) started.
+
+> Task :app:compileDebugKotlin
+Adding -Xuse-inline-scopes-numbers Kotlin compiler flag for task :app:compileDebugAndroidTestKotlin
+Caching disabled for task ':app:compileDebugKotlin' because:
+  Build cache is disabled
+Task ':app:compileDebugKotlin' is not up-to-date because:
+  Value of input property 'kotlinJavaToolchainProvider.javaVersion' has changed for task ':app:compileDebugKotlin'
+The input changes require a full rebuild for incremental task ':app:compileDebugKotlin'.
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/kotlin', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+Kotlin source files: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/java/com/teleteh/xplayer2/ui/network/NetworkFragment.kt, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/java/com/teleteh/xplayer2/ui/MainPagerAdapter.kt, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/java/com/teleteh/xplayer2/ui/files/FilesFragment.kt, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/java/com/teleteh/xplayer2/ui/recent/RecentFragment.kt, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/java/com/teleteh/xplayer2/MainActivity.kt, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/java/com/teleteh/xplayer2/player/PlayerActivity.kt
+Java source files: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/generated/data_binding_base_class_source_out/debug/out/com/teleteh/xplayer2/databinding/FragmentRecentBinding.java, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/generated/data_binding_base_class_source_out/debug/out/com/teleteh/xplayer2/databinding/FragmentNetworkBinding.java, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/generated/data_binding_base_class_source_out/debug/out/com/teleteh/xplayer2/databinding/ActivityPlayerBinding.java, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/generated/data_binding_base_class_source_out/debug/out/com/teleteh/xplayer2/databinding/ActivityMainBinding.java, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/generated/data_binding_base_class_source_out/debug/out/com/teleteh/xplayer2/databinding/FragmentFilesBinding.java
+Script source files: 
+Script file extensions: 
+Using Kotlin/JVM incremental compilation
+[KOTLIN] Kotlin compilation 'jdkHome' argument: null
+Options for KOTLIN DAEMON: IncrementalCompilationOptions(super=CompilationOptions(compilerMode=INCREMENTAL_COMPILER, targetPlatform=JVM, reportCategories=[0, 3], reportSeverity=2, requestedCompilationResults=[0], kotlinScriptExtensions=[]), areFileChangesKnown=false, modifiedFiles=null, deletedFiles=null, classpathChanges=NotAvailableForNonIncrementalRun, workingDir=/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/kotlin/compileDebugKotlin/cacheable, multiModuleICSettings=MultiModuleICSettings(buildHistoryFile=/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/kotlin/compileDebugKotlin/local-state/build-history.bin, useModuleDetection=true), usePreciseJavaTracking=true, icFeatures=IncrementalCompilationFeatures(withAbiSnapshot=false, preciseCompilationResultsBackup=true, keepIncrementalCompilationCachesInMemory=true, enableUnsafeIncrementalCompilationForMultiplatform=false), outputFiles=[/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/tmp/kotlin-classes/debug, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/kotlin/compileDebugKotlin/cacheable, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/kotlin/compileDebugKotlin/local-state])
+Finished executing kotlin compiler using DAEMON strategy
+Resolve mutations for :app:compileDebugJavaWithJavac (Thread[#94,Execution worker Thread 6,5,main]) started.
+:app:compileDebugJavaWithJavac (Thread[#94,Execution worker Thread 6,5,main]) started.
+
+> Task :app:compileDebugJavaWithJavac
+Caching disabled for JdkImageTransform: /Users/alexander.shekhovtsov/Library/Android/sdk/platforms/android-36/core-for-system-modules.jar because:
+  Build cache is disabled
+Starting process 'command '/opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home/bin/jlink''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home/bin/jlink --version
+Successfully started process 'command '/opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home/bin/jlink''
+Starting process 'command '/opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home/bin/javac''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home/bin/javac --system=none --patch-module=java.base=/Users/alexander.shekhovtsov/Library/Android/sdk/platforms/android-36/core-for-system-modules.jar -d /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/cb9dcdcef4b9540276f1f315bb4cc793-e563a447-c0d8-43e9-b014-ff002c407291/transformed/output/temp /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/cb9dcdcef4b9540276f1f315bb4cc793-e563a447-c0d8-43e9-b014-ff002c407291/transformed/output/temp/module-info.java
+Successfully started process 'command '/opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home/bin/javac''
+Starting process 'command '/opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home/bin/jmod''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home/bin/jmod create --module-version 24 --target-platform LINUX-OTHER --class-path /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/cb9dcdcef4b9540276f1f315bb4cc793-e563a447-c0d8-43e9-b014-ff002c407291/transformed/output/temp/module.jar /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/cb9dcdcef4b9540276f1f315bb4cc793-e563a447-c0d8-43e9-b014-ff002c407291/transformed/output/temp/jmod/java.base.jmod
+Successfully started process 'command '/opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home/bin/jmod''
+Starting process 'command '/opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home/bin/jlink''. Working directory: /Users/alexander.shekhovtsov/work/3d/XPlayer2/app Command: /opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home/bin/jlink --module-path /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/cb9dcdcef4b9540276f1f315bb4cc793-e563a447-c0d8-43e9-b014-ff002c407291/transformed/output/temp/jmod --add-modules java.base --output /Users/alexander.shekhovtsov/.gradle/caches/8.13/transforms/cb9dcdcef4b9540276f1f315bb4cc793-e563a447-c0d8-43e9-b014-ff002c407291/transformed/output/jdkImage --disable-plugin system-modules
+Successfully started process 'command '/opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home/bin/jlink''
+Custom actions are attached to task ':app:compileDebugJavaWithJavac'.
+Caching disabled for task ':app:compileDebugJavaWithJavac' because:
+  Build cache is disabled
+Task ':app:compileDebugJavaWithJavac' is not up-to-date because:
+  Value of input property 'javaCompiler.metadata.languageVersion' has changed for task ':app:compileDebugJavaWithJavac'
+  Value of input property 'javaCompiler.metadata.taskInputs.languageVersion' has changed for task ':app:compileDebugJavaWithJavac'
+  Value of input property 'javaVersion' has changed for task ':app:compileDebugJavaWithJavac'
+The input changes require a full rebuild for incremental task ':app:compileDebugJavaWithJavac'.
+Compilation mode: in-process compilation
+Full recompilation is required because no incremental change information is available. This is usually caused by clean builds or changing compiler arguments.
+Compiling with toolchain '/opt/homebrew/Cellar/openjdk/24.0.1/libexec/openjdk.jdk/Contents/Home'.
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/java', not found
+Compiling with JDK Java compiler API.
+Class dependency analysis for incremental compilation took 0.003 secs.
+Created classpath snapshot for incremental compilation in 0.031 secs.
+Resolve mutations for :app:processDebugJavaRes (Thread[#94,Execution worker Thread 6,5,main]) started.
+:app:processDebugJavaRes (Thread[#94,Execution worker Thread 6,5,main]) started.
+
+> Task :app:processDebugJavaRes
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/resources', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/resources', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/resources', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/resources', not found
+Caching disabled for task ':app:processDebugJavaRes' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:processDebugJavaRes' is not up-to-date because:
+  Output property 'destinationDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/java_res/debug/processDebugJavaRes/out has been removed.
+  Output property 'destinationDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/java_res/debug/processDebugJavaRes/out/com has been removed.
+  Output property 'destinationDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/java_res/debug/processDebugJavaRes/out/com/teleteh has been removed.
+  and more...
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/resources', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/resources', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/main/resources', not found
+file or directory '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/src/debug/resources', not found
+Resolve mutations for :app:mergeDebugJavaResource (Thread[#94,Execution worker Thread 6,5,main]) started.
+:app:mergeDebugJavaResource (Thread[#94,Execution worker Thread 6,5,main]) started.
+Resolve mutations for :app:dexBuilderDebug (Thread[#92,Execution worker Thread 4,5,main]) started.
+:app:dexBuilderDebug (Thread[#92,Execution worker Thread 4,5,main]) started.
+
+> Task :app:mergeDebugJavaResource
+Caching disabled for task ':app:mergeDebugJavaResource' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:mergeDebugJavaResource' is not up-to-date because:
+  Output property 'cacheDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug-mergeJavaRes/zip-cache has been removed.
+  Output property 'cacheDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug-mergeJavaRes/zip-cache/+9wbX62oiQB62lJtWqFftQ== has been removed.
+  Output property 'cacheDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/incremental/debug-mergeJavaRes/zip-cache/+B7ww9+hTjjVO5gmsHiShQ== has been removed.
+  and more...
+The input changes require a full rebuild for incremental task ':app:mergeDebugJavaResource'.
+
+> Task :app:dexBuilderDebug
+Caching disabled for task ':app:dexBuilderDebug' because:
+  Build cache is disabled
+Task ':app:dexBuilderDebug' is not up-to-date because:
+  Value of input property 'dexParams.errorFormatMode' has changed for task ':app:dexBuilderDebug'
+The input changes require a full rebuild for incremental task ':app:dexBuilderDebug'.
+Dex builder is incremental : false 
+Processing input /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/tmp/kotlin-classes/debug
+Processing input /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes
+Dexing /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/tmp/kotlin-classes/debug
+Dexing /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes
+Processing input /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/compile_and_runtime_not_namespaced_r_class_jar/debug/processDebugResources/R.jar
+Dexing /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/compile_and_runtime_not_namespaced_r_class_jar/debug/processDebugResources/R.jar
+Dexing '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/tmp/kotlin-classes/debug' to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out'
+Dexing '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes' to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out'
+Dexing '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/compile_and_runtime_not_namespaced_r_class_jar/debug/processDebugResources/R.jar' to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out/b529a423243e59e2abbe7882300d78da6ddab16dbf4f3bfeac6c5078f4ad0a52_2.jar'
+Dexing '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/compile_and_runtime_not_namespaced_r_class_jar/debug/processDebugResources/R.jar' to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out/b529a423243e59e2abbe7882300d78da6ddab16dbf4f3bfeac6c5078f4ad0a52_4.jar'
+Dexing '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/compile_and_runtime_not_namespaced_r_class_jar/debug/processDebugResources/R.jar' to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out/b529a423243e59e2abbe7882300d78da6ddab16dbf4f3bfeac6c5078f4ad0a52_1.jar'
+Dexing '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/tmp/kotlin-classes/debug' to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out'
+Dexing '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/compile_and_runtime_not_namespaced_r_class_jar/debug/processDebugResources/R.jar' to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out/b529a423243e59e2abbe7882300d78da6ddab16dbf4f3bfeac6c5078f4ad0a52_0.jar'
+Dexing '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes' to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out'
+Dexing '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/tmp/kotlin-classes/debug' to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out'
+Dexing '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/tmp/kotlin-classes/debug' to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out'
+Dexing '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes' to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out'
+Dexing '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/tmp/kotlin-classes/debug' to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out'
+Dexing '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes' to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out'
+Dexing '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes' to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out'
+Dexing '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/compile_and_runtime_not_namespaced_r_class_jar/debug/processDebugResources/R.jar' to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out/b529a423243e59e2abbe7882300d78da6ddab16dbf4f3bfeac6c5078f4ad0a52_3.jar'
+Done with all dex archive conversions
+Resolve mutations for :app:mergeProjectDexDebug (Thread[#94,Execution worker Thread 6,5,main]) started.
+:app:mergeProjectDexDebug (Thread[#94,Execution worker Thread 6,5,main]) started.
+
+> Task :app:mergeProjectDexDebug
+Caching disabled for task ':app:mergeProjectDexDebug' because:
+  Build cache is disabled
+Task ':app:mergeProjectDexDebug' is not up-to-date because:
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/dex/debug/mergeProjectDexDebug has been removed.
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/dex/debug/mergeProjectDexDebug/0 has been removed.
+  Output property 'outputDir' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/dex/debug/mergeProjectDexDebug/0/classes.dex has been removed.
+  and more...
+The input changes require a full rebuild for incremental task ':app:mergeProjectDexDebug'.
+Merging to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/dex/debug/mergeProjectDexDebug/1' with D8 from all or a subset of dex files in /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out, and from all global synthetics files in 
+Merging to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/dex/debug/mergeProjectDexDebug/0' with D8 from all or a subset of dex files in /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out/b529a423243e59e2abbe7882300d78da6ddab16dbf4f3bfeac6c5078f4ad0a52_0.jar, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out/b529a423243e59e2abbe7882300d78da6ddab16dbf4f3bfeac6c5078f4ad0a52_1.jar, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out/b529a423243e59e2abbe7882300d78da6ddab16dbf4f3bfeac6c5078f4ad0a52_2.jar, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out/b529a423243e59e2abbe7882300d78da6ddab16dbf4f3bfeac6c5078f4ad0a52_3.jar, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out/b529a423243e59e2abbe7882300d78da6ddab16dbf4f3bfeac6c5078f4ad0a52_4.jar, and from all global synthetics files in 
+Merging to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/dex/debug/mergeProjectDexDebug/8' with D8 from all or a subset of dex files in /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out, and from all global synthetics files in 
+Merging to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/dex/debug/mergeProjectDexDebug/11' with D8 from all or a subset of dex files in /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out, and from all global synthetics files in 
+Merging to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/dex/debug/mergeProjectDexDebug/13' with D8 from all or a subset of dex files in /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out, and from all global synthetics files in 
+Merging to '/Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/dex/debug/mergeProjectDexDebug/14' with D8 from all or a subset of dex files in /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out, /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/project_dex_archive/debug/dexBuilderDebug/out, and from all global synthetics files in 
+Resolve mutations for :app:packageDebug (Thread[#94,Execution worker Thread 6,5,main]) started.
+:app:packageDebug (Thread[#94,Execution worker Thread 6,5,main]) started.
+
+> Task :app:packageDebug
+Custom actions are attached to task ':app:packageDebug'.
+Caching disabled for task ':app:packageDebug' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:packageDebug' is not up-to-date because:
+  Value of input property 'abiFilters' has changed for task ':app:packageDebug'
+  Value of input property 'deterministicEntryOrder' has changed for task ':app:packageDebug'
+The input changes require a full rebuild for incremental task ':app:packageDebug'.
+Resolve mutations for :app:createDebugApkListingFileRedirect (Thread[#94,Execution worker Thread 6,5,main]) started.
+:app:createDebugApkListingFileRedirect (Thread[#94,Execution worker Thread 6,5,main]) started.
+
+> Task :app:createDebugApkListingFileRedirect
+Caching disabled for task ':app:createDebugApkListingFileRedirect' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Task ':app:createDebugApkListingFileRedirect' is not up-to-date because:
+  Output property 'redirectFile' file /Users/alexander.shekhovtsov/work/3d/XPlayer2/app/build/intermediates/apk_ide_redirect_file/debug/createDebugApkListingFileRedirect/redirect.txt has been removed.
+Resolve mutations for :app:assembleDebug (Thread[#94,Execution worker Thread 6,5,main]) started.
+:app:assembleDebug (Thread[#94,Execution worker Thread 6,5,main]) started.
+
+> Task :app:assembleDebug
+Skipping task ':app:assembleDebug' as it has no actions.
+AAPT2 aapt2-8.12.0-13700139-osx Daemon #0: shutdown
+
+BUILD SUCCESSFUL in 14s
+48 actionable tasks: 48 executed
+Watched directory hierarchies: [/Users/alexander.shekhovtsov/work/3d/XPlayer2]

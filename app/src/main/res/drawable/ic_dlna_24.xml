@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- generic cast/waves glyph -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M2,8h20v8H2V8zm2,2v4h16v-4H4zm1,7c3.87,0 7,3.13 7,7h-2c0,-2.76 -2.24,-5 -5,-5v-2zm0,4c1.66,0 3,1.34 3,3H6c0,-0.55 -0.45,-1 -1,-1v-2z"/>
+</vector>
