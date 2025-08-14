@@ -1,4 +1,10 @@
 [submodule "external/ffmpeg"]
 	path = external/ffmpeg
-	url = https://git.ffmpeg.org/ffmpeg.git
+	url = https://github.com/FFmpeg/FFmpeg
 	branch = release/6.0
+	shallow = true
+[submodule "external/media3"]
+	shallow = true
+	path = external/media3
+	url = https://github.com/androidx/media
+	branch = release
