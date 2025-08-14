@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:gravity="center"
+        android:insetLeft="44dp"
+        android:insetTop="44dp"
+        android:insetRight="44dp"
+        android:insetBottom="44dp">
+        <bitmap
+            android:src="@drawable/hero_image_for_block_g"
+            android:gravity="center"
+            android:antialias="true"
+            android:filter="true" />
+    </item>
+</layer-list>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="8dp"
+    android:insetTop="8dp"
+    android:insetRight="8dp"
+    android:insetBottom="8dp">
+    <bitmap
+        android:src="@drawable/hero_image_for_block_g"
+        android:gravity="center"
+        android:antialias="true"
+        android:filter="true" />
+</inset>

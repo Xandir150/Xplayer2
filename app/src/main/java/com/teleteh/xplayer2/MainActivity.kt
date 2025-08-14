@@ -14,6 +14,9 @@ import android.view.WindowManager
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import android.graphics.BitmapFactory
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
 
 class MainActivity : AppCompatActivity() {
 
@@ -29,6 +32,25 @@ class MainActivity : AppCompatActivity() {
         // Use MaterialToolbar as ActionBar to fix menu overlap under title on older Android
         val toolbar: MaterialToolbar = findViewById(R.id.toolbar)
         setSupportActionBar(toolbar)
+        // Ensure title is shown alongside a compact logo
+        toolbar.title = getString(R.string.app_name)
+        // Create a scaled bitmap for the logo (~18dp height) so the title remains visible
+        val bmp = BitmapFactory.decodeResource(resources, R.drawable.hero_image_for_block_g)
+        val targetDp = 24f
+        val density = resources.displayMetrics.density
+        val targetHeightPx = (targetDp * density).toInt().coerceAtLeast(1)
+        val aspect = if (bmp.height != 0) bmp.width.toFloat() / bmp.height.toFloat() else 1f
+        val targetWidthPx = (targetHeightPx * aspect).toInt().coerceAtLeast(1)
+        val scaledBmp = Bitmap.createScaledBitmap(bmp, targetWidthPx, targetHeightPx, true)
+        val logoDrawable = BitmapDrawable(resources, scaledBmp)
+        supportActionBar?.apply {
+            setDisplayShowTitleEnabled(true)
+            setDisplayShowHomeEnabled(true)
+            setDisplayUseLogoEnabled(true)
+            setLogo(logoDrawable)
+        }
+        // Also set on the toolbar to guarantee layout alongside title on all OEMs
+        toolbar.logo = logoDrawable
 
         val viewPager: ViewPager2 = binding.viewPager
         viewPager.adapter = MainPagerAdapter(this)
