@@ -50,6 +50,18 @@
             android:textAllCaps="false"
             android:textColor="@android:color/white"
             android:checkable="true" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnShift"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:insetLeft="8dp"
+            android:insetRight="8dp"
+            android:text="Shift"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:checkable="true" />
     </LinearLayout>
 
 </merge>

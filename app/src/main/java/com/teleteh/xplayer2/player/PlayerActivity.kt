@@ -34,6 +34,7 @@ import androidx.media3.common.Metadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
@@ -78,7 +79,12 @@ class PlayerActivity : AppCompatActivity() {
     private var titleCenterView: android.widget.TextView? = null
     private var currentResolvedTitle: String? = null
     private var btnSbsRef: MaterialButton? = null
+    private var btnShiftRef: MaterialButton? = null
+    // Debug flag: whether vertical SBS shift is enabled (not persisted)
+    private var sbsShiftEnabled: Boolean = false
     // No need for reentrancy guard when we don't call show/hide inside listener
+    private var lastVideoWidth: Int = 0
+    private var lastVideoHeight: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -108,7 +114,9 @@ class PlayerActivity : AppCompatActivity() {
         overlay.bringToFront()
         val btnBack = overlay.findViewById<MaterialButton>(R.id.btnBack)
         val btnSbs = overlay.findViewById<MaterialButton>(R.id.btnSbs)
+        val btnShift = overlay.findViewById<MaterialButton>(R.id.btnShift)
         btnSbsRef = btnSbs
+        btnShiftRef = btnShift
         titleCenterView = overlay.findViewById(R.id.tvTitleCenter)
         btnBack.setOnClickListener { navigateBackToPrimary() }
         btnSbs.isCheckable = true
@@ -117,6 +125,14 @@ class PlayerActivity : AppCompatActivity() {
         btnSbs.setOnClickListener {
             toggleStereoMode()
             applySbsButtonVisual(btnSbs)
+        }
+        // Shift debug button
+        btnShift.isCheckable = true
+        btnShift.isChecked = sbsShiftEnabled
+        btnShift.setOnClickListener {
+            sbsShiftEnabled = !sbsShiftEnabled
+            btnShift.isChecked = sbsShiftEnabled
+            applySbsShiftIfNeeded()
         }
         // Configure controllers with same behavior
         val timeoutMs = 3000
@@ -290,6 +306,11 @@ class PlayerActivity : AppCompatActivity() {
                 exo.play()
                 // Listen for metadata/title updates to reflect in UI and Recent
                 exo.addListener(object : Player.Listener {
+                    override fun onVideoSizeChanged(videoSize: VideoSize) {
+                        lastVideoWidth = videoSize.width
+                        lastVideoHeight = videoSize.height
+                        applySbsShiftIfNeeded()
+                    }
                     override fun onTracksChanged(tracks: Tracks) {
                         // Log selected audio track info for debugging multi-track issues
                         val groups = tracks.groups
@@ -611,6 +632,7 @@ class PlayerActivity : AppCompatActivity() {
         ).show()
         glView?.setSbsEnabled(newSbs)
         presentation?.setSbsEnabled(newSbs)
+        applySbsShiftIfNeeded()
         saveProgress()
     }
 
@@ -622,6 +644,38 @@ class PlayerActivity : AppCompatActivity() {
     private fun setStereoSbs(value: Boolean) {
         val prefs = getSharedPreferences("player_prefs", MODE_PRIVATE)
         prefs.edit { putBoolean("stereo_sbs", value) }
+    }
+
+    // --- SBS vertical shift to approximate 16:9 without bars ---
+    private fun applySbsShiftIfNeeded() {
+        val gl = glView ?: return
+        if (!sbsShiftEnabled || !getStereoSbs()) {
+            gl.setEyeVerticalShiftNormalized(0f, 0f)
+            gl.setPerEyeLetterboxPx(0f, referenceHeightPx = 1f)
+            return
+        }
+        val w = lastVideoWidth
+        val h = lastVideoHeight
+        if (w <= 0 || h <= 0) {
+            gl.setEyeVerticalShiftNormalized(0f, 0f)
+            gl.setPerEyeLetterboxPx(0f, referenceHeightPx = 1f)
+            return
+        }
+        // Compute desired half height for 16:9 based on HALF video width (each SBS half uses half width)
+        val targetHalfH = kotlin.math.round((w / 2f) * 9f / 16f)
+        // OU source half height is h/2
+        val halfH = h / 2f
+        val delta = (targetHalfH - halfH).toInt()
+        if (delta <= 0) {
+            // Already 16:9 or taller; no padding
+            gl.setEyeVerticalShiftNormalized(0f, 0f)
+            gl.setPerEyeLetterboxPx(0f, referenceHeightPx = halfH.coerceAtLeast(1f))
+            return
+        }
+        // Fine-tune: use 90% of delta as one-sided pad per half in source pixels
+        val pad = delta * 0.9f
+        gl.setEyeVerticalShiftNormalized(0f, 0f)
+        gl.setPerEyeLetterboxPx(pad, referenceHeightPx = halfH)
     }
 
     private fun updateSbsUi() {

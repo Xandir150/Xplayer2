@@ -57,6 +57,61 @@ class OuToSbsGlView @JvmOverloads constructor(
         requestRender()
     }
 
+    /**
+     * Set per-eye vertical shift in normalized texture space (0..1 of full texture height).
+     * Positive value lowers the image on screen for that eye.
+     */
+    fun setEyeVerticalShiftNormalized(left: Float, right: Float) {
+        // Clamp to safe range then forward to renderer on GL thread
+        val l = left.coerceIn(-0.25f, 0.25f)
+        val r = right.coerceIn(-0.25f, 0.25f)
+        queueEvent {
+            renderer.setEyeShiftNormalized(l, r)
+        }
+        requestRender()
+    }
+
+    /**
+     * Convenience: set per-eye vertical shift in pixels relative to a reference full-frame height.
+     */
+    fun setEyeVerticalShiftPx(leftPx: Float, rightPx: Float, referenceHeightPx: Float) {
+        if (referenceHeightPx <= 0f) return
+        setEyeVerticalShiftNormalized(leftPx / referenceHeightPx, rightPx / referenceHeightPx)
+    }
+
+    /**
+     * Apply opposite shifts to left/right eyes with a single positive amount (in pixels):
+     * bottom-half eye goes DOWN, top-half eye goes UP. Respects current swapEyes mapping.
+     */
+    fun setOppositeVerticalShiftPx(amountPx: Float, referenceHeightPx: Float) {
+        if (referenceHeightPx <= 0f) return
+        val amt = (amountPx / referenceHeightPx).coerceIn(0f, 0.25f)
+        queueEvent {
+            val swap = renderer.swapEyes.get()
+            val leftFromTop = if (swap) true else false
+            val rightFromTop = !leftFromTop
+            val leftShift = if (leftFromTop) -amt else amt
+            val rightShift = if (rightFromTop) -amt else amt
+            renderer.setEyeShiftNormalized(leftShift, rightShift)
+        }
+        requestRender()
+    }
+
+    /**
+     * Set per-eye letterbox padding as a pixel amount relative to a reference full-frame height.
+     * The same positive amount is applied, but for the eye sampling the top half the bar is added on TOP,
+     * and for the eye sampling the bottom half the bar is added on BOTTOM. This preserves 16:9 per eye
+     * when the OU source lacks top/bottom black bars.
+     */
+    fun setPerEyeLetterboxPx(amountPx: Float, referenceHeightPx: Float) {
+        if (referenceHeightPx <= 0f) return
+        val frac = (amountPx / referenceHeightPx).coerceIn(0f, 0.25f)
+        queueEvent {
+            renderer.perEyePadFrac = frac
+        }
+        requestRender()
+    }
+
     private inner class OuToSbsRenderer : Renderer, SurfaceTexture.OnFrameAvailableListener {
         private var textureId: Int = 0
         private var surfaceTexture: SurfaceTexture? = null
@@ -74,6 +129,12 @@ class OuToSbsGlView @JvmOverloads constructor(
         private var uTexMatrixLoc = 0
         private var uScaleLoc = 0
         private var uOffsetLoc = 0
+        // Normalized per-eye vertical shift (in full texture space, 0..1). Positive value intends to lower the image on screen.
+        // These are applied symmetrically depending on whether the eye samples from top or bottom half.
+        @Volatile private var leftEyeShiftNorm: Float = 0f
+        @Volatile private var rightEyeShiftNorm: Float = 0f
+        // Fraction of per-eye vertical letterbox relative to full-frame height (0..~0.25)
+        @Volatile var perEyePadFrac: Float = 0f
         private val texMatrix = FloatArray(16)
 
         // Fullscreen quad (two triangles)
@@ -167,18 +228,38 @@ class OuToSbsGlView @JvmOverloads constructor(
             val y = viewport[1]
             val w = viewport[2] / 2
             val h = viewport[3]
-            GLES20.glViewport(x, y, w, h)
+            // Apply per-eye letterbox by shrinking the half-viewport vertically and anchoring:
+            // - Top-half eye: anchor to TOP (bar appears at BOTTOM)
+            // - Bottom-half eye: anchor to BOTTOM (bar appears at TOP)
+            // Use provided per-eye pad fraction (relative to source half height) scaled to current half-viewport
+            val pad = (perEyePadFrac * h).toInt().coerceAtMost(h - 1)
+            // Top-half anchored to top: keep top edge, so shift y up by pad
+            // Bottom-half anchored to bottom: keep bottom edge, so y stays
+            val yAdj = if (fromTopHalf) y + pad else y
+            val hAdj = h - pad
+            GLES20.glViewport(x, yAdj, w, hAdj)
 
             // Apply SurfaceTexture transform and crop to top/bottom half via uniforms
             // With v origin at bottom: top half starts at 0.5, bottom half at 0.0
             GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, texMatrix, 0)
             GLES20.glUniform2f(uScaleLoc, 1f, 0.5f)
-            GLES20.glUniform2f(uOffsetLoc, 0f, if (fromTopHalf) 0.5f else 0f)
+            // Choose per-eye vertical shift. Convention: positive shift lowers the image on screen.
+            val shift = if (left) leftEyeShiftNorm else rightEyeShiftNorm
+            // For bottom half, increasing offset samples higher in the source, making the image appear lower on screen.
+            // For top half, decreasing offset samples lower in the source, likewise lowering image on screen.
+            val base = if (fromTopHalf) 0.5f else 0f
+            val offsetY = if (fromTopHalf) base - shift else base + shift
+            GLES20.glUniform2f(uOffsetLoc, 0f, offsetY)
 
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
 
             // Restore full viewport for next draw step
             GLES20.glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
+        }
+
+        fun setEyeShiftNormalized(left: Float, right: Float) {
+            leftEyeShiftNorm = left
+            rightEyeShiftNorm = right
         }
 
         override fun onFrameAvailable(surfaceTexture: SurfaceTexture?) {
