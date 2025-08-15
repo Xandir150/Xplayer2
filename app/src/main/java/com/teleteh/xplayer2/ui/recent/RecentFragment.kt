@@ -26,6 +26,8 @@ class RecentFragment : Fragment(R.layout.fragment_recent) {
             val intent = Intent(ctx, PlayerActivity::class.java)
             intent.data = entry.uriObj()
             intent.putExtra(PlayerActivity.EXTRA_START_POSITION_MS, entry.lastPositionMs)
+            // Pass the stored title so PlayerActivity starts with the correct display title
+            intent.putExtra(PlayerActivity.EXTRA_TITLE, entry.title)
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             DisplayUtils.startOnBestDisplay(requireActivity(), intent)
         }, onDelete = { entry ->
