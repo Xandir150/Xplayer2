@@ -7,6 +7,7 @@ import android.content.Intent
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.view.Display
+import android.content.pm.PackageManager
 
 object DisplayUtils {
     private const val ULTRAWIDE_RATIO = 3.2f // ~32:10..32:9
@@ -38,21 +39,33 @@ object DisplayUtils {
                 if (ratio >= ULTRAWIDE_RATIO) return d
             }
         }
-        return null
+        // If no ultrawide found, return the first available external display
+        return candidates.firstOrNull()
     }
 
     fun startOnBestDisplay(activity: Activity, intent: Intent) {
         val ext = findUltraWideExternalDisplay(activity)
-        if (ext != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val opts = ActivityOptions.makeBasic().setLaunchDisplayId(ext.displayId)
-            activity.startActivity(intent, opts.toBundle())
-        } else {
-            activity.startActivity(intent)
+        if (ext != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // Android 11+ reliably supports launching activities on external displays
+                try {
+                    val opts = ActivityOptions.makeBasic().setLaunchDisplayId(ext.displayId)
+                    activity.startActivity(intent, opts.toBundle())
+                    return
+                } catch (_: Throwable) {
+                    // Fall through to primary display on failure
+                }
+            } else {
+                // Android 10 and below: avoid setLaunchDisplayId to prevent system toast
+                // TODO: implement Presentation-based external playback for API < 30
+            }
         }
+        // Fallback: just launch normally (primary display)
+        activity.startActivity(intent)
     }
 
     fun startOnPrimaryDisplay(activity: Activity, intent: Intent) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val opts = ActivityOptions.makeBasic().setLaunchDisplayId(Display.DEFAULT_DISPLAY)
             activity.startActivity(intent, opts.toBundle())
         } else {

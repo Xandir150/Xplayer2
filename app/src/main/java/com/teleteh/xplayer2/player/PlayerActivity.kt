@@ -7,6 +7,7 @@ import android.database.Cursor
 import android.graphics.Color
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -14,6 +15,7 @@ import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.view.Surface
 import android.widget.Toast
 import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
@@ -31,6 +33,7 @@ import androidx.media3.common.Metadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
@@ -62,8 +65,11 @@ class PlayerActivity : AppCompatActivity() {
 
     private lateinit var playerView: PlayerView
     private var glView: OuToSbsGlView? = null
+    private var glSurface: Surface? = null
     private var player: ExoPlayer? = null
     private var trackSelector: DefaultTrackSelector? = null
+    private var presentation: ExternalPlayerPresentation? = null
+    private var displayListener: DisplayManager.DisplayListener? = null
     private var sourceUri: Uri? = null
     private var titleCenterView: android.widget.TextView? = null
     private var currentResolvedTitle: String? = null
@@ -202,9 +208,16 @@ class PlayerActivity : AppCompatActivity() {
                     .build()
                 exo.setMediaItem(mediaItem)
 
-                // Route video frames to GL surface when ready
+                // Route video frames: On API < 30 prefer external Presentation surface if available
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                    tryShowExternalPresentation()
+                }
+                // Also wire GL surface as a fallback (used when no Presentation)
                 glView?.setOnSurfaceReadyListener { surface ->
-                    exo.setVideoSurface(surface)
+                    glSurface = surface
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R || presentation == null) {
+                        exo.setVideoSurface(surface)
+                    }
                 }
                 exo.prepare()
 
@@ -274,6 +287,25 @@ class PlayerActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         if (player == null && sourceUri != null) initializePlayer()
+        // Listen for display changes to (re)show Presentation on API < 30
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            val dm = getSystemService(DisplayManager::class.java)
+            val listener = object : DisplayManager.DisplayListener {
+                override fun onDisplayAdded(displayId: Int) {
+                    tryShowExternalPresentation()
+                }
+                override fun onDisplayRemoved(displayId: Int) {
+                    // Dismiss if the presentation's display is gone
+                    val d = presentation?.display
+                    if (d != null && d.displayId == displayId) dismissPresentation()
+                }
+                override fun onDisplayChanged(displayId: Int) {}
+            }
+            dm?.registerDisplayListener(listener, null)
+            displayListener = listener
+            // Attempt once on start, in case display was already connected
+            tryShowExternalPresentation()
+        }
     }
 
     override fun onPause() {
@@ -289,6 +321,12 @@ class PlayerActivity : AppCompatActivity() {
         player?.clearVideoSurface()
         player?.release()
         player = null
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            val dm = getSystemService(DisplayManager::class.java)
+            displayListener?.let { dm?.unregisterDisplayListener(it) }
+            displayListener = null
+            dismissPresentation()
+        }
     }
 
 
@@ -348,6 +386,56 @@ class PlayerActivity : AppCompatActivity() {
         saveProgress()
         player?.release()
         player = null
+    }
+
+    private fun tryShowExternalPresentation() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) return
+        val ext = DisplayUtils.findUltraWideExternalDisplay(this) ?: run {
+            dismissPresentation()
+            return
+        }
+        if (presentation?.display?.displayId == ext.displayId) return
+        dismissPresentation()
+        // Create presentation and route player surface there
+        val pres = ExternalPlayerPresentation(this, ext) { surface ->
+            player?.let { exo ->
+                if (surface != null) {
+                    exo.setVideoSurface(surface)
+                } else {
+                    exo.clearVideoSurface()
+                }
+            }
+        }
+        presentation = pres
+        try {
+            pres.show()
+            // Mirror current SBS state to external GL, but auto-enable if external is ultrawide
+            val current = getStereoSbs()
+            val d = pres.display
+            var ultra = false
+            try {
+                val dm = android.util.DisplayMetrics()
+                @Suppress("DEPRECATION")
+                d?.getMetrics(dm)
+                val ratio = (dm.widthPixels.toFloat() / (dm.heightPixels.takeIf { it > 0 } ?: 1))
+                ultra = ratio >= 3.2f
+            } catch (_: Throwable) { }
+            pres.setSbsEnabled(current || ultra)
+        } catch (_: Throwable) {
+            presentation = null
+        }
+    }
+
+    private fun dismissPresentation() {
+        presentation?.dismiss()
+        presentation = null
+        // Restore rendering back to GL surface if available
+        val surface = glSurface
+        if (surface != null) {
+            player?.setVideoSurface(surface)
+        } else {
+            player?.clearVideoSurface()
+        }
     }
 
     private fun saveProgress() {
@@ -430,6 +518,7 @@ class PlayerActivity : AppCompatActivity() {
             Toast.LENGTH_SHORT
         ).show()
         glView?.setSbsEnabled(newSbs)
+        presentation?.setSbsEnabled(newSbs)
         saveProgress()
     }
 

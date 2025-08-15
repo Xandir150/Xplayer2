@@ -15,10 +15,12 @@
         android:roundIcon="@mipmap/ic_launcher_glasses_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.XPlayer2"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="true"
+        android:largeHeap="true">
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:resizeableActivity="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

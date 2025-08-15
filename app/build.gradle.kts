@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.teleteh.xplayer2"
-        minSdk = 30
+        minSdk = 29
         targetSdk = 36
         versionCode = 2
         versionName = "1.0.1"
