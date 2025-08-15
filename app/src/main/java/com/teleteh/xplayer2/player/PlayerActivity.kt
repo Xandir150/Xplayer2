@@ -685,6 +685,8 @@ class PlayerActivity : AppCompatActivity() {
         val ultraWide = w.toFloat() / h.toFloat() >= 3.2f
         // With SbsMirrorLayout mirroring internally, no need to toggle a right-side view
         // Leave toolbar visibility controlled by controller listener
+        // Duplicate mono video into left/right halves on ultrawide stereo displays when SBS is OFF
+        glView?.setDuplicateMonoToSbs(ultraWide && !getStereoSbs())
     }
 
     private fun applySbsButtonVisual(btn: MaterialButton) {

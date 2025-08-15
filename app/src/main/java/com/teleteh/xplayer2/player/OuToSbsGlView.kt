@@ -52,6 +52,15 @@ class OuToSbsGlView @JvmOverloads constructor(
         requestRender()
     }
 
+    /**
+     * When SBS is disabled, optionally duplicate the mono frame side-by-side (left and right halves).
+     * Useful for stereo displays to watch 2D content.
+     */
+    fun setDuplicateMonoToSbs(enabled: Boolean) {
+        renderer.duplicateMonoToSbs.set(enabled)
+        requestRender()
+    }
+
     fun setSwapEyes(enabled: Boolean) {
         renderer.swapEyes.set(enabled)
         requestRender()
@@ -121,6 +130,7 @@ class OuToSbsGlView @JvmOverloads constructor(
         var onSurfaceReady: ((Surface) -> Unit)? = null
         val sbsEnabled = AtomicBoolean(false)
         val swapEyes = AtomicBoolean(false)
+        val duplicateMonoToSbs = AtomicBoolean(false)
 
         private var program = 0
         private var aPosLoc = 0
@@ -203,8 +213,13 @@ class OuToSbsGlView @JvmOverloads constructor(
                 drawHalf(left = true, fromTopHalf = leftFromTop)
                 drawHalf(left = false, fromTopHalf = rightFromTop)
             } else {
-                // Mono: draw the full texture to full screen
-                drawFull()
+                // Mono: either full screen, or duplicate into left/right halves for stereo displays
+                if (duplicateMonoToSbs.get()) {
+                    drawMonoIntoHalf(left = true)
+                    drawMonoIntoHalf(left = false)
+                } else {
+                    drawFull()
+                }
             }
 
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0)
@@ -216,6 +231,22 @@ class OuToSbsGlView @JvmOverloads constructor(
             GLES20.glUniform2f(uScaleLoc, 1f, 1f)
             GLES20.glUniform2f(uOffsetLoc, 0f, 0f)
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+        }
+
+        private fun drawMonoIntoHalf(left: Boolean) {
+            val viewport = IntArray(4)
+            GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewport, 0)
+            val x = if (left) viewport[0] else viewport[0] + viewport[2] / 2
+            val y = viewport[1]
+            val w = viewport[2] / 2
+            val h = viewport[3]
+            // Draw full texture into the half viewport
+            GLES20.glViewport(x, y, w, h)
+            GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, texMatrix, 0)
+            GLES20.glUniform2f(uScaleLoc, 1f, 1f)
+            GLES20.glUniform2f(uOffsetLoc, 0f, 0f)
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+            GLES20.glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
         }
 
         private fun drawHalf(left: Boolean, fromTopHalf: Boolean) {
