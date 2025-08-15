@@ -9,7 +9,8 @@ data class RecentEntry(
     val durationMs: Long,
     val lastPlayedAt: Long,
     val framePacking: Int? = null,
-    val sbsEnabled: Boolean? = null
+    val sbsEnabled: Boolean? = null,
+    val sbsShiftEnabled: Boolean? = null
 ) {
     fun uriObj(): Uri = Uri.parse(uri)
 }

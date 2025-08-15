@@ -133,6 +133,8 @@ class PlayerActivity : AppCompatActivity() {
             sbsShiftEnabled = !sbsShiftEnabled
             btnShift.isChecked = sbsShiftEnabled
             applySbsShiftIfNeeded()
+            // Persist per-item shift state
+            saveProgress()
         }
         // Configure controllers with same behavior
         val timeoutMs = 3000
@@ -294,6 +296,10 @@ class PlayerActivity : AppCompatActivity() {
                 if (resumePos > 0L) {
                     exo.seekTo(resumePos)
                 }
+                // Initialize per-item shift toggle from recents
+                sbsShiftEnabled = recent?.sbsShiftEnabled ?: false
+                btnShiftRef?.isChecked = sbsShiftEnabled
+                applySbsShiftIfNeeded()
                 // Initialize SBS state per item
                 val dm = resources.displayMetrics
                 val ultraWide = (dm.widthPixels.toFloat() / (dm.heightPixels.takeIf { it > 0 }
@@ -571,7 +577,8 @@ class PlayerActivity : AppCompatActivity() {
             durationMs = duration,
             lastPlayedAt = System.currentTimeMillis(),
             framePacking = framePacking,
-            sbsEnabled = getStereoSbs()
+            sbsEnabled = getStereoSbs(),
+            sbsShiftEnabled = sbsShiftEnabled
         )
         RecentStore(this).upsert(entry)
     }

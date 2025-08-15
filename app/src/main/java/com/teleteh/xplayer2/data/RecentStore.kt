@@ -73,7 +73,8 @@ class RecentStore(private val context: Context) {
             durationMs = optLong("durationMs", 0L),
             lastPlayedAt = optLong("lastPlayedAt", 0L),
             framePacking = if (has("framePacking") && !isNull("framePacking")) optInt("framePacking") else null,
-            sbsEnabled = if (has("sbsEnabled") && !isNull("sbsEnabled")) optBoolean("sbsEnabled") else null
+            sbsEnabled = if (has("sbsEnabled") && !isNull("sbsEnabled")) optBoolean("sbsEnabled") else null,
+            sbsShiftEnabled = if (has("sbsShiftEnabled") && !isNull("sbsShiftEnabled")) optBoolean("sbsShiftEnabled") else null
         )
     } catch (_: Throwable) {
         null
@@ -87,6 +88,7 @@ class RecentStore(private val context: Context) {
         put("lastPlayedAt", lastPlayedAt)
         if (framePacking != null) put("framePacking", framePacking)
         if (sbsEnabled != null) put("sbsEnabled", sbsEnabled)
+        if (sbsShiftEnabled != null) put("sbsShiftEnabled", sbsShiftEnabled)
     }
 
     private fun ensureNiceTitle(entry: RecentEntry): String {
