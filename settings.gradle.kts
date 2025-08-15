@@ -77,4 +77,10 @@ project(":media3-lib-exoplayer-dash").projectDir = media3("libraries/exoplayer_d
 
 include(":media3-lib-transformer")
 project(":media3-lib-transformer").projectDir = media3("libraries/transformer")
- 
+
+// Additional app-used modules to avoid mixing with Maven artifacts
+include(":media3-lib-ui")
+project(":media3-lib-ui").projectDir = media3("libraries/ui")
+
+include(":media3-lib-exoplayer-hls")
+project(":media3-lib-exoplayer-hls").projectDir = media3("libraries/exoplayer_hls")

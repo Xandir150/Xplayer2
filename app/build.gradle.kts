@@ -57,9 +57,9 @@ dependencies {
     implementation(libs.org.jetbrains.kotlinx.coroutines.core)
     implementation(libs.org.jetbrains.kotlinx.coroutines.android)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.media3.exoplayer)
-    implementation(libs.androidx.media3.exoplayer.hls)
-    implementation(libs.androidx.media3.ui)
+    implementation(project(":media3-lib-exoplayer"))
+    implementation(project(":media3-lib-exoplayer-hls"))
+    implementation(project(":media3-lib-ui"))
     // Image loading for device icons and thumbnails
     implementation(libs.coil)
     // Local Media3 FFmpeg decoder module
