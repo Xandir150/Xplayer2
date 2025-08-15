@@ -62,6 +62,61 @@
             android:textAllCaps="false"
             android:textColor="@android:color/white"
             android:checkable="true" />
+
+        <ImageButton
+            android:id="@+id/btnAudio"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="8dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/select_audio_track"
+            android:scaleType="centerInside"
+            android:src="@drawable/ear_sound_24px"
+            android:tint="@android:color/white" />
     </LinearLayout>
+
+    <!-- Fullscreen tap-to-dismiss root for custom audio menu -->
+    <FrameLayout
+        android:id="@+id/audioMenuRoot"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <!-- Centered menu for non-SBS mode -->
+        <LinearLayout
+            android:id="@+id/audioMenuCenter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:background="#CC000000"
+            android:padding="12dp" />
+
+        <!-- Left panel for SBS mode -->
+        <LinearLayout
+            android:id="@+id/audioMenuLeft"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="24dp"
+            android:orientation="vertical"
+            android:background="#CC000000"
+            android:padding="12dp"
+            android:visibility="gone" />
+
+        <!-- Right panel for SBS mode -->
+        <LinearLayout
+            android:id="@+id/audioMenuRight"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="24dp"
+            android:orientation="vertical"
+            android:background="#CC000000"
+            android:padding="12dp"
+            android:visibility="gone" />
+    </FrameLayout>
 
 </merge>

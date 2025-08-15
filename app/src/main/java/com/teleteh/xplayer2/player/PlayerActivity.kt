@@ -1,4 +1,4 @@
-package com.teleteh.xplayer2.player
+    package com.teleteh.xplayer2.player
 
 import android.content.Intent
 import android.content.res.ColorStateList
@@ -18,6 +18,10 @@ import android.view.MenuItem
 import android.view.View
 import android.view.Surface
 import android.widget.Toast
+import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.view.ViewGroup
 import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
@@ -34,6 +38,7 @@ import androidx.media3.common.Metadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -44,6 +49,10 @@ import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.PlayerView.ControllerVisibilityListener
 import androidx.media3.ui.TrackSelectionDialogBuilder
+import androidx.media3.ui.DefaultTrackNameProvider
+import android.graphics.Typeface
+import android.widget.ScrollView
+import android.util.TypedValue
 import com.google.android.material.button.MaterialButton
 import com.teleteh.xplayer2.MainActivity
 import com.teleteh.xplayer2.R
@@ -80,6 +89,10 @@ class PlayerActivity : AppCompatActivity() {
     private var currentResolvedTitle: String? = null
     private var btnSbsRef: MaterialButton? = null
     private var btnShiftRef: MaterialButton? = null
+    private var audioMenuRoot: android.widget.FrameLayout? = null
+    private var audioMenuCenter: LinearLayout? = null
+    private var audioMenuLeft: LinearLayout? = null
+    private var audioMenuRight: LinearLayout? = null
     // Debug flag: whether vertical SBS shift is enabled (not persisted)
     private var sbsShiftEnabled: Boolean = false
     // No need for reentrancy guard when we don't call show/hide inside listener
@@ -115,9 +128,16 @@ class PlayerActivity : AppCompatActivity() {
         val btnBack = overlay.findViewById<MaterialButton>(R.id.btnBack)
         val btnSbs = overlay.findViewById<MaterialButton>(R.id.btnSbs)
         val btnShift = overlay.findViewById<MaterialButton>(R.id.btnShift)
+        val btnAudio = overlay.findViewById<ImageButton>(R.id.btnAudio)
         btnSbsRef = btnSbs
         btnShiftRef = btnShift
         titleCenterView = overlay.findViewById(R.id.tvTitleCenter)
+        // Audio menu containers
+        audioMenuRoot = overlay.findViewById(R.id.audioMenuRoot)
+        audioMenuCenter = overlay.findViewById(R.id.audioMenuCenter)
+        audioMenuLeft = overlay.findViewById(R.id.audioMenuLeft)
+        audioMenuRight = overlay.findViewById(R.id.audioMenuRight)
+        audioMenuRoot?.setOnClickListener { hideAudioMenu() }
         btnBack.setOnClickListener { navigateBackToPrimary() }
         btnSbs.isCheckable = true
         btnSbs.isChecked = getStereoSbs()
@@ -136,6 +156,7 @@ class PlayerActivity : AppCompatActivity() {
             // Persist per-item shift state
             saveProgress()
         }
+        btnAudio.setOnClickListener { showAudioMenu() }
         // Configure controllers with same behavior
         val timeoutMs = 3000
         playerView.controllerShowTimeoutMs = timeoutMs
@@ -496,6 +517,144 @@ class PlayerActivity : AppCompatActivity() {
         saveProgress()
         player?.release()
         player = null
+    }
+
+    // --- Custom Audio Menu (SBS-aware) ---
+    private data class AudioMenuItem(
+        val label: String,
+        val isAuto: Boolean,
+        val group: Tracks.Group?,
+        val trackIndexInGroup: Int?
+    )
+
+    private fun buildAudioMenuItems(): List<AudioMenuItem> {
+        val items = mutableListOf<AudioMenuItem>()
+        // Auto item first
+        items += AudioMenuItem(label = "Auto", isAuto = true, group = null, trackIndexInGroup = null)
+        val tracks = player?.currentTracks ?: return items
+        val nameProvider = DefaultTrackNameProvider(resources)
+        for (i in 0 until tracks.groups.size) {
+            val g = tracks.groups[i]
+            if (g.type != C.TRACK_TYPE_AUDIO) continue
+            for (j in 0 until g.length) {
+                // List only supported tracks
+                if (!g.isTrackSupported(j)) continue
+                val f = g.getTrackFormat(j)
+                val pretty = nameProvider.getTrackName(f)
+                val label = pretty
+                items += AudioMenuItem(label = label, isAuto = false, group = g, trackIndexInGroup = j)
+            }
+        }
+        return items
+    }
+
+    private fun showAudioMenu() {
+        val root = audioMenuRoot ?: return
+        val center = audioMenuCenter ?: return
+        val left = audioMenuLeft ?: return
+        val right = audioMenuRight ?: return
+        // Clear previous content
+        center.removeAllViews()
+        left.removeAllViews()
+        right.removeAllViews()
+        val items = buildAudioMenuItems()
+        val sbs = getStereoSbs()
+        // Build views
+        fun addItemsTo(container: LinearLayout) {
+            container.removeAllViews()
+            fun dp(value: Int): Int =
+                TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP,
+                    value.toFloat(),
+                    resources.displayMetrics
+                ).toInt()
+            val title = TextView(this).apply {
+                text = getString(R.string.select_audio_track)
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                setTextColor(Color.WHITE)
+                textSize = 16f
+                typeface = Typeface.DEFAULT_BOLD
+            }
+            // Build scrollable content
+            val scroll = ScrollView(this).apply {
+                // Cap height to ~60% of the root overlay height
+                val h = (audioMenuRoot?.height ?: 0)
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    if (h > 0) (h * 0.6f).toInt() else ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            }
+            val inner = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+            }
+            val items = buildAudioMenuItems()
+            inner.addView(title)
+            // Determine current selection for highlighting
+            items.forEach { item ->
+                val isSelected = when {
+                    item.isAuto -> false
+                    item.group != null && item.trackIndexInGroup != null -> {
+                        try {
+                            item.group.isTrackSelected(item.trackIndexInGroup)
+                        } catch (e: Exception) { false }
+                    }
+                    else -> false
+                }
+                val tv = TextView(this).apply {
+                    text = item.label
+                    setPadding(dp(16), dp(10), dp(16), dp(10))
+                    setTextColor(Color.WHITE)
+                    textSize = 14f
+                    isAllCaps = false
+                    if (isSelected) setTypeface(typeface, Typeface.BOLD)
+                    alpha = if (isSelected) 1.0f else 0.85f
+                    setOnClickListener {
+                        applyAudioSelection(item)
+                        hideAudioMenu()
+                    }
+                }
+                inner.addView(tv)
+            }
+            scroll.addView(inner)
+            container.addView(scroll)
+        }
+        if (sbs) {
+            // Show RIGHT panel to match button position; mirrored rendering shows in both eyes
+            center.visibility = View.GONE
+            left.visibility = View.GONE
+            right.visibility = View.VISIBLE
+            addItemsTo(right)
+        } else {
+            center.visibility = View.VISIBLE
+            left.visibility = View.GONE
+            right.visibility = View.GONE
+            addItemsTo(center)
+        }
+        root.visibility = View.VISIBLE
+    }
+
+    private fun hideAudioMenu() {
+        audioMenuRoot?.visibility = View.GONE
+    }
+
+    private fun applyAudioSelection(item: AudioMenuItem) {
+        val selector = trackSelector ?: return
+        val exo = player ?: return
+        val builder = selector.buildUponParameters()
+        // Always ensure audio is enabled
+        builder.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+        // Clear previous audio overrides
+        builder.clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+        if (!item.isAuto) {
+            val group = item.group ?: return
+            val index = item.trackIndexInGroup ?: return
+            val override = TrackSelectionOverride(group.mediaTrackGroup, listOf(index))
+            builder.addOverride(override)
+        }
+        selector.parameters = builder.build()
+        // Nudge to apply immediately
+        exo.playWhenReady = exo.playWhenReady
+        Toast.makeText(this, if (item.isAuto) "Audio: Auto" else item.label, Toast.LENGTH_SHORT).show()
     }
 
     private fun tryShowExternalPresentation() {
