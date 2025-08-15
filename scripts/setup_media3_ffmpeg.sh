@@ -8,7 +8,7 @@ set -euo pipefail
 #   NDK_PATH: $ANDROID_NDK_HOME or $ANDROID_NDK or $ANDROID_HOME/ndk/* (first found)
 #   ANDROID_ABI: 30 (must be <= minSdk in app)
 #   HOST_PLATFORM: darwin-x86_64 (macOS). Use linux-x86_64 on Linux.
-#   DECODERS: ac3 eac3 dca
+#   DECODERS: wide set by default (can be overridden with --decoders)
 #   MEDIA3_DIR: external/media3
 #   FFMPEG_SRC_DIR: external/ffmpeg
 #
@@ -63,7 +63,7 @@ resolve_ndk() {
 NDK_PATH="$(resolve_ndk)"
 ANDROID_ABI="${ABI_ARG:-30}"
 HOST_PLATFORM="${HOST_ARG:-darwin-x86_64}"
-ENABLED_DECODERS=( ${DECODERS_ARG:-"ac3 eac3 dca"} )
+ENABLED_DECODERS=( ${DECODERS_ARG:-"ac3 dca aac mp3 vorbis opus flac alac ape wmapro wma wmav2 pcm_s16le pcm_s24le pcm_s32le pcm_f32le atrac3 atrac3p"} )
 
 if [[ -z "${NDK_PATH}" ]]; then
   echo "ERROR: Android NDK not found. Provide with --ndk or set ANDROID_NDK_HOME." >&2

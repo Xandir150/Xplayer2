@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.hardware.display.DisplayManager
+import android.media.MediaRouter
 import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -30,12 +31,14 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Metadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
-import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.decoder.ffmpeg.FfmpegLibrary
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.PlayerView.ControllerVisibilityListener
@@ -70,6 +73,7 @@ class PlayerActivity : AppCompatActivity() {
     private var trackSelector: DefaultTrackSelector? = null
     private var presentation: ExternalPlayerPresentation? = null
     private var displayListener: DisplayManager.DisplayListener? = null
+    private var routeCallback: MediaRouter.SimpleCallback? = null
     private var sourceUri: Uri? = null
     private var titleCenterView: android.widget.TextView? = null
     private var currentResolvedTitle: String? = null
@@ -182,12 +186,34 @@ class PlayerActivity : AppCompatActivity() {
         trackSelector = selector
         val renderersFactory = DefaultRenderersFactory(this)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            .setEnableDecoderFallback(true)
         player = ExoPlayer.Builder(this, renderersFactory)
             .setTrackSelector(selector)
             .build().also { exo ->
                 // Prefer highest quality variant (e.g., for HLS master playlists)
+                val ffmpegAvailableForPrefs = try { FfmpegLibrary.isAvailable() } catch (_: Throwable) { false }
                 selector.parameters = selector.buildUponParameters()
                     .setForceHighestSupportedBitrate(true)
+                    // Only prefer AC3/EAC3/DTS when FFmpeg is available. Otherwise prefer common AAC/Opus/Vorbis
+                    .setPreferredAudioMimeTypes(
+                        *(if (ffmpegAvailableForPrefs) arrayOf(
+                            MimeTypes.AUDIO_E_AC3,
+                            MimeTypes.AUDIO_AC3,
+                            MimeTypes.AUDIO_DTS,
+                            MimeTypes.AUDIO_DTS_HD,
+                            MimeTypes.AUDIO_AAC,
+                            MimeTypes.AUDIO_OPUS,
+                            MimeTypes.AUDIO_VORBIS
+                        ) else arrayOf(
+                            MimeTypes.AUDIO_AAC,
+                            MimeTypes.AUDIO_OPUS,
+                            MimeTypes.AUDIO_VORBIS,
+                            MimeTypes.AUDIO_E_AC3,
+                            MimeTypes.AUDIO_AC3,
+                            MimeTypes.AUDIO_DTS,
+                            MimeTypes.AUDIO_DTS_HD
+                        ))
+                    )
                     .build()
                 // Bind player to UI controls (PlayerView), but video output will be our GL surface
                 playerView.player = exo
@@ -208,14 +234,33 @@ class PlayerActivity : AppCompatActivity() {
                     .build()
                 exo.setMediaItem(mediaItem)
 
-                // Route video frames: On API < 30 prefer external Presentation surface if available
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                // --- Diagnostics: FFmpeg availability ---
+                val ffmpegAvailable = try { FfmpegLibrary.isAvailable() } catch (_: Throwable) { false }
+                if (!ffmpegAvailable) {
+                    android.util.Log.w("XPlayer2", "FFmpeg extension not available. AC3/EAC3/DTS may not decode on this device.")
+                } else {
+                    android.util.Log.i("XPlayer2", "FFmpeg extension is available. Using extension renderers: PREFER")
+                }
+
+                // Route video frames: On API <= 30 prefer Presentation only when truly available
+                // - On Android 11 (API 30): prefer Presentation ONLY if MediaRouter provides a route display
+                // - On Android 10 and below: allow either MediaRouter route OR external display scan
+                val preferPresentation = when {
+                    Build.VERSION.SDK_INT == Build.VERSION_CODES.R ->
+                        DisplayUtils.getRoutePresentationDisplay(this) != null
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.R ->
+                        (DisplayUtils.getRoutePresentationDisplay(this) != null
+                                || DisplayUtils.findUltraWideExternalDisplay(this) != null)
+                    else -> false
+                }
+                if (preferPresentation) {
                     tryShowExternalPresentation()
                 }
-                // Also wire GL surface as a fallback (used when no Presentation)
+                // Also wire GL surface as a fallback (used when no Presentation or no external display)
                 glView?.setOnSurfaceReadyListener { surface ->
                     glSurface = surface
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R || presentation == null) {
+                    // If preferring Presentation and external exists, don't attach main GL surface yet
+                    if (!preferPresentation && presentation == null) {
                         exo.setVideoSurface(surface)
                     }
                 }
@@ -245,6 +290,25 @@ class PlayerActivity : AppCompatActivity() {
                 exo.play()
                 // Listen for metadata/title updates to reflect in UI and Recent
                 exo.addListener(object : Player.Listener {
+                    override fun onTracksChanged(tracks: Tracks) {
+                        // Log selected audio track info for debugging multi-track issues
+                        val groups = tracks.groups
+                        for (i in 0 until groups.size) {
+                            val g = groups[i]
+                            if (g.type == C.TRACK_TYPE_AUDIO) {
+                                for (j in 0 until g.length) {
+                                    val info = g.getTrackFormat(j)
+                                    val selected = g.isTrackSelected(j)
+                                    if (selected) {
+                                        android.util.Log.i(
+                                            "XPlayer2",
+                                            "Selected audio: mime=${info.sampleMimeType} codecs=${info.codecs} ch=${info.channelCount} hz=${info.sampleRate} lang=${info.language}"
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                     override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
                         updateCenterTitle()
                         // Persist improved title into Recent if changed
@@ -287,8 +351,8 @@ class PlayerActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         if (player == null && sourceUri != null) initializePlayer()
-        // Listen for display changes to (re)show Presentation on API < 30
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+        // Listen for display changes to (re)show Presentation on API <= 30 (Android 10 & 11)
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
             val dm = getSystemService(DisplayManager::class.java)
             val listener = object : DisplayManager.DisplayListener {
                 override fun onDisplayAdded(displayId: Int) {
@@ -303,6 +367,18 @@ class PlayerActivity : AppCompatActivity() {
             }
             dm?.registerDisplayListener(listener, null)
             displayListener = listener
+            // MediaRouter route changes (like HDMI docks / wireless displays)
+            routeCallback = DisplayUtils.registerRouteCallback(this) {
+                // On any route change, try to show/dismiss Presentation accordingly
+                val routeDisplay = DisplayUtils.getRoutePresentationDisplay(this)
+                if (routeDisplay != null) {
+                    tryShowExternalPresentation()
+                } else {
+                    // If no route presentation and current presentation targets a non-route display, leave it
+                    // Otherwise dismiss to return to primary
+                    if (presentation != null) dismissPresentation()
+                }
+            }
             // Attempt once on start, in case display was already connected
             tryShowExternalPresentation()
         }
@@ -321,10 +397,13 @@ class PlayerActivity : AppCompatActivity() {
         player?.clearVideoSurface()
         player?.release()
         player = null
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
             val dm = getSystemService(DisplayManager::class.java)
             displayListener?.let { dm?.unregisterDisplayListener(it) }
             displayListener = null
+            // Unregister MediaRouter callback
+            DisplayUtils.unregisterRouteCallback(this, routeCallback)
+            routeCallback = null
             dismissPresentation()
         }
     }
@@ -378,6 +457,10 @@ class PlayerActivity : AppCompatActivity() {
         glView?.onResume()
         // Resume playback if needed
         player?.playWhenReady = true
+        // Re-attempt showing Presentation on API <= 30 in case display connected while paused
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+            tryShowExternalPresentation()
+        }
         updateSbsUi()
     }
 
@@ -389,8 +472,15 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun tryShowExternalPresentation() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) return
-        val ext = DisplayUtils.findUltraWideExternalDisplay(this) ?: run {
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.R) return
+        // Resolve target display depending on API level
+        val ext = when {
+            Build.VERSION.SDK_INT == Build.VERSION_CODES.R ->
+                DisplayUtils.getRoutePresentationDisplay(this)
+            else ->
+                DisplayUtils.getRoutePresentationDisplay(this)
+                    ?: DisplayUtils.findUltraWideExternalDisplay(this)
+        } ?: run {
             dismissPresentation()
             return
         }
@@ -409,6 +499,8 @@ class PlayerActivity : AppCompatActivity() {
         presentation = pres
         try {
             pres.show()
+            // While waiting for Presentation GL surface, clear the main GL surface so frames don't render on primary
+            player?.clearVideoSurface()
             // Mirror current SBS state to external GL, but auto-enable if external is ultrawide
             val current = getStereoSbs()
             val d = pres.display

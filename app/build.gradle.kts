@@ -62,7 +62,7 @@ dependencies {
     implementation(libs.androidx.media3.ui)
     // Image loading for device icons and thumbnails
     implementation(libs.coil)
-    // Local Media3 FFmpeg decoder module (make sure external/media3 is set up)
+    // Local Media3 FFmpeg decoder module
     implementation(project(":media3-lib-decoder-ffmpeg"))
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

@@ -8,6 +8,7 @@ import android.hardware.display.DisplayManager
 import android.os.Build
 import android.view.Display
 import android.content.pm.PackageManager
+import android.media.MediaRouter
 
 object DisplayUtils {
     private const val ULTRAWIDE_RATIO = 3.2f // ~32:10..32:9
@@ -46,8 +47,8 @@ object DisplayUtils {
     fun startOnBestDisplay(activity: Activity, intent: Intent) {
         val ext = findUltraWideExternalDisplay(activity)
         if (ext != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Android 11+ reliably supports launching activities on external displays
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // Android 12+ (API 31+) can launch activities on external displays
                 try {
                     val opts = ActivityOptions.makeBasic().setLaunchDisplayId(ext.displayId)
                     activity.startActivity(intent, opts.toBundle())
@@ -55,9 +56,22 @@ object DisplayUtils {
                 } catch (_: Throwable) {
                     // Fall through to primary display on failure
                 }
+            } else if (Build.VERSION.SDK_INT == Build.VERSION_CODES.R) {
+                // Android 11 (API 30): If no presentation-capable route, force-launch on external (may show toast)
+                val routeDisplay = getRoutePresentationDisplay(activity)
+                if (routeDisplay == null) {
+                    try {
+                        val opts = ActivityOptions.makeBasic().setLaunchDisplayId(ext.displayId)
+                        activity.startActivity(intent, opts.toBundle())
+                        return
+                    } catch (_: Throwable) {
+                        // Fall through
+                    }
+                }
+                // If routeDisplay exists, avoid setLaunchDisplayId and rely on Presentation inside PlayerActivity
             } else {
-                // Android 10 and below: avoid setLaunchDisplayId to prevent system toast
-                // TODO: implement Presentation-based external playback for API < 30
+                // Android 10 and below: avoid setLaunchDisplayId to prevent system toast.
+                // PlayerActivity will render to the external display via Presentation when available.
             }
         }
         // Fallback: just launch normally (primary display)
@@ -71,5 +85,36 @@ object DisplayUtils {
         } else {
             activity.startActivity(intent)
         }
+    }
+
+    // --- MediaRouter helpers (similar to VLC approach) ---
+
+    fun getRoutePresentationDisplay(context: Context): Display? {
+        val mr = context.getSystemService(Context.MEDIA_ROUTER_SERVICE) as? MediaRouter ?: return null
+        val route = mr.getSelectedRoute(MediaRouter.ROUTE_TYPE_LIVE_VIDEO)
+        return route?.presentationDisplay
+    }
+
+    fun registerRouteCallback(context: Context, onChanged: () -> Unit): MediaRouter.SimpleCallback? {
+        val mr = context.getSystemService(Context.MEDIA_ROUTER_SERVICE) as? MediaRouter ?: return null
+        val cb = object : MediaRouter.SimpleCallback() {
+            override fun onRoutePresentationDisplayChanged(router: MediaRouter, info: MediaRouter.RouteInfo) {
+                onChanged()
+            }
+            override fun onRouteSelected(router: MediaRouter, type: Int, info: MediaRouter.RouteInfo) {
+                onChanged()
+            }
+            override fun onRouteUnselected(router: MediaRouter, type: Int, info: MediaRouter.RouteInfo) {
+                onChanged()
+            }
+        }
+        mr.addCallback(MediaRouter.ROUTE_TYPE_LIVE_VIDEO, cb)
+        return cb
+    }
+
+    fun unregisterRouteCallback(context: Context, callback: MediaRouter.SimpleCallback?) {
+        if (callback == null) return
+        val mr = context.getSystemService(Context.MEDIA_ROUTER_SERVICE) as? MediaRouter ?: return
+        mr.removeCallback(callback)
     }
 }

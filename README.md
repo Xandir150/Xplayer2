@@ -50,8 +50,7 @@ If you don’t want to use submodules, run the helper script to clone the requir
 ./scripts/setup_media3_ffmpeg.sh \
   --ndk "/path/to/android-ndk" \
   --host darwin-x86_64 \
-  --abi 30 \
-  --decoders "ac3 eac3 dca"
+  --abi 30
 ```
 
 Notes:
@@ -62,6 +61,21 @@ Notes:
   2) Clone FFmpeg 6.0 into `external/ffmpeg` (branch `release/6.0`) if missing
   3) Symlink `external/ffmpeg` to `external/media3/libraries/decoder_ffmpeg/src/main/jni/ffmpeg`
   4) Invoke `build_ffmpeg.sh` in the Media3 decoder module to build binaries
+
+### Enabled audio decoders (default)
+
+The setup script enables a wide set of decoders by default to make the player "all‑eating":
+
+```
+ac3 eac3 dca aac mp3 vorbis opus flac alac ape wmalossless wmapro wma wmav2 
+pcm_s16le pcm_s24le pcm_s32le pcm_f32le atrac3 atrac3p
+```
+
+You can override the list using `--decoders "<space separated names>"` when invoking the script, for example:
+
+```bash
+./scripts/setup_media3_ffmpeg.sh --abi 30 --decoders "ac3 eac3 dca aac hevc"
+```
 
 ## Building the app
 ```bash
