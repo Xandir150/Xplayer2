@@ -26,6 +26,8 @@ class ExternalPlayerPresentation(
         setContentView(R.layout.presentation_player)
         // Make window fullscreen and allow drawing edge-to-edge
         window?.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        // Keep only the external screen on while the device may lock the primary display
+        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window?.attributes = window?.attributes?.apply {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS

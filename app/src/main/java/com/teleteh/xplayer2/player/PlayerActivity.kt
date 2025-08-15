@@ -11,6 +11,7 @@ import android.hardware.display.DisplayManager
 import android.media.MediaRouter
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.OpenableColumns
 import android.view.LayoutInflater
 import android.view.Menu
@@ -22,6 +23,7 @@ import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.view.ViewGroup
+import android.view.Display
 import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
@@ -73,6 +75,8 @@ class PlayerActivity : AppCompatActivity() {
         val intent = Intent(this, MainActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         DisplayUtils.startOnPrimaryDisplay(this, intent)
+        // If we explicitly leave playback, dismiss the external presentation so the second screen clears
+        dismissPresentation()
         finish()
     }
 
@@ -98,6 +102,7 @@ class PlayerActivity : AppCompatActivity() {
     // No need for reentrancy guard when we don't call show/hide inside listener
     private var lastVideoWidth: Int = 0
     private var lastVideoHeight: Int = 0
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -436,15 +441,23 @@ class PlayerActivity : AppCompatActivity() {
         super.onPause()
         saveProgress()
         glView?.onPause()
-        player?.playWhenReady = false
+        // If rendering to an external Presentation or activity is on external display, keep playing when primary screen is turned off/locked
+        if (!(presentation != null || isOnExternalDisplay())) {
+            player?.playWhenReady = false
+        }
+        // WakeLock: keep if external playback is active, otherwise release
+        updateWakeLock()
     }
 
     override fun onStop() {
         super.onStop()
         saveProgress()
-        player?.clearVideoSurface()
-        player?.release()
-        player = null
+        // If external Presentation is active or activity is on external display, keep the player alive to continue playback on the secondary display
+        if (!(presentation != null || isOnExternalDisplay())) {
+            player?.clearVideoSurface()
+            player?.release()
+            player = null
+        }
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
             val dm = getSystemService(DisplayManager::class.java)
             displayListener?.let { dm?.unregisterDisplayListener(it) }
@@ -452,8 +465,16 @@ class PlayerActivity : AppCompatActivity() {
             // Unregister MediaRouter callback
             DisplayUtils.unregisterRouteCallback(this, routeCallback)
             routeCallback = null
-            dismissPresentation()
+            // Dismiss Presentation if we're finishing (leaving playback), otherwise keep it during lock
+            if (isFinishing) {
+                dismissPresentation()
+            } else if (!(presentation != null || isOnExternalDisplay())) {
+                // No external playback in use -> ensure dismissal
+                dismissPresentation()
+            }
         }
+        // Update wakelock after potential dismissal/finishing
+        updateWakeLock()
     }
 
 
@@ -505,11 +526,28 @@ class PlayerActivity : AppCompatActivity() {
         glView?.onResume()
         // Resume playback if needed
         player?.playWhenReady = true
+        // For Android 12+ when the activity itself runs on an external display, keep only that display awake
+        try {
+            if (isOnExternalDisplay()) {
+                window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            } else {
+                window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        } catch (_: Throwable) { }
         // Re-attempt showing Presentation on API <= 30 in case display connected while paused
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
             tryShowExternalPresentation()
         }
         updateSbsUi()
+        // Ensure wakelock matches current external playback state
+        updateWakeLock()
+    }
+
+    private fun isOnExternalDisplay(): Boolean {
+        return try {
+            val d = window?.decorView?.display
+            d != null && d.displayId != Display.DEFAULT_DISPLAY
+        } catch (_: Throwable) { false }
     }
 
     override fun onDestroy() {
@@ -517,6 +555,36 @@ class PlayerActivity : AppCompatActivity() {
         saveProgress()
         player?.release()
         player = null
+        releaseWakeLock()
+    }
+
+    private fun shouldHoldWakeLock(): Boolean = (presentation != null || isOnExternalDisplay())
+
+    private fun updateWakeLock() {
+        if (shouldHoldWakeLock()) {
+            acquireWakeLock()
+        } else {
+            releaseWakeLock()
+        }
+    }
+
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        try {
+            val pm = getSystemService(PowerManager::class.java)
+            val wl = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "XPlayer2:ExternalPlayback")
+            wl?.setReferenceCounted(false)
+            wl?.acquire()
+            wakeLock = wl
+        } catch (_: Throwable) { }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            val wl = wakeLock
+            if (wl?.isHeld == true) wl.release()
+        } catch (_: Throwable) { }
+        wakeLock = null
     }
 
     // --- Custom Audio Menu (SBS-aware) ---
@@ -702,6 +770,8 @@ class PlayerActivity : AppCompatActivity() {
         } catch (_: Throwable) {
             presentation = null
         }
+        // Presentation shown -> re-evaluate wakelock
+        updateWakeLock()
     }
 
     private fun dismissPresentation() {
@@ -714,6 +784,8 @@ class PlayerActivity : AppCompatActivity() {
         } else {
             player?.clearVideoSurface()
         }
+        // Presentation dismissed -> re-evaluate wakelock
+        updateWakeLock()
     }
 
     private fun saveProgress() {
