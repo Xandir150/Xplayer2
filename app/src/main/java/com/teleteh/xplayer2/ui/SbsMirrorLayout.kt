@@ -1,7 +1,6 @@
 package com.teleteh.xplayer2.ui
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
@@ -26,8 +25,6 @@ class SbsMirrorLayout @JvmOverloads constructor(
 ) : ViewGroup(context, attrs) {
 
     private var isUltraWide = false
-    private var bufferBitmap: Bitmap? = null
-    private var bufferCanvas: Canvas? = null
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
     private var overlay: MirrorOverlayView? = null
 
@@ -81,21 +78,8 @@ class SbsMirrorLayout @JvmOverloads constructor(
         super.dispatchDraw(canvas)
     }
 
-    private fun ensureBuffer(w: Int, h: Int) {
-        val cur = bufferBitmap
-        if (cur == null || cur.width != w || cur.height != h) {
-            cur?.recycle()
-            bufferBitmap =
-                if (w > 0 && h > 0) Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888) else null
-            bufferCanvas = bufferBitmap?.let { Canvas(it) }
-        }
-    }
-
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
-        bufferCanvas = null
-        bufferBitmap?.recycle()
-        bufferBitmap = null
     }
 
     override fun onDescendantInvalidated(child: View, target: View) {
@@ -183,8 +167,6 @@ class SbsMirrorLayout @JvmOverloads constructor(
     }
 
     private inner class MirrorOverlayView(context: Context) : View(context) {
-        private var buf: Bitmap? = null
-        private var bufCanvas: Canvas? = null
         private val p = Paint(Paint.FILTER_BITMAP_FLAG)
 
         init {
@@ -199,28 +181,13 @@ class SbsMirrorLayout @JvmOverloads constructor(
             if (!parent.shouldMirror(w, h)) return
             val content = parent.contentChild() ?: return
             val half = w / 2
-            ensureBuf(half, h)
-            val off = bufCanvas ?: return
-            // Clear and draw content into offscreen half-size buffer
-            off.drawColor(0, android.graphics.PorterDuff.Mode.CLEAR)
-            val save = off.save()
-            // Translate so content's left maps to 0 in offscreen
-            off.translate(-content.left.toFloat(), -content.top.toFloat())
-            content.draw(off)
-            off.restoreToCount(save)
-            val bmp = buf ?: return
-            // Draw buffer to right half
-            canvas.drawBitmap(bmp, half.toFloat(), 0f, p)
-        }
-
-        private fun ensureBuf(w: Int, h: Int) {
-            val cur = buf
-            if (cur == null || cur.width != w || cur.height != h) {
-                cur?.recycle()
-                buf =
-                    if (w > 0 && h > 0) Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888) else null
-                bufCanvas = buf?.let { Canvas(it) }
-            }
+            // Draw the content directly onto the window canvas on the right half.
+            // This keeps rendering on the hardware canvas and avoids SW bitmap usage.
+            val save = canvas.save()
+            canvas.clipRect(half, 0, w, h)
+            canvas.translate(half - content.left.toFloat(), -content.top.toFloat())
+            content.draw(canvas)
+            canvas.restoreToCount(save)
         }
 
         override fun gatherTransparentRegion(region: Region?): Boolean =
