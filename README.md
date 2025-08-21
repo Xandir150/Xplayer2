@@ -1,6 +1,6 @@
 # XPlayer2
 
-XPlayer2 is an Android video player with 3D/VR features. It uses AndroidX Media3 ExoPlayer and an FFmpeg-based decoder module for specific codecs.
+XPlayer2 is an Android video player with 3D/VR features for using with XReal glasses. It uses AndroidX Media3 ExoPlayer and an FFmpeg-based decoder module for specific codecs.
 
 ## Features (highlights)
 - 3D video support; OU/SBS badge in Recent based on frame-packing metadata.
