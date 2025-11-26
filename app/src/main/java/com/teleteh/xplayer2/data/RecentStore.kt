@@ -66,15 +66,22 @@ class RecentStore(private val context: Context) {
     }
 
     private fun JSONObject.toEntry(): RecentEntry? = try {
+        val uriStr = getString("uri")
+        val storedSourceType = optString("sourceType", "").takeIf { it.isNotBlank() }
+        val sourceType = storedSourceType?.let { 
+            try { SourceType.valueOf(it) } catch (_: Throwable) { null }
+        } ?: RecentEntry.detectSourceType(Uri.parse(uriStr))
+        
         RecentEntry(
-            uri = getString("uri"),
+            uri = uriStr,
             title = optString("title", ""),
             lastPositionMs = optLong("lastPositionMs", 0L),
             durationMs = optLong("durationMs", 0L),
             lastPlayedAt = optLong("lastPlayedAt", 0L),
             framePacking = if (has("framePacking") && !isNull("framePacking")) optInt("framePacking") else null,
             sbsEnabled = if (has("sbsEnabled") && !isNull("sbsEnabled")) optBoolean("sbsEnabled") else null,
-            sbsShiftEnabled = if (has("sbsShiftEnabled") && !isNull("sbsShiftEnabled")) optBoolean("sbsShiftEnabled") else null
+            sbsShiftEnabled = if (has("sbsShiftEnabled") && !isNull("sbsShiftEnabled")) optBoolean("sbsShiftEnabled") else null,
+            sourceType = sourceType
         )
     } catch (_: Throwable) {
         null
@@ -89,6 +96,7 @@ class RecentStore(private val context: Context) {
         if (framePacking != null) put("framePacking", framePacking)
         if (sbsEnabled != null) put("sbsEnabled", sbsEnabled)
         if (sbsShiftEnabled != null) put("sbsShiftEnabled", sbsShiftEnabled)
+        if (sourceType != null) put("sourceType", sourceType.name)
     }
 
     private fun ensureNiceTitle(entry: RecentEntry): String {
