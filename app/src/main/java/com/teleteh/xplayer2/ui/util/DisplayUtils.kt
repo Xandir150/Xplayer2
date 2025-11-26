@@ -45,9 +45,8 @@ object DisplayUtils {
     }
 
     fun startOnBestDisplay(activity: Activity, intent: Intent) {
-        // Always launch Activity on primary display (phone screen)
-        // Video will be rendered to external display via Presentation inside PlayerActivity
-        // This keeps the UI controls accessible on the phone while video plays on glasses/external display
+        // Always launch on primary display (phone)
+        // Video will be shown on external display via Presentation
         activity.startActivity(intent)
     }
 

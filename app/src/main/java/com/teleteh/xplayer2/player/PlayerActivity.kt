@@ -71,6 +71,10 @@ class PlayerActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_START_POSITION_MS = "start_position_ms"
         const val EXTRA_TITLE = "title"
+        
+        // Current instance for remote control access
+        var currentInstance: PlayerActivity? = null
+            private set
     }
 
     private fun navigateBackToPrimary() {
@@ -86,6 +90,7 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var playerView: PlayerView
     private var glView: OuToSbsGlView? = null
     private var glSurface: Surface? = null
+    private var presentationSurface: Surface? = null
     private var player: ExoPlayer? = null
     private var trackSelector: DefaultTrackSelector? = null
     private var presentation: ExternalPlayerPresentation? = null
@@ -114,11 +119,14 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        currentInstance = this
         setContentView(R.layout.activity_player)
+        
         // Handle system back via dispatcher to move app back to primary display
         onBackPressedDispatcher.addCallback(this) {
             navigateBackToPrimary()
         }
+        
         playerView = findViewById(R.id.playerView)
         glView = findViewById(R.id.glView)
         glView?.setSbsEnabled(getStereoSbs())
@@ -336,29 +344,25 @@ class PlayerActivity : AppCompatActivity() {
                     android.util.Log.i("XPlayer2", "FFmpeg extension is available. Using extension renderers: PREFER")
                 }
 
-                // Route video frames: On API <= 30 prefer Presentation only when truly available
-                // - On Android 11 (API 30): prefer Presentation ONLY if MediaRouter provides a route display
-                // - On Android 10 and below: allow either MediaRouter route OR external display scan
-                val preferPresentation = when {
-                    Build.VERSION.SDK_INT == Build.VERSION_CODES.R ->
-                        DisplayUtils.getRoutePresentationDisplay(this) != null
-                    Build.VERSION.SDK_INT < Build.VERSION_CODES.R ->
-                        (DisplayUtils.getRoutePresentationDisplay(this) != null
-                                || DisplayUtils.findUltraWideExternalDisplay(this) != null)
-                    else -> false
-                }
-                if (preferPresentation) {
-                    tryShowExternalPresentation()
-                }
-                // Also wire GL surface as a fallback (used when no Presentation or no external display)
+                // Wire GL surface for video output (only if no Presentation)
                 glView?.setOnSurfaceReadyListener { surface ->
                     glSurface = surface
-                    // If preferring Presentation and external exists, don't attach main GL surface yet
-                    if (!preferPresentation && presentation == null) {
+                    // Only bind to local GL if Presentation is not active
+                    if (presentation == null) {
                         exo.setVideoSurface(surface)
                     }
                 }
                 exo.prepare()
+                
+                // If Presentation exists, bind player to it
+                presentation?.let { pres ->
+                    pres.setPlayer(exo)
+                    // If Presentation surface is already ready, bind it now
+                    presentationSurface?.let { surface ->
+                        android.util.Log.d("XPlayer2", "Binding existing Presentation surface to new player")
+                        exo.setVideoSurface(surface)
+                    }
+                }
 
                 // Resume position if provided or stored
                 // Use sourceUri for recents lookup (not resolvedStreamUri which may be different for extracted streams)
@@ -477,40 +481,21 @@ class PlayerActivity : AppCompatActivity() {
         updateSbsUi()
     }
 
+    private var remoteControlLaunched = false
+    
     override fun onStart() {
         super.onStart()
         // Don't initialize player if stream extraction is in progress
         if (player == null && sourceUri != null && !isExtractingStream) initializePlayer()
-        // Listen for display changes to (re)show Presentation on API <= 30 (Android 10 & 11)
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
-            val dm = getSystemService(DisplayManager::class.java)
-            val listener = object : DisplayManager.DisplayListener {
-                override fun onDisplayAdded(displayId: Int) {
-                    tryShowExternalPresentation()
-                }
-                override fun onDisplayRemoved(displayId: Int) {
-                    // Dismiss if the presentation's display is gone
-                    val d = presentation?.display
-                    if (d != null && d.displayId == displayId) dismissPresentation()
-                }
-                override fun onDisplayChanged(displayId: Int) {}
-            }
-            dm?.registerDisplayListener(listener, null)
-            displayListener = listener
-            // MediaRouter route changes (like HDMI docks / wireless displays)
-            routeCallback = DisplayUtils.registerRouteCallback(this) {
-                // On any route change, try to show/dismiss Presentation accordingly
-                val routeDisplay = DisplayUtils.getRoutePresentationDisplay(this)
-                if (routeDisplay != null) {
-                    tryShowExternalPresentation()
-                } else {
-                    // If no route presentation and current presentation targets a non-route display, leave it
-                    // Otherwise dismiss to return to primary
-                    if (presentation != null) dismissPresentation()
-                }
-            }
-            // Attempt once on start, in case display was already connected
-            tryShowExternalPresentation()
+        // Try to show Presentation on external display
+        tryShowExternalPresentation()
+        
+        // If Presentation is active, launch RemoteControlActivity on phone
+        if (presentation != null && !remoteControlLaunched) {
+            remoteControlLaunched = true
+            val intent = Intent(this, RemoteControlActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            startActivity(intent)
         }
     }
 
@@ -518,8 +503,8 @@ class PlayerActivity : AppCompatActivity() {
         super.onPause()
         saveProgress()
         glView?.onPause()
-        // If rendering to an external Presentation or activity is on external display, keep playing when primary screen is turned off/locked
-        if (!(presentation != null || isOnExternalDisplay())) {
+        // If Presentation is active, keep playing when phone screen is turned off/locked
+        if (presentation == null) {
             player?.playWhenReady = false
         }
         // WakeLock: keep if external playback is active, otherwise release
@@ -603,18 +588,8 @@ class PlayerActivity : AppCompatActivity() {
         glView?.onResume()
         // Resume playback if needed
         player?.playWhenReady = true
-        // For Android 12+ when the activity itself runs on an external display, keep only that display awake
-        try {
-            if (isOnExternalDisplay()) {
-                window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            } else {
-                window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            }
-        } catch (_: Throwable) { }
-        // Re-attempt showing Presentation on API <= 30 in case display connected while paused
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
-            tryShowExternalPresentation()
-        }
+        // Try to show Presentation on external display
+        tryShowExternalPresentation()
         updateSbsUi()
         // Ensure wakelock matches current external playback state
         updateWakeLock()
@@ -629,13 +604,16 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (currentInstance == this) {
+            currentInstance = null
+        }
         saveProgress()
         player?.release()
         player = null
         releaseWakeLock()
     }
 
-    private fun shouldHoldWakeLock(): Boolean = (presentation != null || isOnExternalDisplay())
+    private fun shouldHoldWakeLock(): Boolean = presentation != null
 
     private fun updateWakeLock() {
         if (shouldHoldWakeLock()) {
@@ -802,66 +780,70 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun tryShowExternalPresentation() {
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.R) return
-        // Resolve target display depending on API level
-        val ext = when {
-            Build.VERSION.SDK_INT == Build.VERSION_CODES.R ->
-                DisplayUtils.getRoutePresentationDisplay(this)
-            else ->
-                DisplayUtils.getRoutePresentationDisplay(this)
-                    ?: DisplayUtils.findUltraWideExternalDisplay(this)
-        } ?: run {
+        // Find external display for Presentation
+        val ext = DisplayUtils.findUltraWideExternalDisplay(this) ?: run {
             dismissPresentation()
             return
         }
+        // Already showing on this display
         if (presentation?.display?.displayId == ext.displayId) return
+        
         dismissPresentation()
-        // Create presentation and route player surface there
+        
+        // Create Presentation and route video there
         val pres = ExternalPlayerPresentation(this, ext) { surface ->
-            player?.let { exo ->
-                if (surface != null) {
+            presentationSurface = surface
+            android.util.Log.d("XPlayer2", "Presentation surface callback: surface=$surface, player=${player != null}")
+            if (surface != null) {
+                player?.let { exo ->
+                    android.util.Log.d("XPlayer2", "Presentation surface ready, binding to player")
                     exo.setVideoSurface(surface)
-                } else {
-                    exo.clearVideoSurface()
                 }
+                // Hide local GL view - video goes to Presentation only
+                glView?.visibility = View.GONE
+            } else {
+                player?.clearVideoSurface()
             }
         }
         presentation = pres
         try {
             pres.show()
-            // While waiting for Presentation GL surface, clear the main GL surface so frames don't render on primary
+            android.util.Log.d("XPlayer2", "Presentation shown on display ${ext.displayId}")
+            
+            // Clear main surface - video will render on Presentation
             player?.clearVideoSurface()
-            // Mirror current SBS state to external GL, but auto-enable if external is ultrawide
-            val current = getStereoSbs()
-            val d = pres.display
-            var ultra = false
-            try {
-                val dm = android.util.DisplayMetrics()
-                @Suppress("DEPRECATION")
-                d?.getMetrics(dm)
-                val ratio = (dm.widthPixels.toFloat() / (dm.heightPixels.takeIf { it > 0 } ?: 1))
-                ultra = ratio >= 3.2f
-            } catch (_: Throwable) { }
-            pres.setSbsEnabled(current || ultra)
-        } catch (_: Throwable) {
+            glView?.visibility = View.GONE
+            
+            // Configure SBS for ultrawide
+            val dm = android.util.DisplayMetrics()
+            @Suppress("DEPRECATION")
+            ext.getMetrics(dm)
+            val ratio = dm.widthPixels.toFloat() / dm.heightPixels.coerceAtLeast(1)
+            val isUltrawide = ratio >= 3.2f
+            
+            // Enable SBS on Presentation
+            pres.setSbsEnabled(getStereoSbs() || isUltrawide)
+            pres.setPlayer(player)
+        } catch (e: Throwable) {
+            android.util.Log.e("XPlayer2", "Failed to show Presentation", e)
             presentation = null
+            // Restore local rendering
+            glView?.visibility = View.VISIBLE
+            glSurface?.let { player?.setVideoSurface(it) }
         }
-        // Presentation shown -> re-evaluate wakelock
         updateWakeLock()
     }
 
     private fun dismissPresentation() {
-        presentation?.dismiss()
-        presentation = null
-        // Restore rendering back to GL surface if available
-        val surface = glSurface
-        if (surface != null) {
-            player?.setVideoSurface(surface)
-        } else {
-            player?.clearVideoSurface()
+        if (presentation != null) {
+            presentation?.dismiss()
+            presentation = null
+            presentationSurface = null
+            // Restore local GL view
+            glView?.visibility = View.VISIBLE
+            glSurface?.let { player?.setVideoSurface(it) }
+            updateWakeLock()
         }
-        // Presentation dismissed -> re-evaluate wakelock
-        updateWakeLock()
     }
 
     private fun saveProgress() {
@@ -1065,5 +1047,106 @@ class PlayerActivity : AppCompatActivity() {
         } catch (_: Throwable) {
             null
         }
+    }
+
+    // ========== Public methods for RemoteControlActivity ==========
+
+    fun getCurrentTitle(): String = currentResolvedTitle ?: sourceUri?.lastPathSegment ?: ""
+
+    fun getCurrentPosition(): Long = player?.currentPosition ?: 0L
+
+    fun getDuration(): Long = player?.duration?.takeIf { it > 0 } ?: 0L
+
+    fun isPlaying(): Boolean = player?.isPlaying ?: false
+
+    fun togglePlayPause() {
+        player?.let { exo ->
+            if (exo.isPlaying) exo.pause() else exo.play()
+        }
+    }
+
+    fun seekTo(positionMs: Long) {
+        player?.seekTo(positionMs.coerceAtLeast(0))
+    }
+
+    fun seekRelative(deltaMs: Long) {
+        player?.let { exo ->
+            val newPos = (exo.currentPosition + deltaMs).coerceIn(0, exo.duration.coerceAtLeast(0))
+            exo.seekTo(newPos)
+        }
+    }
+
+    fun isStereoSbsEnabled(): Boolean = getStereoSbs()
+
+    fun toggleStereoSbs() {
+        val newValue = !getStereoSbs()
+        setStereoSbs(newValue)
+        glView?.setSbsEnabled(newValue)
+        presentation?.setSbsEnabled(newValue)
+        btnSbsRef?.let { applySbsButtonVisual(it) }
+        updateSbsUi()
+        applySbsShiftIfNeeded()
+        saveProgress()
+    }
+
+    fun isShiftEnabled(): Boolean = sbsShiftEnabled
+
+    fun toggleShift() {
+        sbsShiftEnabled = !sbsShiftEnabled
+        btnShiftRef?.isChecked = sbsShiftEnabled
+        applySbsShiftIfNeeded()
+        saveProgress()
+    }
+
+    /**
+     * Get list of audio tracks for remote control
+     * Returns list of pairs: (label, index) where index -1 means "Auto"
+     */
+    fun getAudioTracks(): List<Pair<String, Int>> {
+        val result = mutableListOf<Pair<String, Int>>()
+        result.add("Auto" to -1)
+        
+        val items = buildAudioMenuItems()
+        items.forEachIndexed { index, item ->
+            if (!item.isAuto) {
+                result.add(item.label to index)
+            }
+        }
+        return result
+    }
+    
+    /**
+     * Get currently selected audio track index (-1 for auto)
+     */
+    fun getSelectedAudioTrackIndex(): Int {
+        val items = buildAudioMenuItems()
+        items.forEachIndexed { index, item ->
+            if (!item.isAuto && item.group != null && item.trackIndexInGroup != null) {
+                try {
+                    if (item.group.isTrackSelected(item.trackIndexInGroup)) {
+                        return index
+                    }
+                } catch (_: Exception) { }
+            }
+        }
+        return -1 // Auto
+    }
+    
+    /**
+     * Select audio track by index (-1 for auto)
+     */
+    fun selectAudioTrack(index: Int) {
+        val items = buildAudioMenuItems()
+        val item = if (index < 0) {
+            items.firstOrNull { it.isAuto }
+        } else {
+            items.getOrNull(index)
+        }
+        item?.let { applyAudioSelection(it) }
+    }
+
+    fun finishAndClose() {
+        dismissPresentation()
+        finish()
     }
 }

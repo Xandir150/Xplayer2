@@ -11,8 +11,12 @@ import android.view.WindowManager
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.ui.PlayerView
 import com.teleteh.xplayer2.R
 
+@UnstableApi
 class ExternalPlayerPresentation(
     context: Context,
     display: Display,
@@ -20,6 +24,7 @@ class ExternalPlayerPresentation(
 ) : Presentation(context, display) {
 
     private var glView: OuToSbsGlView? = null
+    private var playerView: PlayerView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,6 +39,7 @@ class ExternalPlayerPresentation(
             }
         }
         glView = findViewById(R.id.presentationGlView)
+        playerView = findViewById(R.id.presentationPlayerView)
         glView?.setOnSurfaceReadyListener { surface ->
             surfaceListener(surface)
         }
@@ -64,6 +70,10 @@ class ExternalPlayerPresentation(
 
     fun setSwapEyes(enabled: Boolean) {
         glView?.setSwapEyes(enabled)
+    }
+
+    fun setPlayer(player: Player?) {
+        playerView?.player = player
     }
 
     override fun onStop() {
