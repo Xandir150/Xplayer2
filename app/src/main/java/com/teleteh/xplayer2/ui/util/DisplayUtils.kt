@@ -45,36 +45,9 @@ object DisplayUtils {
     }
 
     fun startOnBestDisplay(activity: Activity, intent: Intent) {
-        val ext = findUltraWideExternalDisplay(activity)
-        if (ext != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                // Android 12+ (API 31+) can launch activities on external displays
-                try {
-                    val opts = ActivityOptions.makeBasic().setLaunchDisplayId(ext.displayId)
-                    activity.startActivity(intent, opts.toBundle())
-                    return
-                } catch (_: Throwable) {
-                    // Fall through to primary display on failure
-                }
-            } else if (Build.VERSION.SDK_INT == Build.VERSION_CODES.R) {
-                // Android 11 (API 30): If no presentation-capable route, force-launch on external (may show toast)
-                val routeDisplay = getRoutePresentationDisplay(activity)
-                if (routeDisplay == null) {
-                    try {
-                        val opts = ActivityOptions.makeBasic().setLaunchDisplayId(ext.displayId)
-                        activity.startActivity(intent, opts.toBundle())
-                        return
-                    } catch (_: Throwable) {
-                        // Fall through
-                    }
-                }
-                // If routeDisplay exists, avoid setLaunchDisplayId and rely on Presentation inside PlayerActivity
-            } else {
-                // Android 10 and below: avoid setLaunchDisplayId to prevent system toast.
-                // PlayerActivity will render to the external display via Presentation when available.
-            }
-        }
-        // Fallback: just launch normally (primary display)
+        // Always launch Activity on primary display (phone screen)
+        // Video will be rendered to external display via Presentation inside PlayerActivity
+        // This keeps the UI controls accessible on the phone while video plays on glasses/external display
         activity.startActivity(intent)
     }
 

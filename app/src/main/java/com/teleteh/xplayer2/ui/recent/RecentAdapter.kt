@@ -5,12 +5,14 @@ import android.provider.OpenableColumns
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.teleteh.xplayer2.R
 import com.teleteh.xplayer2.data.RecentEntry
+import com.teleteh.xplayer2.data.SourceType
 import java.util.concurrent.TimeUnit
 
 class RecentAdapter(
@@ -28,6 +30,7 @@ class RecentAdapter(
 
     class VH(view: View, val onClick: (Int) -> Unit, val onDeleteIdx: (Int) -> Unit) :
         RecyclerView.ViewHolder(view) {
+        val sourceIcon: ImageView = view.findViewById(R.id.ivSourceIcon)
         val title: TextView = view.findViewById(R.id.tvTitle)
         val subtitle: TextView = view.findViewById(R.id.tvSubtitle)
         val badge: TextView = view.findViewById(R.id.tvBadge)
@@ -61,6 +64,18 @@ class RecentAdapter(
                 append(formatMs(item.durationMs))
             }
         }
+        
+        // Source icon based on type
+        val sourceType = item.sourceType ?: RecentEntry.detectSourceType(Uri.parse(item.uri))
+        val iconRes = when (sourceType) {
+            SourceType.VK -> R.drawable.ic_source_vk
+            SourceType.OK -> R.drawable.ic_source_ok
+            SourceType.LOCAL -> R.drawable.ic_source_local
+            SourceType.NETWORK -> R.drawable.ic_source_network
+            SourceType.UNKNOWN -> R.drawable.ic_source_unknown
+        }
+        holder.sourceIcon.setImageResource(iconRes)
+        
         // Frame-packing badge: show "OU=>SBS" for known 3D formats (3=SBS, 4=OU), hide otherwise
         if (item.framePacking == 3 || item.framePacking == 4) {
             holder.badge.visibility = View.VISIBLE

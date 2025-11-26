@@ -1,5 +1,5 @@
 [versions]
-agp = "8.12.0"
+agp = "8.13.1"
 coil = "2.7.0"
 composeBom = "2025.07.00"
 foundation = "1.8.3"

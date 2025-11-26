@@ -61,6 +61,9 @@ import com.teleteh.xplayer2.R
 import com.teleteh.xplayer2.data.RecentEntry
 import com.teleteh.xplayer2.data.RecentStore
 import com.teleteh.xplayer2.ui.util.DisplayUtils
+import com.teleteh.xplayer2.util.VideoStreamExtractor
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 @UnstableApi
 class PlayerActivity : AppCompatActivity() {
@@ -89,7 +92,7 @@ class PlayerActivity : AppCompatActivity() {
     private var displayListener: DisplayManager.DisplayListener? = null
     private var routeCallback: MediaRouter.SimpleCallback? = null
     private var sourceUri: Uri? = null
-    private var titleCenterView: android.widget.TextView? = null
+    private var titleCenterView: TextView? = null
     private var currentResolvedTitle: String? = null
     private var btnSbsRef: MaterialButton? = null
     private var btnShiftRef: MaterialButton? = null
@@ -103,6 +106,11 @@ class PlayerActivity : AppCompatActivity() {
     private var lastVideoWidth: Int = 0
     private var lastVideoHeight: Int = 0
     private var wakeLock: PowerManager.WakeLock? = null
+    // Resolved stream URL (may differ from sourceUri for ok.ru, vkvideo, etc.)
+    private var resolvedStreamUri: Uri? = null
+    private var extractedTitle: String? = null
+    // Flag to prevent premature player initialization during stream extraction
+    private var isExtractingStream: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -190,7 +198,7 @@ class PlayerActivity : AppCompatActivity() {
                     intent?.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
                 } else {
                     @Suppress("DEPRECATION")
-                    intent?.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+                    intent?.getParcelableExtra(Intent.EXTRA_STREAM)
                 }
                 parsed ?: stream
             }
@@ -202,11 +210,49 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
 
-        initializePlayer()
-        // Set initial title in UI if possible
-        updateCenterTitle()
-        // Try to extract container title (e.g., MKV Title) early
-        tryProbeTitleFromRetriever()
+        // Check if URL needs stream extraction (ok.ru, vkvideo, etc.)
+        val uri = sourceUri!!
+        android.util.Log.i("XPlayer2", "Source URI: $uri, host=${uri.host}, isSupported=${VideoStreamExtractor.isSupported(uri)}")
+        if (VideoStreamExtractor.isSupported(uri)) {
+            // Show loading indicator
+            titleCenterView?.text = getString(R.string.loading_stream)
+            android.util.Log.i("XPlayer2", "Starting stream extraction for: $uri")
+            isExtractingStream = true
+            lifecycleScope.launch {
+                try {
+                    val extracted = VideoStreamExtractor.extract(uri)
+                    isExtractingStream = false
+                    if (extracted != null) {
+                        android.util.Log.i("XPlayer2", "Stream extracted successfully: ${extracted.url}")
+                        resolvedStreamUri = Uri.parse(extracted.url)
+                        extractedTitle = extracted.title
+                        if (!extracted.title.isNullOrBlank()) {
+                            currentResolvedTitle = extracted.title
+                        }
+                        initializePlayer()
+                        updateCenterTitle()
+                    } else {
+                        // Extraction failed - show error but don't try original URL (it won't work)
+                        android.util.Log.w("XPlayer2", "Stream extraction failed for: $uri")
+                        Toast.makeText(this@PlayerActivity, R.string.stream_extraction_failed, Toast.LENGTH_LONG).show()
+                        titleCenterView?.text = getString(R.string.stream_extraction_failed)
+                        // Don't initialize player with original URL - it won't work for these sites
+                    }
+                } catch (e: Exception) {
+                    isExtractingStream = false
+                    android.util.Log.e("XPlayer2", "Exception during stream extraction", e)
+                    Toast.makeText(this@PlayerActivity, R.string.stream_extraction_failed, Toast.LENGTH_LONG).show()
+                    titleCenterView?.text = getString(R.string.stream_extraction_failed)
+                }
+            }
+        } else {
+            resolvedStreamUri = uri
+            initializePlayer()
+            // Set initial title in UI if possible
+            updateCenterTitle()
+            // Try to extract container title (e.g., MKV Title) early
+            tryProbeTitleFromRetriever()
+        }
     }
 
     private fun hideSystemBars() {
@@ -224,8 +270,12 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun initializePlayer() {
-        val uri = sourceUri ?: return
-        if (player != null) return
+        val uri = resolvedStreamUri ?: sourceUri ?: return
+        android.util.Log.i("XPlayer2", "initializePlayer called with uri=$uri, player=${player != null}")
+        if (player != null) {
+            android.util.Log.w("XPlayer2", "Player already initialized, skipping")
+            return
+        }
         val selector = DefaultTrackSelector(this)
         trackSelector = selector
         val renderersFactory = DefaultRenderersFactory(this)
@@ -311,9 +361,10 @@ class PlayerActivity : AppCompatActivity() {
                 exo.prepare()
 
                 // Resume position if provided or stored
+                // Use sourceUri for recents lookup (not resolvedStreamUri which may be different for extracted streams)
                 val requestedStart = intent?.getLongExtra(EXTRA_START_POSITION_MS, -1L) ?: -1L
                 val store = RecentStore(this)
-                val recent = store.find(uri.toString())
+                val recent = store.find((sourceUri ?: uri).toString())
                 val resumePos = when {
                     requestedStart >= 0L -> requestedStart
                     (recent?.lastPositionMs ?: 0L) > 0L -> recent!!.lastPositionMs
@@ -331,8 +382,12 @@ class PlayerActivity : AppCompatActivity() {
                 val ultraWide = (dm.widthPixels.toFloat() / (dm.heightPixels.takeIf { it > 0 }
                     ?: 1).toFloat()) >= 3.2f
                 val initialSbs = recent?.sbsEnabled ?: ultraWide
+                android.util.Log.i("XPlayer2", "Initializing SBS: recent?.sbsEnabled=${recent?.sbsEnabled}, ultraWide=$ultraWide, initialSbs=$initialSbs")
                 setStereoSbs(initialSbs)
                 glView?.setSbsEnabled(initialSbs)
+                // Don't set duplicateMonoToSbs here - wait for onVideoSizeChanged to know if video is stereo
+                // Initially disable duplication, it will be enabled in updateSbsUi() if needed
+                glView?.setDuplicateMonoToSbs(false)
                 // Refresh button visuals to reflect initial per-item state
                 btnSbsRef?.let { applySbsButtonVisual(it) }
                 exo.play()
@@ -342,27 +397,46 @@ class PlayerActivity : AppCompatActivity() {
                         lastVideoWidth = videoSize.width
                         lastVideoHeight = videoSize.height
                         applySbsShiftIfNeeded()
+                        // Update duplicate mono logic based on video aspect ratio
+                        updateSbsUi()
                     }
                     override fun onTracksChanged(tracks: Tracks) {
-                        // Log selected audio track info for debugging multi-track issues
+                        // Log all track info for debugging
                         val groups = tracks.groups
                         for (i in 0 until groups.size) {
                             val g = groups[i]
-                            if (g.type == C.TRACK_TYPE_AUDIO) {
-                                for (j in 0 until g.length) {
-                                    val info = g.getTrackFormat(j)
-                                    val selected = g.isTrackSelected(j)
-                                    if (selected) {
-                                        android.util.Log.i(
-                                            "XPlayer2",
-                                            "Selected audio: mime=${info.sampleMimeType} codecs=${info.codecs} ch=${info.channelCount} hz=${info.sampleRate} lang=${info.language}"
-                                        )
+                            val typeName = when (g.type) {
+                                C.TRACK_TYPE_VIDEO -> "VIDEO"
+                                C.TRACK_TYPE_AUDIO -> "AUDIO"
+                                C.TRACK_TYPE_TEXT -> "TEXT"
+                                C.TRACK_TYPE_METADATA -> "METADATA"
+                                else -> "TYPE_${g.type}"
+                            }
+                            for (j in 0 until g.length) {
+                                val info = g.getTrackFormat(j)
+                                val selected = g.isTrackSelected(j)
+                                android.util.Log.i(
+                                    "XPlayer2",
+                                    "Track[$typeName] selected=$selected mime=${info.sampleMimeType} label=${info.label} lang=${info.language} id=${info.id}"
+                                )
+                                // Log metadata from format
+                                info.metadata?.let { meta ->
+                                    for (k in 0 until meta.length()) {
+                                        android.util.Log.i("XPlayer2", "  Format metadata[$k]: ${meta[k]}")
                                     }
                                 }
                             }
                         }
                     }
                     override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
+                        // Log all media metadata
+                        android.util.Log.i("XPlayer2", "MediaMetadata changed:")
+                        android.util.Log.i("XPlayer2", "  title=${mediaMetadata.title}")
+                        android.util.Log.i("XPlayer2", "  displayTitle=${mediaMetadata.displayTitle}")
+                        android.util.Log.i("XPlayer2", "  artist=${mediaMetadata.artist}")
+                        android.util.Log.i("XPlayer2", "  albumTitle=${mediaMetadata.albumTitle}")
+                        android.util.Log.i("XPlayer2", "  description=${mediaMetadata.description}")
+                        android.util.Log.i("XPlayer2", "  station=${mediaMetadata.station}")
                         updateCenterTitle()
                         // Persist improved title into Recent if changed
                         val newTitle = bestTitleForCurrent()
@@ -374,16 +448,18 @@ class PlayerActivity : AppCompatActivity() {
                     }
 
                     override fun onMetadata(metadata: Metadata) {
-                        // Extract ID3 title (e.g., HLS ID3 tags)
+                        // Log all metadata entries
+                        android.util.Log.i("XPlayer2", "onMetadata: ${metadata.length()} entries")
                         var foundTitle: String? = null
                         for (i in 0 until metadata.length()) {
                             val entry = metadata[i]
+                            android.util.Log.i("XPlayer2", "  Metadata[$i]: ${entry.javaClass.simpleName} = $entry")
                             if (entry is TextInformationFrame) {
+                                android.util.Log.i("XPlayer2", "    ID3 frame: id=${entry.id} values=${entry.values}")
                                 if (entry.id.equals("TIT2", ignoreCase = true)) {
                                     val t = entry.values[0].trim()
                                     if (t.isNotBlank()) {
                                         foundTitle = t
-                                        break
                                     }
                                 }
                             }
@@ -403,7 +479,8 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        if (player == null && sourceUri != null) initializePlayer()
+        // Don't initialize player if stream extraction is in progress
+        if (player == null && sourceUri != null && !isExtractingStream) initializePlayer()
         // Listen for display changes to (re)show Presentation on API <= 30 (Android 10 & 11)
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
             val dm = getSystemService(DisplayManager::class.java)
@@ -609,8 +686,7 @@ class PlayerActivity : AppCompatActivity() {
                 if (!g.isTrackSupported(j)) continue
                 val f = g.getTrackFormat(j)
                 val pretty = nameProvider.getTrackName(f)
-                val label = pretty
-                items += AudioMenuItem(label = label, isAuto = false, group = g, trackIndexInGroup = j)
+                items += AudioMenuItem(label = pretty, isAuto = false, group = g, trackIndexInGroup = j)
             }
         }
         return items
@@ -664,7 +740,7 @@ class PlayerActivity : AppCompatActivity() {
                     item.group != null && item.trackIndexInGroup != null -> {
                         try {
                             item.group.isTrackSelected(item.trackIndexInGroup)
-                        } catch (e: Exception) { false }
+                        } catch (_: Exception) { false }
                     }
                     else -> false
                 }
@@ -809,7 +885,8 @@ class PlayerActivity : AppCompatActivity() {
             lastPlayedAt = System.currentTimeMillis(),
             framePacking = framePacking,
             sbsEnabled = getStereoSbs(),
-            sbsShiftEnabled = sbsShiftEnabled
+            sbsShiftEnabled = sbsShiftEnabled,
+            sourceType = RecentEntry.detectSourceType(uri)
         )
         RecentStore(this).upsert(entry)
     }
@@ -916,15 +993,39 @@ class PlayerActivity : AppCompatActivity() {
         gl.setPerEyeLetterboxPx(pad, referenceHeightPx = halfH)
     }
 
+    /**
+     * Check if video appears to be stereo based on aspect ratio:
+     * - SBS (Side-by-Side): ~2:1 aspect ratio (each eye is 1:1 or 16:9 after split)
+     * - OU (Over-Under): ~1:1 aspect ratio (each eye is 2:1 or 16:9 after split)
+     */
+    private fun isVideoStereo(): Boolean {
+        val vw = lastVideoWidth
+        val vh = lastVideoHeight
+        if (vw <= 0 || vh <= 0) return false
+        
+        val aspect = vw.toFloat() / vh.toFloat()
+        // SBS: aspect ~2:1 (1.8 - 2.2) or ~32:9 (3.4 - 3.8)
+        // OU: aspect ~1:1 (0.9 - 1.1) or ~8:9 (0.85 - 0.95)
+        val isSbs = aspect in 1.8f..2.2f || aspect in 3.4f..3.8f
+        val isOu = aspect in 0.85f..1.15f
+        
+        android.util.Log.d("XPlayer2", "isVideoStereo: ${vw}x${vh}, aspect=$aspect, isSbs=$isSbs, isOu=$isOu")
+        return isSbs || isOu
+    }
+    
     private fun updateSbsUi() {
         val dm = resources.displayMetrics
         val w = dm.widthPixels
         val h = dm.heightPixels.takeIf { it > 0 } ?: 1
         val ultraWide = w.toFloat() / h.toFloat() >= 3.2f
-        // With SbsMirrorLayout mirroring internally, no need to toggle a right-side view
-        // Leave toolbar visibility controlled by controller listener
-        // Duplicate mono video into left/right halves on ultrawide stereo displays when SBS is OFF
-        glView?.setDuplicateMonoToSbs(ultraWide && !getStereoSbs())
+        
+        // Determine if we should duplicate mono to SBS:
+        // - Only on ultrawide displays
+        // - Only when SBS mode is OFF
+        // - Only for non-stereo (2D) content - stereo content should stretch
+        val shouldDuplicate = ultraWide && !getStereoSbs() && !isVideoStereo()
+        android.util.Log.d("XPlayer2", "updateSbsUi: ultraWide=$ultraWide, getStereoSbs=${getStereoSbs()}, isVideoStereo=${isVideoStereo()}, shouldDuplicate=$shouldDuplicate")
+        glView?.setDuplicateMonoToSbs(shouldDuplicate)
     }
 
     private fun applySbsButtonVisual(btn: MaterialButton) {
