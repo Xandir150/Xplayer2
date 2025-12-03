@@ -1,5 +1,5 @@
 <resources>
-    <!-- Base application theme with edge-to-edge support -->
+    <!-- Android 15 (API 35) specific theme overrides for edge-to-edge enforcement -->
     <style name="Theme.XPlayer2" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <!-- Primary brand color. -->
         <item name="colorPrimary">@color/purple_500</item>
@@ -9,15 +9,18 @@
         <item name="colorSecondary">@color/teal_200</item>
         <item name="colorSecondaryVariant">@color/teal_700</item>
         <item name="colorOnSecondary">@color/black</item>
-        <!-- Edge-to-edge: transparent status bar, content draws behind -->
+        <!-- Edge-to-edge is enforced on Android 15+, these are now ignored but kept for clarity -->
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- Required for Android 15: always use cutout mode -->
+        <item name="android:windowLayoutInDisplayCutoutMode">always</item>
     </style>
 
-    <!-- Fullscreen, no action bar theme for PlayerActivity -->
+    <!-- Fullscreen theme for PlayerActivity - Android 15+ -->
     <style name="Theme.XPlayer2.Fullscreen" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <!-- Android 15 requires ALWAYS mode, shortEdges is interpreted as ALWAYS anyway -->
+        <item name="android:windowLayoutInDisplayCutoutMode">always</item>
     </style>
 </resources>

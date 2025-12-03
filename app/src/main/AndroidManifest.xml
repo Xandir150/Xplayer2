@@ -162,17 +162,6 @@
                     android:scheme="https"
                     android:sspPattern=".*\\.m3u8(\?.*)?" />
             </intent-filter>
-            <!-- Host-specific fallback for cdn2site.com if app omits extension in data -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-
-                <data
-                    android:scheme="https"
-                    android:host="cdn2site.com" />
-            </intent-filter>
 
             <!-- Selective: common direct video links over HTTP/HTTPS (no MIME required) -->
             <intent-filter>
@@ -307,6 +296,11 @@
             android:screenOrientation="portrait"
             android:launchMode="singleTop"
             android:theme="@style/Theme.XPlayer2" />
+        
+        <service
+            android:name=".player.PlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 
 </manifest>

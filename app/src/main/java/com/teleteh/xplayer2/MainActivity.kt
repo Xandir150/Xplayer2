@@ -8,9 +8,11 @@ import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.view.updatePadding
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
@@ -25,8 +27,12 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Enable edge-to-edge before setting content view
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        setupEdgeToEdge()
         hideSystemBars()
 
         // Use MaterialToolbar as ActionBar to fix menu overlap under title on older Android
@@ -61,9 +67,21 @@ class MainActivity : AppCompatActivity() {
         }.attach()
     }
 
+    private fun setupEdgeToEdge() {
+        // Handle window insets for edge-to-edge display
+        // AppBarLayout handles status bar insets automatically when fitsSystemWindows=true
+        // For navigation bar, we apply padding to the ViewPager
+        ViewCompat.setOnApplyWindowInsetsListener(binding.viewPager) { view, windowInsets ->
+            val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
+            // Apply bottom padding for navigation bar
+            view.updatePadding(bottom = insets.bottom)
+            // Return insets so other views can also consume them
+            windowInsets
+        }
+    }
+
     private fun hideSystemBars() {
-        // Edge-to-edge and hide system bars on modern Android
-        WindowCompat.setDecorFitsSystemWindows(window, false)
+        // Hide status bar but keep navigation bar visible for edge-to-edge
         val controller = WindowInsetsControllerCompat(window, binding.root)
         controller.hide(WindowInsetsCompat.Type.statusBars())
         controller.systemBarsBehavior =

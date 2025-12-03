@@ -11,8 +11,8 @@ android {
         applicationId = "com.teleteh.xplayer2"
         minSdk = 29
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 6
+        versionName = "1.0.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -73,6 +73,8 @@ dependencies {
     implementation(project(":media3-lib-exoplayer"))
     implementation(project(":media3-lib-exoplayer-hls"))
     implementation(project(":media3-lib-ui"))
+    // MediaSession for foreground playback service
+    implementation(project(":media3-lib-session"))
     // Image loading for device icons and thumbnails
     implementation(libs.coil)
     // Local Media3 FFmpeg decoder module

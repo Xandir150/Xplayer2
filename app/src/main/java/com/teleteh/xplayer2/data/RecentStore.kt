@@ -42,7 +42,7 @@ class RecentStore(private val context: Context) {
         val existingIdx = current.indexOfFirst { it.uri == newEntry.uri }
         if (existingIdx >= 0) current.removeAt(existingIdx)
         current.add(0, newEntry)
-        while (current.size > maxItems) current.removeLast()
+        while (current.size > maxItems) current.removeAt(current.lastIndex)
         val arr = JSONArray()
         current.forEach { arr.put(it.toJson()) }
         prefs.edit().putString(KEY_ITEMS, arr.toString()).apply()

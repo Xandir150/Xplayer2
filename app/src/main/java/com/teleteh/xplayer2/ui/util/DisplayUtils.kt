@@ -47,7 +47,33 @@ object DisplayUtils {
     fun startOnBestDisplay(activity: Activity, intent: Intent) {
         // Always launch on primary display (phone)
         // Video will be shown on external display via Presentation
-        activity.startActivity(intent)
+        try {
+            activity.startActivity(intent)
+        } catch (e: SecurityException) {
+            // URI permission may have expired or be invalid
+            // Try without the URI grant flag, or show error
+            android.util.Log.e("DisplayUtils", "SecurityException starting activity", e)
+            try {
+                // Remove URI and try again - user will need to re-select the file
+                val fallbackIntent = Intent(intent).apply {
+                    data = null
+                    clipData = null
+                    removeFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                activity.startActivity(fallbackIntent)
+                android.widget.Toast.makeText(
+                    activity,
+                    "Файл недоступен. Выберите его заново.",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            } catch (e2: Exception) {
+                android.widget.Toast.makeText(
+                    activity,
+                    "Не удалось открыть файл: ${e.message}",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
     fun startOnPrimaryDisplay(activity: Activity, intent: Intent) {

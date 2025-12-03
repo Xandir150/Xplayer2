@@ -84,3 +84,6 @@ project(":media3-lib-ui").projectDir = media3("libraries/ui")
 
 include(":media3-lib-exoplayer-hls")
 project(":media3-lib-exoplayer-hls").projectDir = media3("libraries/exoplayer_hls")
+
+include(":media3-lib-session")
+project(":media3-lib-session").projectDir = media3("libraries/session")

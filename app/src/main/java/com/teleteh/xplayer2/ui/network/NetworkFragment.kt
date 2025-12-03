@@ -107,7 +107,7 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
             } else {
                 // Not handling, let system handle default back
                 isEnabled = false
-                requireActivity().onBackPressed()
+                requireActivity().onBackPressedDispatcher.onBackPressed()
             }
         }
 

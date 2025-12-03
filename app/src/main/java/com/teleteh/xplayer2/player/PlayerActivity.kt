@@ -9,15 +9,18 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.hardware.display.DisplayManager
 import android.media.MediaRouter
+import android.content.ComponentName
+import android.content.ServiceConnection
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
+import android.os.IBinder
 import android.provider.OpenableColumns
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.Surface
+import android.view.WindowManager
 import android.widget.Toast
 import android.widget.ImageButton
 import android.widget.LinearLayout
@@ -110,7 +113,23 @@ class PlayerActivity : AppCompatActivity() {
     // No need for reentrancy guard when we don't call show/hide inside listener
     private var lastVideoWidth: Int = 0
     private var lastVideoHeight: Int = 0
-    private var wakeLock: PowerManager.WakeLock? = null
+    // Foreground service for external playback
+    private var playbackService: PlaybackService? = null
+    private var serviceBound = false
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+            playbackService = (binder as? PlaybackService.LocalBinder)?.getService()
+            serviceBound = true
+            // Start foreground if we have a player and presentation
+            if (presentation != null) {
+                player?.let { playbackService?.startForegroundPlayback(it, currentResolvedTitle) }
+            }
+        }
+        override fun onServiceDisconnected(name: ComponentName?) {
+            playbackService = null
+            serviceBound = false
+        }
+    }
     // Resolved stream URL (may differ from sourceUri for ok.ru, vkvideo, etc.)
     private var resolvedStreamUri: Uri? = null
     private var extractedTitle: String? = null
@@ -120,6 +139,14 @@ class PlayerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         currentInstance = this
+        
+        // Ensure edge-to-edge and cutout mode for Android 15+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            }
+        }
+        
         setContentView(R.layout.activity_player)
         
         // Handle system back via dispatcher to move app back to primary display
@@ -507,8 +534,8 @@ class PlayerActivity : AppCompatActivity() {
         if (presentation == null) {
             player?.playWhenReady = false
         }
-        // WakeLock: keep if external playback is active, otherwise release
-        updateWakeLock()
+        // Foreground service: keep if external playback is active, otherwise stop
+        updatePlaybackService()
     }
 
     override fun onStop() {
@@ -535,8 +562,8 @@ class PlayerActivity : AppCompatActivity() {
                 dismissPresentation()
             }
         }
-        // Update wakelock after potential dismissal/finishing
-        updateWakeLock()
+        // Update foreground service after potential dismissal/finishing
+        updatePlaybackService()
     }
 
 
@@ -591,8 +618,8 @@ class PlayerActivity : AppCompatActivity() {
         // Try to show Presentation on external display
         tryShowExternalPresentation()
         updateSbsUi()
-        // Ensure wakelock matches current external playback state
-        updateWakeLock()
+        // Ensure foreground service matches current external playback state
+        updatePlaybackService()
     }
 
     private fun isOnExternalDisplay(): Boolean {
@@ -610,36 +637,35 @@ class PlayerActivity : AppCompatActivity() {
         saveProgress()
         player?.release()
         player = null
-        releaseWakeLock()
+        stopPlaybackService()
     }
 
-    private fun shouldHoldWakeLock(): Boolean = presentation != null
-
-    private fun updateWakeLock() {
-        if (shouldHoldWakeLock()) {
-            acquireWakeLock()
+    private fun updatePlaybackService() {
+        if (presentation != null) {
+            startPlaybackService()
         } else {
-            releaseWakeLock()
+            stopPlaybackService()
         }
     }
 
-    private fun acquireWakeLock() {
-        if (wakeLock?.isHeld == true) return
-        try {
-            val pm = getSystemService(PowerManager::class.java)
-            val wl = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "XPlayer2:ExternalPlayback")
-            wl?.setReferenceCounted(false)
-            wl?.acquire()
-            wakeLock = wl
-        } catch (_: Throwable) { }
+    private fun startPlaybackService() {
+        if (serviceBound) {
+            // Already bound, just start foreground
+            player?.let { playbackService?.startForegroundPlayback(it, currentResolvedTitle) }
+            return
+        }
+        val intent = Intent(this, PlaybackService::class.java)
+        startService(intent)
+        bindService(intent, serviceConnection, BIND_AUTO_CREATE)
     }
 
-    private fun releaseWakeLock() {
-        try {
-            val wl = wakeLock
-            if (wl?.isHeld == true) wl.release()
-        } catch (_: Throwable) { }
-        wakeLock = null
+    private fun stopPlaybackService() {
+        if (serviceBound) {
+            playbackService?.stopForegroundPlayback()
+            try { unbindService(serviceConnection) } catch (_: Throwable) { }
+            serviceBound = false
+            playbackService = null
+        }
     }
 
     // --- Custom Audio Menu (SBS-aware) ---
@@ -831,7 +857,7 @@ class PlayerActivity : AppCompatActivity() {
             glView?.visibility = View.VISIBLE
             glSurface?.let { player?.setVideoSurface(it) }
         }
-        updateWakeLock()
+        updatePlaybackService()
     }
 
     private fun dismissPresentation() {
@@ -842,7 +868,7 @@ class PlayerActivity : AppCompatActivity() {
             // Restore local GL view
             glView?.visibility = View.VISIBLE
             glSurface?.let { player?.setVideoSurface(it) }
-            updateWakeLock()
+            updatePlaybackService()
         }
     }
 

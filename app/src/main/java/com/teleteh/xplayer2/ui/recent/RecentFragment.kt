@@ -23,8 +23,29 @@ class RecentFragment : Fragment(R.layout.fragment_recent) {
         empty = view.findViewById(R.id.tvEmpty)
         adapter = RecentAdapter(onClick = { entry ->
             val ctx = requireContext()
+            val uri = entry.uriObj()
+            
+            // Check if we still have permission to access this URI
+            val hasPermission = try {
+                if (uri.scheme == "content") {
+                    ctx.contentResolver.persistedUriPermissions.any { it.uri == uri && it.isReadPermission }
+                } else {
+                    true // file:// or other schemes don't need permission check
+                }
+            } catch (_: Exception) { false }
+            
+            if (!hasPermission && uri.scheme == "content") {
+                // Try to re-take permission (may fail if original grant expired)
+                try {
+                    ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (_: SecurityException) {
+                    android.widget.Toast.makeText(ctx, "Файл недоступен. Выберите его заново.", android.widget.Toast.LENGTH_LONG).show()
+                    return@RecentAdapter
+                }
+            }
+            
             val intent = Intent(ctx, PlayerActivity::class.java)
-            intent.data = entry.uriObj()
+            intent.data = uri
             intent.putExtra(PlayerActivity.EXTRA_START_POSITION_MS, entry.lastPositionMs)
             // Pass the stored title so PlayerActivity starts with the correct display title
             intent.putExtra(PlayerActivity.EXTRA_TITLE, entry.title)

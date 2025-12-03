@@ -5,7 +5,6 @@ import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.Display
 import android.widget.ImageButton
 import android.widget.SeekBar
 import android.widget.TextView
@@ -120,10 +119,7 @@ class RemoteControlActivity : AppCompatActivity() {
         handler.removeCallbacks(updateRunnable)
     }
 
-    override fun onBackPressed() {
-        // Don't close PlayerActivity, just minimize remote
-        super.onBackPressed()
-    }
+    // Back press handled by default - just finishes this activity without affecting PlayerActivity
 
     private fun updateTitle() {
         val title = PlayerActivity.currentInstance?.getCurrentTitle() ?: "No video"

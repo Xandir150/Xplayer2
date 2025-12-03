@@ -20,4 +20,8 @@
     <string name="error_invalid_input">Проверьте данные</string>
     <string name="loading_stream">Загрузка видео…</string>
     <string name="stream_extraction_failed">Не удалось извлечь видео-поток</string>
+    <string name="playback_channel_name">Воспроизведение</string>
+    <string name="playback_channel_description">Уведомление о воспроизведении на внешнем дисплее</string>
+    <string name="playing_on_external_display">Воспроизведение на внешнем дисплее</string>
+    <string name="stop">Стоп</string>
 </resources>

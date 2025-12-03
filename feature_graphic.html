@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            width: 1024px;
+            height: 500px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        /* Background pattern */
+        .bg-pattern {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                radial-gradient(circle at 20% 80%, rgba(120, 0, 255, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(0, 200, 255, 0.15) 0%, transparent 50%);
+        }
+        
+        .container {
+            display: flex;
+            align-items: center;
+            gap: 60px;
+            z-index: 1;
+        }
+        
+        /* VR Glasses icon */
+        .vr-icon {
+            width: 200px;
+            height: 120px;
+            position: relative;
+        }
+        
+        .glasses-frame {
+            width: 200px;
+            height: 80px;
+            background: linear-gradient(180deg, #333 0%, #1a1a1a 100%);
+            border-radius: 20px;
+            position: relative;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            border: 2px solid #444;
+        }
+        
+        .lens {
+            position: absolute;
+            width: 70px;
+            height: 50px;
+            background: linear-gradient(135deg, #2196F3 0%, #1976D2 50%, #0D47A1 100%);
+            border-radius: 10px;
+            top: 15px;
+            box-shadow: 
+                inset 0 0 20px rgba(255,255,255,0.2),
+                0 0 30px rgba(33, 150, 243, 0.5);
+        }
+        
+        .lens-left { left: 20px; }
+        .lens-right { right: 20px; }
+        
+        .lens::after {
+            content: '▶';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255,255,255,0.8);
+            font-size: 20px;
+        }
+        
+        .nose-bridge {
+            position: absolute;
+            width: 30px;
+            height: 20px;
+            background: #222;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: -10px;
+            border-radius: 0 0 10px 10px;
+        }
+        
+        .content {
+            text-align: left;
+        }
+        
+        .title {
+            font-size: 72px;
+            font-weight: 800;
+            color: white;
+            letter-spacing: -2px;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        
+        .title span {
+            color: #2196F3;
+        }
+        
+        .subtitle {
+            font-size: 28px;
+            color: rgba(255,255,255,0.8);
+            margin-top: 10px;
+            font-weight: 300;
+        }
+        
+        .features {
+            display: flex;
+            gap: 20px;
+            margin-top: 30px;
+        }
+        
+        .feature {
+            background: rgba(255,255,255,0.1);
+            padding: 10px 20px;
+            border-radius: 25px;
+            color: white;
+            font-size: 16px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-pattern"></div>
+    <div class="container">
+        <div class="vr-icon">
+            <div class="glasses-frame">
+                <div class="lens lens-left"></div>
+                <div class="lens lens-right"></div>
+                <div class="nose-bridge"></div>
+            </div>
+        </div>
+        <div class="content">
+            <div class="title">X<span>Player</span>2</div>
+            <div class="subtitle">3D Video Player for VR Glasses</div>
+            <div class="features">
+                <div class="feature">SBS / OU Support</div>
+                <div class="feature">XREAL • Rokid</div>
+                <div class="feature">DLNA</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
