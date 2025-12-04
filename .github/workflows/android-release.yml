@@ -44,8 +44,13 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
+      - name: Rename APK
+        run: |
+          TAG="${GITHUB_REF_NAME:-dev}"
+          mv app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/XPlayer2-${TAG}.apk"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: app/build/outputs/apk/release/*.apk
+          name: XPlayer2-${{ github.ref_name }}
+          path: app/build/outputs/apk/release/XPlayer2-*.apk
