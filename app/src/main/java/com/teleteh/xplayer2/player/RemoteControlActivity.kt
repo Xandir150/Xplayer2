@@ -1,10 +1,15 @@
 package com.teleteh.xplayer2.player
 
+import android.animation.ValueAnimator
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.MotionEvent
+import android.view.View
+import android.view.WindowManager
+import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.ImageButton
 import android.widget.SeekBar
 import android.widget.TextView
@@ -37,6 +42,13 @@ class RemoteControlActivity : AppCompatActivity() {
             handler.postDelayed(this, 500)
         }
     }
+    
+    // Screen dimming
+    private var isScreenDimmed = false
+    private var dimAnimator: ValueAnimator? = null
+    private var dimOverlay: View? = null
+    private val dimDelayMs = 5000L // 5 seconds before dimming
+    private val dimRunnable = Runnable { dimScreen() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,6 +111,107 @@ class RemoteControlActivity : AppCompatActivity() {
             PlayerActivity.currentInstance?.finishAndClose()
             finish()
         }
+        
+        // Setup dim overlay for screen dimming
+        setupDimOverlay()
+    }
+    
+    private fun setupDimOverlay() {
+        // Create a fullscreen black overlay for dimming
+        val rootView = findViewById<View>(android.R.id.content) as android.view.ViewGroup
+        dimOverlay = View(this).apply {
+            setBackgroundColor(Color.BLACK)
+            alpha = 0f
+            visibility = View.GONE
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { wakeScreen() }
+        }
+        rootView.addView(dimOverlay, android.view.ViewGroup.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT
+        ))
+    }
+    
+    private fun scheduleDim() {
+        handler.removeCallbacks(dimRunnable)
+        handler.postDelayed(dimRunnable, dimDelayMs)
+    }
+    
+    private fun cancelDim() {
+        handler.removeCallbacks(dimRunnable)
+    }
+    
+    private fun dimScreen() {
+        if (isScreenDimmed) return
+        isScreenDimmed = true
+        
+        dimAnimator?.cancel()
+        dimOverlay?.visibility = View.VISIBLE
+        
+        // Animate overlay alpha and screen brightness
+        dimAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 500
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener { animator ->
+                val value = animator.animatedValue as Float
+                dimOverlay?.alpha = value
+                // Also dim actual screen brightness
+                window.attributes = window.attributes.apply {
+                    screenBrightness = (1f - value * 0.99f).coerceAtLeast(0.01f)
+                }
+            }
+            start()
+        }
+    }
+    
+    private fun wakeScreen() {
+        if (!isScreenDimmed) return
+        isScreenDimmed = false
+        
+        dimAnimator?.cancel()
+        
+        // Animate back to full brightness
+        val currentAlpha = dimOverlay?.alpha ?: 1f
+        dimAnimator = ValueAnimator.ofFloat(currentAlpha, 0f).apply {
+            duration = 300
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener { animator ->
+                val value = animator.animatedValue as Float
+                dimOverlay?.alpha = value
+                window.attributes = window.attributes.apply {
+                    screenBrightness = (1f - value * 0.99f).coerceAtLeast(0.01f)
+                }
+            }
+            addListener(object : android.animation.Animator.AnimatorListener {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    dimOverlay?.visibility = View.GONE
+                    // Reset brightness to auto
+                    window.attributes = window.attributes.apply {
+                        screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                    }
+                    // Schedule next dim
+                    scheduleDim()
+                }
+                override fun onAnimationStart(animation: android.animation.Animator) {}
+                override fun onAnimationCancel(animation: android.animation.Animator) {}
+                override fun onAnimationRepeat(animation: android.animation.Animator) {}
+            })
+            start()
+        }
+    }
+    
+    override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
+        // Any touch resets the dim timer
+        if (ev?.action == MotionEvent.ACTION_DOWN) {
+            if (isScreenDimmed) {
+                wakeScreen()
+                return true // Consume the touch
+            }
+            // Reset dim timer on any interaction
+            scheduleDim()
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onResume() {
@@ -112,11 +225,19 @@ class RemoteControlActivity : AppCompatActivity() {
         updateButtons()
         updateProgress()
         handler.post(updateRunnable)
+        // Start dim timer
+        scheduleDim()
     }
 
     override fun onPause() {
         super.onPause()
         handler.removeCallbacks(updateRunnable)
+        cancelDim()
+        dimAnimator?.cancel()
+        // Reset brightness when leaving
+        window.attributes = window.attributes.apply {
+            screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        }
     }
 
     // Back press handled by default - just finishes this activity without affecting PlayerActivity

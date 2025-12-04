@@ -1,5 +1,7 @@
 # XPlayer2
 
+<a href="https://play.google.com/store/apps/details?id=com.teleteh.xplayer2"><img alt="Get it on Google Play" src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" height="80"/></a>
+
 XPlayer2 is an Android video player with 3D/VR features for using with XReal glasses. It uses AndroidX Media3 ExoPlayer and an FFmpeg-based decoder module for specific codecs.
 
 ## Features (highlights)
