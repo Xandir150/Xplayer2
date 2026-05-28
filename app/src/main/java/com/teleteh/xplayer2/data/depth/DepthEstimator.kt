@@ -3,6 +3,7 @@ package com.teleteh.xplayer2.data.depth
 import android.content.Context
 import android.util.Log
 import org.tensorflow.lite.Interpreter
+import org.tensorflow.lite.gpu.GpuDelegate
 import org.tensorflow.lite.nnapi.NnApiDelegate
 import java.io.FileInputStream
 import java.nio.ByteBuffer
@@ -32,6 +33,7 @@ class DepthEstimator(
 ) {
     private var interpreter: Interpreter? = null
     private var nnApiDelegate: NnApiDelegate? = null
+    private var gpuDelegate: GpuDelegate? = null
 
     private val inputBuf: ByteBuffer = ByteBuffer
         .allocateDirect(inputSize * inputSize * 3 * 4)
@@ -55,28 +57,36 @@ class DepthEstimator(
      */
     fun init(context: Context, assetPath: String = DepthModelManager.MODEL_FILENAME): Boolean {
         if (interpreter != null) return true
+        val buffer = loadModelAsset(context, assetPath)
+            ?: loadModelFile(DepthModelManager(context).cachedFile)
+            ?: return false
+
+        // For an FP32 CNN like MiDaS, the GPU (Adreno/Mali) delegate is usually much faster
+        // than NNAPI, which often can't run FP32 graphs on the NPU and silently falls back to
+        // CPU. Try GPU first, then NNAPI, then plain multi-thread CPU.
+        if (tryInit(buffer) { o ->
+                val d = GpuDelegate(); gpuDelegate = d; o.addDelegate(d); "GPU"
+            }) return true
+        if (tryInit(buffer) { o ->
+                val d = NnApiDelegate(); nnApiDelegate = d; o.addDelegate(d); "NNAPI"
+            }) return true
+        return tryInit(buffer) { o -> o.setNumThreads(4); "CPU x4" }
+    }
+
+    private inline fun tryInit(buffer: MappedByteBuffer, configure: (Interpreter.Options) -> String): Boolean {
         return try {
-            val buffer = loadModelAsset(context, assetPath)
-                ?: loadModelFile(DepthModelManager(context).cachedFile)
-                ?: return false
-            val options = Interpreter.Options().apply {
-                // Reserve threads conservatively — depth runs alongside the video decoder.
-                setNumThreads(2)
-                try {
-                    val d = NnApiDelegate()
-                    addDelegate(d)
-                    nnApiDelegate = d
-                    Log.i(TAG, "Lazy 3D: NNAPI delegate attached")
-                } catch (e: Throwable) {
-                    Log.w(TAG, "Lazy 3D: NNAPI not available (${e.message}); using CPU")
-                }
-            }
+            val options = Interpreter.Options()
+            val label = configure(options)
             interpreter = Interpreter(buffer, options)
-            Log.i(TAG, "Lazy 3D: depth model loaded (inputSize=${inputSize}x$inputSize)")
+            Log.i(TAG, "Lazy 3D: depth model loaded on $label (inputSize=${inputSize}x$inputSize)")
             true
         } catch (e: Throwable) {
-            Log.e(TAG, "Lazy 3D: failed to init depth model", e)
-            close()
+            Log.w(TAG, "Lazy 3D: delegate init failed (${e.message}); trying next")
+            try { gpuDelegate?.close() } catch (_: Throwable) {}
+            try { nnApiDelegate?.close() } catch (_: Throwable) {}
+            gpuDelegate = null; nnApiDelegate = null
+            try { interpreter?.close() } catch (_: Throwable) {}
+            interpreter = null
             false
         }
     }
@@ -145,8 +155,10 @@ class DepthEstimator(
     fun close() {
         try { interpreter?.close() } catch (_: Throwable) { }
         try { nnApiDelegate?.close() } catch (_: Throwable) { }
+        try { gpuDelegate?.close() } catch (_: Throwable) { }
         interpreter = null
         nnApiDelegate = null
+        gpuDelegate = null
     }
 
     private fun loadModelAsset(context: Context, assetPath: String): MappedByteBuffer? {

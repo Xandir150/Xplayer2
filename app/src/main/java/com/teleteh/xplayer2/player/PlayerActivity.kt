@@ -160,6 +160,15 @@ class PlayerActivity : AppCompatActivity() {
     // active (the Presentation's when glasses are connected, otherwise the local one).
     private var renderSourceIsSbs: Boolean = false
     private var renderDuplicateMono: Boolean = false
+
+    // 3-state stereo mode for the current clip. Auto-detection sets it from the source layout;
+    // the SBS button cycles it manually (needed for Full-SBS/Full-OU clips that are 1920x1080
+    // and thus indistinguishable from 2D by resolution). Manual choices persist per Recent item.
+    private enum class StereoMode { Off, Ou, Sbs;
+        fun toInt() = ordinal
+        companion object { fun fromInt(v: Int) = entries.getOrElse(v) { Off } }
+    }
+    private var stereoMode: StereoMode = StereoMode.Off
     // Becomes true once the user has chosen an SBS state explicitly — either by tapping the
     // SBS toolbar button, or because a saved Recent entry already had sbsEnabled set. While
     // false, auto-detection is allowed to flip the SBS toggle on OU sources.
@@ -582,14 +591,17 @@ class PlayerActivity : AppCompatActivity() {
                 // Initialize per-item resize mode from recents
                 resizeMode = recent?.resizeMode ?: 0
                 applyResizeMode()
-                // Render mode is decided automatically from the source layout once the first
-                // frame size / track info arrives (see applyRenderMode). Start neutral —
-                // plain full-screen passthrough — so we never show a wrong OU/SBS cut before
-                // detection. We intentionally do NOT restore SBS from the Recent entry: the
-                // layout detector is the source of truth, and manual overrides only last for
-                // the current session.
-                sbsExplicitlyConfigured = false
-                setStereoSbs(false)
+                // Restore a manual per-clip stereo choice if one was saved; otherwise auto-detect
+                // from the source layout on the first frame (see applyRenderMode). Start neutral
+                // so we never flash a wrong OU/SBS cut before detection.
+                val savedStereo = recent?.stereoMode ?: -1
+                if (savedStereo in 0..2) {
+                    stereoMode = StereoMode.fromInt(savedStereo)
+                    sbsExplicitlyConfigured = true
+                } else {
+                    stereoMode = StereoMode.Off
+                    sbsExplicitlyConfigured = false
+                }
                 renderSourceIsSbs = false
                 renderDuplicateMono = false
                 applyRenderConfig()
@@ -1237,7 +1249,10 @@ class PlayerActivity : AppCompatActivity() {
             sbsEnabled = getStereoSbs(),
             sbsShiftEnabled = sbsShiftEnabled,
             sourceType = RecentEntry.detectSourceType(uri),
-            resizeMode = resizeMode
+            resizeMode = resizeMode,
+            // Persist the stereo mode only when the user picked it manually (so auto-detected
+            // values don't pollute the next session); -1 means "let auto-detect decide".
+            stereoMode = if (sbsExplicitlyConfigured) stereoMode.toInt() else -1
         )
         RecentStore(this).upsert(entry)
     }
@@ -1318,38 +1333,38 @@ class PlayerActivity : AppCompatActivity() {
      * Decide what to render from the detected source layout. This is the single place that
      * maps "what is this clip" → "how do we show it", per the product rules:
      *
-     *   - Wide / SBS source  → pass through, split L/R per eye. No OU cut, no duplication.
-     *   - OU source          → convert OU→SBS (the app's signature feature). SBS button lit.
-     *   - 2D / mono source   → do NOT cut. On the glasses' ultrawide panel, duplicate the
-     *                          frame into both eye-halves so it sits centred per eye; the
-     *                          Lazy-3D button is then offered for optional depth synthesis.
+     *   - SBS mode → split the frame left/right per eye (half-SBS passthrough OR full-SBS).
+     *   - OU mode  → convert over-under to SBS (the app's signature feature).
+     *   - 2D (Off) → do NOT cut. On the glasses' ultrawide panel duplicate the frame into both
+     *                eye-halves so it sits centred per eye; Lazy-3D is offered for depth synth.
      *
-     * A manual SBS-button press ([sbsExplicitlyConfigured]) overrides the auto choice for the
-     * rest of the clip — letting the user force an OU cut if detection guessed wrong.
+     * Auto-detection picks the mode from the source layout. Half-SBS (wide) and Half/Full-OU
+     * (tall) are detectable by aspect; Full-SBS in a 16:9 frame is NOT (it looks like 2D), so
+     * the user cycles the SBS button to it. A manual choice ([sbsExplicitlyConfigured]) sticks
+     * for the clip and is persisted.
      */
     private fun applyRenderMode() {
-        val layout = detectSourceLayout()
-        when (layout) {
-            SourceLayout.Sbs -> {
-                if (!sbsExplicitlyConfigured) setStereoSbs(true)
-                renderSourceIsSbs = true
-                renderDuplicateMono = false
-            }
-            SourceLayout.Ou -> {
-                if (!sbsExplicitlyConfigured) setStereoSbs(true)
-                renderSourceIsSbs = false
-                renderDuplicateMono = false
-            }
-            SourceLayout.Mono -> {
-                if (!sbsExplicitlyConfigured) setStereoSbs(false)
-                renderSourceIsSbs = false
-                // Duplicate only when SBS isn't manually forced and we're on the wide panel.
-                renderDuplicateMono = activeDisplayIsUltrawide() && !getStereoSbs()
+        if (!sbsExplicitlyConfigured) {
+            // Auto: derive the stereo mode from the detected source layout.
+            stereoMode = when (detectSourceLayout()) {
+                SourceLayout.Sbs -> StereoMode.Sbs
+                SourceLayout.Ou -> StereoMode.Ou
+                SourceLayout.Mono -> StereoMode.Off
             }
         }
+        when (stereoMode) {
+            StereoMode.Sbs -> { renderSourceIsSbs = true; renderDuplicateMono = false }
+            StereoMode.Ou -> { renderSourceIsSbs = false; renderDuplicateMono = false }
+            StereoMode.Off -> {
+                renderSourceIsSbs = false
+                // On the wide glasses panel, centre 2D per eye by duplicating into both halves.
+                renderDuplicateMono = activeDisplayIsUltrawide()
+            }
+        }
+        val aspect = if (lastVideoHeight > 0) lastVideoWidth.toFloat() / lastVideoHeight else 0f
         android.util.Log.i(
             "XPlayer2",
-            "applyRenderMode: layout=$layout sbs=${getStereoSbs()} sourceIsSbs=$renderSourceIsSbs dup=$renderDuplicateMono"
+            "applyRenderMode: ${lastVideoWidth}x${lastVideoHeight} aspect=${"%.2f".format(aspect)} stereoMode=$stereoMode sourceIsSbs=$renderSourceIsSbs dup=$renderDuplicateMono manual=$sbsExplicitlyConfigured"
         )
         applyRenderConfig()
         btnSbsRef?.let { applySbsButtonVisual(it) }
@@ -1488,29 +1503,31 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     // --- Stereo mode state ---
-    private fun toggleStereoMode() {
-        val newSbs = !getStereoSbs()
-        setStereoSbs(newSbs)
-        // Manual press wins over auto-detection for the rest of this clip.
+    // Cycle the SBS button: 2D → OU→SBS → SBS → 2D. Manual press wins over auto-detection
+    // for the rest of this clip and is persisted, so Full-SBS/Full-OU clips (which look like
+    // 2D by resolution) keep the user's choice on reopen.
+    private fun cycleStereoMode() {
+        stereoMode = when (stereoMode) {
+            StereoMode.Off -> StereoMode.Ou
+            StereoMode.Ou -> StereoMode.Sbs
+            StereoMode.Sbs -> StereoMode.Off
+        }
         sbsExplicitlyConfigured = true
-        Toast.makeText(
-            this,
-            if (newSbs) getString(R.string.stereo_mode_sbs) else getString(R.string.stereo_mode_normal),
-            Toast.LENGTH_SHORT
-        ).show()
+        val label = when (stereoMode) {
+            StereoMode.Off -> getString(R.string.stereo_mode_normal)
+            StereoMode.Ou -> "OU→SBS"
+            StereoMode.Sbs -> "SBS"
+        }
+        Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
         applyRenderMode()
         saveProgress()
     }
 
-    private fun getStereoSbs(): Boolean {
-        val prefs = getSharedPreferences("player_prefs", MODE_PRIVATE)
-        return prefs.getBoolean("stereo_sbs", false)
-    }
+    private fun toggleStereoMode() = cycleStereoMode()
 
-    private fun setStereoSbs(value: Boolean) {
-        val prefs = getSharedPreferences("player_prefs", MODE_PRIVATE)
-        prefs.edit { putBoolean("stereo_sbs", value) }
-    }
+    // "Is any stereo split active" — true for both OU→SBS and SBS modes, false for 2D.
+    // Used by the pipeline / shift / save paths that only care whether we're splitting at all.
+    private fun getStereoSbs(): Boolean = stereoMode != StereoMode.Off
 
     // --- SBS vertical shift to approximate 16:9 without bars ---
     private fun applySbsShiftIfNeeded() {
@@ -1551,17 +1568,20 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun applySbsButtonVisual(btn: MaterialButton) {
-        val checked = getStereoSbs()
-        btn.isChecked = checked
-        if (!checked) {
-            // When OFF -> outlined
+        // Reflect the 3-state stereo mode: label + filled (active) vs outlined (2D).
+        btn.text = when (stereoMode) {
+            StereoMode.Off -> "2D"
+            StereoMode.Ou -> "OU→SBS"
+            StereoMode.Sbs -> "SBS"
+        }
+        val active = stereoMode != StereoMode.Off
+        btn.isChecked = active
+        if (!active) {
             btn.backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
             btn.setTextColor(Color.WHITE)
             btn.strokeColor = ColorStateList.valueOf(Color.WHITE)
-            val px = (2 * resources.displayMetrics.density).toInt()
-            btn.strokeWidth = px
+            btn.strokeWidth = (2 * resources.displayMetrics.density).toInt()
         } else {
-            // When ON -> filled
             btn.backgroundTintList = ColorStateList.valueOf("#2196F3".toColorInt())
             btn.setTextColor(Color.WHITE)
             btn.strokeColor = ColorStateList.valueOf(Color.TRANSPARENT)
@@ -1618,11 +1638,14 @@ class PlayerActivity : AppCompatActivity() {
 
     fun isStereoSbsEnabled(): Boolean = getStereoSbs()
 
-    fun toggleStereoSbs() {
-        setStereoSbs(!getStereoSbs())
-        sbsExplicitlyConfigured = true
-        applyRenderMode()
-        saveProgress()
+    /** Remote-control entry point: cycle 2D → OU→SBS → SBS. */
+    fun toggleStereoSbs() = cycleStereoMode()
+
+    /** Current stereo-mode label for the remote ("2D" / "OU→SBS" / "SBS"). */
+    fun getStereoModeLabel(): String = when (stereoMode) {
+        StereoMode.Off -> "2D"
+        StereoMode.Ou -> "OU→SBS"
+        StereoMode.Sbs -> "SBS"
     }
 
     fun isShiftEnabled(): Boolean = sbsShiftEnabled
@@ -1780,6 +1803,7 @@ class PlayerActivity : AppCompatActivity() {
             }
             // Pump fresh depth results into the active GL view every ~33 ms.
             val depthTick = object : Runnable {
+                private var ticks = 0
                 override fun run() {
                     val depth = worker.pollLatestDepth()
                     if (depth != null) {
@@ -1788,6 +1812,9 @@ class PlayerActivity : AppCompatActivity() {
                             bytes[i] = (depth[i].coerceIn(0f, 1f) * 255f).toInt().toByte()
                         }
                         activeGlView()?.setDepthMap(bytes, estimator.inputSize, estimator.inputSize)
+                    }
+                    if (++ticks % 60 == 0) {
+                        android.util.Log.i("XPlayer2", "Lazy 3D: avg depth inference ${"%.1f".format(estimator.avgInferenceMs)} ms")
                     }
                     if (lazy3dEnabled) poseUiHandler.postDelayed(this, 33)
                 }
