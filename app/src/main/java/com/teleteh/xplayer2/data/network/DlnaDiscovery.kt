@@ -16,10 +16,12 @@ import java.util.Locale
 class DlnaDiscovery {
     fun discover(scope: CoroutineScope, onDevice: (NetworkItem.DlnaDevice) -> Unit) {
         scope.launch(Dispatchers.IO) {
+            val socket = try {
+                DatagramSocket().apply { soTimeout = 2000 }
+            } catch (_: Exception) {
+                return@launch
+            }
             try {
-                // Send M-SEARCH
-                val socket = DatagramSocket()
-                socket.soTimeout = 3000
                 val searchRequest = ("M-SEARCH * HTTP/1.1\r\n" +
                         "HOST: 239.255.255.250:1900\r\n" +
                         "MAN: \"ssdp:discover\"\r\n" +
@@ -42,25 +44,30 @@ class DlnaDiscovery {
                         val usn = headers["usn"]
                         val key = (usn ?: location).lowercase(Locale.US)
                         if (seen.add(key)) {
-                            val info = fetchDeviceInfo(location)
-                            withContext(Dispatchers.Main) {
-                                onDevice(
-                                    NetworkItem.DlnaDevice(
-                                        info.first ?: "",
-                                        location,
-                                        usn,
-                                        info.second
+                            // Resolve device description in parallel so we don't block SSDP receive.
+                            // Slow NAS can take 1-2s and would otherwise cost us subsequent packets.
+                            scope.launch(Dispatchers.IO) {
+                                val info = fetchDeviceInfo(location)
+                                withContext(Dispatchers.Main) {
+                                    onDevice(
+                                        NetworkItem.DlnaDevice(
+                                            info.first ?: "",
+                                            location,
+                                            usn,
+                                            info.second
+                                        )
                                     )
-                                )
+                                }
                             }
                         }
                     } catch (_: Exception) {
                         // ignore timeouts and parse errors
                     }
                 }
-                socket.close()
             } catch (_: Exception) {
                 // ignore
+            } finally {
+                try { socket.close() } catch (_: Exception) { }
             }
         }
     }
@@ -81,8 +88,8 @@ class DlnaDiscovery {
     private fun fetchDeviceInfo(location: String): Pair<String?, String?> {
         return try {
             val conn = URL(location).openConnection()
-            conn.connectTimeout = 2000
-            conn.readTimeout = 2000
+            conn.connectTimeout = 5000
+            conn.readTimeout = 5000
             conn.getInputStream().use { input ->
                 val reader = BufferedReader(InputStreamReader(input))
                 val sb = StringBuilder()

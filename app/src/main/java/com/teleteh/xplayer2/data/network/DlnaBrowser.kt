@@ -57,26 +57,32 @@ class DlnaBrowser {
               </s:Body>
             </s:Envelope>
         """.trimIndent()
-            val url = URL(controlUrl)
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 4000
-                readTimeout = 6000
-                doOutput = true
-                setRequestProperty("Content-Type", "text/xml; charset=utf-8")
-                setRequestProperty("SOAPAction", soapAction)
-            }
-            conn.outputStream.use { os ->
-                OutputStreamWriter(os, Charsets.UTF_8).use { it.write(envelope) }
-            }
-            val body = try {
-                conn.inputStream.bufferedReader().use(BufferedReader::readText)
-            } catch (e: Exception) {
-                conn.errorStream?.bufferedReader()?.use(BufferedReader::readText) ?: throw e
+            var conn: HttpURLConnection? = null
+            try {
+                val url = URL(controlUrl)
+                conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    connectTimeout = 8000
+                    readTimeout = 15000
+                    doOutput = true
+                    setRequestProperty("Content-Type", "text/xml; charset=utf-8")
+                    setRequestProperty("SOAPAction", soapAction)
+                }
+                conn.outputStream.use { os ->
+                    OutputStreamWriter(os, Charsets.UTF_8).use { it.write(envelope) }
+                }
+                val body = try {
+                    conn.inputStream.bufferedReader().use(BufferedReader::readText)
+                } catch (e: Exception) {
+                    conn.errorStream?.bufferedReader()?.use(BufferedReader::readText)
+                        ?: return@withContext BrowseResult(emptyList(), emptyList())
+                }
+                parseDidlFromSoap(body)
+            } catch (_: Exception) {
+                BrowseResult(emptyList(), emptyList())
             } finally {
-                conn.disconnect()
+                try { conn?.disconnect() } catch (_: Exception) { }
             }
-            parseDidlFromSoap(body)
         }
 
     data class BrowseResult(
@@ -209,18 +215,21 @@ class DlnaBrowser {
     }
 
     private fun fetchText(urlStr: String): String? {
+        var conn: HttpURLConnection? = null
         return try {
             val url = URL(urlStr)
-            val conn = (url.openConnection() as HttpURLConnection).apply {
+            conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                connectTimeout = 4000
-                readTimeout = 6000
+                connectTimeout = 8000
+                readTimeout = 10000
                 setRequestProperty("Accept", "application/xml, text/xml, */*;q=0.8")
                 setRequestProperty("User-Agent", "XPlayer2/1.0 (Android)")
             }
             conn.inputStream.bufferedReader().use { it.readText() }
         } catch (_: Exception) {
             null
+        } finally {
+            try { conn?.disconnect() } catch (_: Exception) { }
         }
     }
 
