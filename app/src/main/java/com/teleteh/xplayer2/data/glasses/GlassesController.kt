@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
+import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
 import android.os.Build
 import android.util.Log
@@ -54,6 +55,8 @@ class GlassesController(private val appContext: Context) {
     private var connection: UsbDeviceConnection? = null
     private var listener: Listener? = null
     private var lastReportedMode: Int = GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60
+    // Interfaces we successfully claimed — we only ever release what we actually took.
+    private val claimedInterfaces: MutableList<UsbInterface> = mutableListOf()
 
     @Volatile
     private var registered: Boolean = false
@@ -191,25 +194,46 @@ class GlassesController(private val appContext: Context) {
             notifyState()
             return
         }
-        // Claim every interface — we only know empirically which one carries the MCU OUT endpoint.
+        // CRITICAL: only claim HID interfaces. XREAL Air is a composite USB device that also
+        // exposes a USB Audio Class interface (stereo over USB) and a display interface — if we
+        // claim those with force=true we yank them away from Android's audio / display drivers,
+        // killing system-wide audio (YouTube etc. go silent) the moment our app appears with the
+        // glasses connected, even before any playback starts. HID is where the MCU OUT endpoint
+        // for our display-mode commands lives, and it's also the class we're allowed to drive
+        // from userspace without disrupting anything else.
+        claimedInterfaces.clear()
         for (i in 0 until dev.interfaceCount) {
-            conn.claimInterface(dev.getInterface(i), true)
+            val intf = dev.getInterface(i)
+            if (intf.interfaceClass != UsbConstants.USB_CLASS_HID) {
+                Log.d(TAG, "Skipping non-HID interface $i (class=0x${intf.interfaceClass.toString(16)}) — leaving it to the kernel")
+                continue
+            }
+            // force=false: refuse to steal from a kernel driver if one is already attached.
+            // No USB Audio / display driver will ever be attached to a HID interface, so this
+            // is safe to leave non-forceful.
+            val ok = conn.claimInterface(intf, false)
+            if (ok) {
+                claimedInterfaces.add(intf)
+                Log.d(TAG, "Claimed HID interface $i (subclass=0x${intf.interfaceSubclass.toString(16)})")
+            } else {
+                Log.w(TAG, "Failed to claim HID interface $i — MCU commands may not reach the glasses")
+            }
         }
         device = dev
         connection = conn
-        Log.i(TAG, "Glasses connected: ${dev.deviceName}")
+        Log.i(TAG, "Glasses connected: ${dev.deviceName}, ${claimedInterfaces.size} HID interface(s) claimed")
         notifyState()
     }
 
     private fun releaseConnection() {
         val c = connection
-        val d = device
-        if (c != null && d != null) {
-            for (i in 0 until d.interfaceCount) {
-                try { c.releaseInterface(d.getInterface(i)) } catch (_: Exception) { }
+        if (c != null) {
+            for (intf in claimedInterfaces) {
+                try { c.releaseInterface(intf) } catch (_: Exception) { }
             }
             try { c.close() } catch (_: Exception) { }
         }
+        claimedInterfaces.clear()
         connection = null
         device = null
     }
