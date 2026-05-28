@@ -1,5 +1,6 @@
     package com.teleteh.xplayer2.player
 
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.res.ColorStateList
@@ -50,9 +51,12 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.media3.decoder.ffmpeg.FfmpegLibrary
 import androidx.media3.extractor.metadata.id3.TextInformationFrame
 import androidx.media3.ui.PlayerView
@@ -417,13 +421,29 @@ class PlayerActivity : AppCompatActivity() {
         val renderersFactory = DefaultRenderersFactory(this)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
-        player = ExoPlayer.Builder(this, renderersFactory)
+        val isLocalUri = uri.scheme?.lowercase() in setOf("file", "content")
+        val playerBuilder = ExoPlayer.Builder(this, renderersFactory)
             .setTrackSelector(selector)
-            .build().also { exo ->
-                // Prefer highest quality variant (e.g., for HLS master playlists)
+        if (isLocalUri) {
+            // Local reads are essentially free; the default 50-second buffer just inflates
+            // RAM use and disk activity. Drop it down to a few seconds for better battery.
+            playerBuilder.setLoadControl(
+                DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(
+                        /* minBufferMs */ 5_000,
+                        /* maxBufferMs */ 15_000,
+                        /* bufferForPlaybackMs */ 500,
+                        /* bufferForPlaybackAfterRebufferMs */ 1_000
+                    )
+                    .build()
+            )
+        }
+        player = playerBuilder.build().also { exo ->
+                // For HLS master playlists, force highest quality only on unmetered Wi-Fi —
+                // doing it on cellular costs the user money and burns battery for no good reason.
                 val ffmpegAvailableForPrefs = try { FfmpegLibrary.isAvailable() } catch (_: Throwable) { false }
                 selector.parameters = selector.buildUponParameters()
-                    .setForceHighestSupportedBitrate(true)
+                    .setForceHighestSupportedBitrate(isOnUnmeteredNetwork())
                     // Only prefer AC3/EAC3/DTS when FFmpeg is available. Otherwise prefer common AAC/Opus/Vorbis
                     .setPreferredAudioMimeTypes(
                         *(if (ffmpegAvailableForPrefs) arrayOf(
@@ -1178,6 +1198,22 @@ class PlayerActivity : AppCompatActivity() {
             // without losing the auto-detect chance for a different clip.
             saveProgress()
         }
+    }
+
+    /**
+     * Returns true on unmetered networks (Wi-Fi, Ethernet) — false on cellular or unknown.
+     * Used to gate features like forcing the highest HLS variant, which would otherwise
+     * blow the user's cellular cap or battery.
+     */
+    private fun isOnUnmeteredNetwork(): Boolean = try {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val net = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(net) ?: return false
+        // hasCapability(NET_CAPABILITY_NOT_METERED) is the right signal — Wi-Fi can be
+        // explicitly metered, Ethernet is never, and cellular is always metered.
+        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+    } catch (_: Throwable) {
+        false
     }
 
     /**
