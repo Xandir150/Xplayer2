@@ -1,6 +1,7 @@
 package com.teleteh.xplayer2.player
 
 import android.animation.ValueAnimator
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
@@ -13,11 +14,14 @@ import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.ImageButton
 import android.widget.SeekBar
 import android.widget.TextView
+import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.toColorInt
 import androidx.media3.common.util.UnstableApi
 import com.google.android.material.button.MaterialButton
+import com.teleteh.xplayer2.MainActivity
 import com.teleteh.xplayer2.R
+import com.teleteh.xplayer2.ui.util.DisplayUtils
 import java.util.concurrent.TimeUnit
 
 /**
@@ -114,6 +118,22 @@ class RemoteControlActivity : AppCompatActivity() {
         
         // Setup dim overlay for screen dimming
         setupDimOverlay()
+
+        // Back press: jump straight to MainActivity instead of revealing PlayerActivity behind us.
+        // Without this, swipe-back from the remote pops the back stack to PlayerActivity, which
+        // then redraws its full player UI on the phone even though the glasses still own the
+        // video — confusing for users and looks like a second concurrent player.
+        onBackPressedDispatcher.addCallback(this) {
+            val intent = Intent(this@RemoteControlActivity, MainActivity::class.java).apply {
+                addFlags(
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP
+                )
+            }
+            DisplayUtils.startOnPrimaryDisplay(this@RemoteControlActivity, intent)
+            finish()
+        }
     }
     
     private fun setupDimOverlay() {

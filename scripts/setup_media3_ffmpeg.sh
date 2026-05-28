@@ -71,7 +71,7 @@ HOST_PLATFORM="${HOST_ARG:-darwin-x86_64}"
 #   mlp    — Meridian Lossless Packing (BluRay lossless base)
 #   alac   — Apple Lossless
 # Without eac3/truehd/mlp the player goes silent on most modern movie containers.
-ENABLED_DECODERS=( ${DECODERS_ARG:-"ac3 eac3 dca truehd mlp aac mp3 vorbis opus flac alac ape wmapro wma wmav2 pcm_s16le pcm_s24le pcm_s32le pcm_f32le atrac3 atrac3p"} )
+ENABLED_DECODERS=( ${DECODERS_ARG:-"ac3 eac3 dca truehd mlp aac mp3 vorbis opus flac alac ape wmapro wmav1 wmav2 wmalossless pcm_s16le pcm_s24le pcm_s32le pcm_f32le atrac3 atrac3p"} )
 
 if [[ -z "${NDK_PATH}" ]]; then
   echo "ERROR: Android NDK not found. Provide with --ndk or set ANDROID_NDK_HOME." >&2
