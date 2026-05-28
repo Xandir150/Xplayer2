@@ -1,6 +1,7 @@
     package com.teleteh.xplayer2.player
 
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.media.audiofx.LoudnessEnhancer
@@ -544,18 +545,24 @@ class PlayerActivity : AppCompatActivity() {
                         updateSbsUi()
                     }
                     override fun onTracksChanged(tracks: Tracks) {
-                        // Capture Format.stereoMode from the selected video track if present.
-                        // MKV's StereoMode and MP4's st3d/sv3d boxes both surface through this field.
+                        // Capture Format.stereoMode and HDR transfer from the selected video track.
+                        // MKV's StereoMode and MP4's st3d/sv3d both surface through Format.stereoMode;
+                        // HDR10 / HLG arrive as Format.colorInfo.colorTransfer.
                         var stereo: Int? = null
+                        var isHdr = false
                         val groups = tracks.groups
                         for (i in 0 until groups.size) {
                             val g = groups[i]
                             if (g.type != C.TRACK_TYPE_VIDEO) continue
                             for (j in 0 until g.length) {
                                 if (!g.isTrackSelected(j)) continue
-                                val mode = g.getTrackFormat(j).stereoMode
-                                if (mode != Format.NO_VALUE) {
-                                    stereo = mode
+                                val fmt = g.getTrackFormat(j)
+                                val mode = fmt.stereoMode
+                                if (mode != Format.NO_VALUE) stereo = mode
+                                val transfer = fmt.colorInfo?.colorTransfer
+                                if (transfer == C.COLOR_TRANSFER_ST2084 ||
+                                    transfer == C.COLOR_TRANSFER_HLG) {
+                                    isHdr = true
                                 }
                             }
                         }
@@ -563,6 +570,7 @@ class PlayerActivity : AppCompatActivity() {
                             detectedSourceStereoMode = stereo
                             applySourceLayoutDetection()
                         }
+                        updateHdrColorMode(isHdr)
 
                         // Diagnostic logging
                         for (i in 0 until groups.size) {
@@ -1169,6 +1177,26 @@ class PlayerActivity : AppCompatActivity() {
             // Don't mark sbsExplicitlyConfigured — leave room for the user to disable later
             // without losing the auto-detect chance for a different clip.
             saveProgress()
+        }
+    }
+
+    /**
+     * Switch the activity window between SDR and HDR colour mode based on the selected
+     * video track. HDR mode requires API 26+ and is silently ignored by devices that don't
+     * actually have an HDR-capable display, so it's safe to set unconditionally on supported
+     * sources. The DIRECT video pipeline (PlayerView SurfaceView) benefits most — HDR
+     * content can then bypass the SDR tone-map that Android would otherwise apply.
+     */
+    private fun updateHdrColorMode(isHdr: Boolean) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val target = if (isHdr) ActivityInfo.COLOR_MODE_HDR else ActivityInfo.COLOR_MODE_DEFAULT
+        if (window.colorMode != target) {
+            try {
+                window.colorMode = target
+                android.util.Log.i("XPlayer2", "Window colorMode = ${if (isHdr) "HDR" else "DEFAULT"}")
+            } catch (e: Throwable) {
+                android.util.Log.w("XPlayer2", "Failed to set window colorMode", e)
+            }
         }
     }
 
