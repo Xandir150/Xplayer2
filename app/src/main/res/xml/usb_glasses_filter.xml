@@ -1,5 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Supported XR glasses VID/PID list, mirrored from wheaney/XRLinuxDriver.
+    Android-side switching only works on XREAL today (open MCU protocol).
+    Other brands are detected so the UI can show a brand-specific message
+    instead of nothing.
+-->
 <resources>
-    <!-- XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra -->
-    <usb-device vendor-id="13080" product-id="1074" />
+    <!-- XREAL: VID 0x3318 (decimal 13080) -->
+    <usb-device vendor-id="13080" product-id="1060" />  <!-- 0x0424 Air -->
+    <usb-device vendor-id="13080" product-id="1064" />  <!-- 0x0428 Air 2 -->
+    <usb-device vendor-id="13080" product-id="1074" />  <!-- 0x0432 Air 2 Pro -->
+    <usb-device vendor-id="13080" product-id="1062" />  <!-- 0x0426 Air 2 Ultra -->
+    <usb-device vendor-id="13080" product-id="1077" />  <!-- 0x0435 One Pro -->
+    <usb-device vendor-id="13080" product-id="1078" />  <!-- 0x0436 One Pro -->
+    <usb-device vendor-id="13080" product-id="1079" />  <!-- 0x0437 One -->
+    <usb-device vendor-id="13080" product-id="1080" />  <!-- 0x0438 One -->
+    <usb-device vendor-id="13080" product-id="1086" />  <!-- 0x043e One S -->
+
+    <!-- VITURE: VID 0x35ca (decimal 13770) -->
+    <usb-device vendor-id="13770" product-id="4113" />  <!-- 0x1011 One -->
+    <usb-device vendor-id="13770" product-id="4115" />  <!-- 0x1013 One -->
+    <usb-device vendor-id="13770" product-id="4119" />  <!-- 0x1017 One -->
+    <usb-device vendor-id="13770" product-id="4117" />  <!-- 0x1015 One Lite -->
+    <usb-device vendor-id="13770" product-id="4123" />  <!-- 0x101b One Lite -->
+    <usb-device vendor-id="13770" product-id="4121" />  <!-- 0x1019 Pro -->
+    <usb-device vendor-id="13770" product-id="4125" />  <!-- 0x101d Pro -->
+    <usb-device vendor-id="13770" product-id="4401" />  <!-- 0x1131 Luma -->
+    <usb-device vendor-id="13770" product-id="4385" />  <!-- 0x1121 Luma Pro -->
+    <usb-device vendor-id="13770" product-id="4417" />  <!-- 0x1141 Luma Pro -->
+    <usb-device vendor-id="13770" product-id="4353" />  <!-- 0x1101 Luma Ultra -->
+    <usb-device vendor-id="13770" product-id="4356" />  <!-- 0x1104 Luma Ultra -->
+    <usb-device vendor-id="13770" product-id="4433" />  <!-- 0x1151 Luma Cyber -->
+    <usb-device vendor-id="13770" product-id="4609" />  <!-- 0x1201 Beast -->
+
+    <!-- TCL / RayNeo: VID 0x1bbb (decimal 7099) -->
+    <usb-device vendor-id="7099" product-id="44880" />  <!-- 0xaf50 NXTWEAR/Air series -->
 </resources>

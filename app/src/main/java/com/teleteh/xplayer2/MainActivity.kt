@@ -315,6 +315,18 @@ class MainActivity : AppCompatActivity() {
             GlassesController.ConnectionState.Connected -> Unit
         }
 
+        // Detected glasses, but their brand needs a closed-source SDK we don't bundle.
+        if (!glasses.supportsRemoteSwitch()) {
+            val brand = glasses.currentBrand()?.name ?: "Glasses"
+            val model = glasses.currentModel().orEmpty()
+            AlertDialog.Builder(this)
+                .setTitle("$brand $model".trim())
+                .setMessage(getString(R.string.glasses_brand_unsupported, brand))
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+            return
+        }
+
         val items = listOf(
             GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60 to getString(R.string.glasses_mode_2d, 60),
             GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_72 to getString(R.string.glasses_mode_2d, 72),

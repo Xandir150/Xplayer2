@@ -15,22 +15,33 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 
 /**
- * Talks to XR glasses over USB HID using the MCU protocol from [GlassesProtocol].
+ * Talks to XR glasses over USB HID.
  *
- * The controller owns a lazily-created connection, watches USB attach/detach
- * events and surfaces a simple connection state + a "set display mode"
- * operation that the main activity can wire to a toolbar button.
+ * Detection covers every major brand currently shipping XR glasses with a USB-C
+ * tether (the VID/PID list is mirrored from wheaney/XRLinuxDriver). The actual
+ * `set display mode` command is only implemented for XREAL right now — see
+ * [supportsRemoteSwitch]. For other brands the controller still reports the
+ * connection so the UI can show an informative message instead of silently
+ * staying empty.
  *
- * Currently recognises:
- *  - XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra (VID 0x3318, PID 0x0432)
+ * **Why not all brands?** Each vendor uses a different protocol:
+ *   - XREAL: open MCU protocol over a 64-byte HID report, CRC-32, head 0xFD.
+ *     Implemented here (see [GlassesProtocol]).
+ *   - VITURE: HID with CRC-16-CCITT and head 0xFF 0xFE. The IMU side has been
+ *     reverse-engineered (mgschwan/viture_virtual_display) but the
+ *     `set_3d` command id is only available through VITURE's closed-source
+ *     libviture_one_sdk (Android: `com.viture.sdk.ArManager.set3D(boolean)`,
+ *     distributed as an AAR from viture.com/developer).
+ *   - TCL/RayNeo and Rokid: both ship closed-source SDKs only.
  *
- * VITURE One/Pro glasses speak a different protocol (closed SDK) and are not
- * supported by this controller yet — but the device list below is a single
- * place to extend when those VIDs/PIDs become available.
+ * To enable VITURE switching: drop `VITURE-SDK-x.y.z.aar` under `app/libs/`,
+ * add it as a flavor-scoped dependency and wire a separate brand-specific
+ * helper from this class.
  */
 class GlassesController(private val appContext: Context) {
 
     enum class ConnectionState { Disconnected, NeedsPermission, Connected }
+    enum class Brand { XREAL, VITURE, ROKID, RAYNEO }
 
     fun interface Listener {
         fun onChanged(state: ConnectionState, currentMode: Int)
@@ -119,11 +130,26 @@ class GlassesController(private val appContext: Context) {
         else -> ConnectionState.Disconnected
     }
 
+    /** Returns the brand of the currently attached glasses, or null if none. */
+    fun currentBrand(): Brand? = (device ?: findAttachedGlasses())?.matchedDevice()?.brand
+
+    /** Human-readable model string for the currently attached glasses, or null. */
+    fun currentModel(): String? = (device ?: findAttachedGlasses())?.matchedDevice()?.model
+
+    /** True only for brands whose protocol we actually speak. Other brands need their vendor SDK. */
+    fun supportsRemoteSwitch(): Boolean = currentBrand() == Brand.XREAL
+
     /**
-     * Send a `Write display mode` MCU command to the connected glasses. No-op if no glasses are connected
-     * (the caller is expected to gate UI on [currentState] first). Returns true if the bulk transfer succeeded.
+     * Send a `Write display mode` MCU command to the connected glasses.
+     *
+     * No-op (returns false) if either:
+     *   - no glasses are connected, or
+     *   - the connected glasses' brand isn't supported for remote switching yet.
+     *
+     * The caller is expected to gate UI on [currentState] and [supportsRemoteSwitch] first.
      */
     fun setDisplayMode(mode: Int): Boolean {
+        if (!supportsRemoteSwitch()) return false
         val ok = sendMcuCommand(GlassesProtocol.MCU_MSG_W_DISP_MODE, byteArrayOf(mode.toByte()))
         if (ok) {
             lastReportedMode = mode
@@ -236,8 +262,10 @@ class GlassesController(private val appContext: Context) {
         listener?.onChanged(currentState(), lastReportedMode)
     }
 
-    private fun UsbDevice.isSupportedGlasses(): Boolean =
-        SUPPORTED_DEVICES.any { it.vid == vendorId && it.pid == productId }
+    private fun UsbDevice.isSupportedGlasses(): Boolean = matchedDevice() != null
+
+    private fun UsbDevice.matchedDevice(): SupportedDevice? =
+        SUPPORTED_DEVICES.firstOrNull { it.vid == vendorId && it.pid == productId }
 
     private fun Intent.usbDevice(): UsbDevice? =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
@@ -245,14 +273,50 @@ class GlassesController(private val appContext: Context) {
         else
             @Suppress("DEPRECATION") getParcelableExtra(UsbManager.EXTRA_DEVICE)
 
-    private data class SupportedDevice(val vid: Int, val pid: Int)
+    private data class SupportedDevice(val vid: Int, val pid: Int, val brand: Brand, val model: String)
 
     companion object {
         private const val TAG = "GlassesController"
 
+        // VID/PID list mirrored from wheaney/XRLinuxDriver (covers every model that ships at the time
+        // of writing). Brand identification is exposed via [currentBrand]; remote switching is only
+        // implemented for XREAL right now — see the class-level kdoc for the protocol situation.
         private val SUPPORTED_DEVICES = listOf(
-            // XREAL Air series. Verified against XREAL Air 2 Pro (xspace).
-            SupportedDevice(vid = 0x3318, pid = 0x0432),
+            // XREAL Air series (open MCU protocol, fully supported here)
+            SupportedDevice(0x3318, 0x0424, Brand.XREAL, "Air"),
+            SupportedDevice(0x3318, 0x0428, Brand.XREAL, "Air 2"),
+            SupportedDevice(0x3318, 0x0432, Brand.XREAL, "Air 2 Pro"),
+            SupportedDevice(0x3318, 0x0426, Brand.XREAL, "Air 2 Ultra"),
+            SupportedDevice(0x3318, 0x0435, Brand.XREAL, "One Pro"),
+            SupportedDevice(0x3318, 0x0436, Brand.XREAL, "One Pro"),
+            SupportedDevice(0x3318, 0x0437, Brand.XREAL, "One"),
+            SupportedDevice(0x3318, 0x0438, Brand.XREAL, "One"),
+            SupportedDevice(0x3318, 0x043e, Brand.XREAL, "One S"),
+
+            // VITURE — detection only. Switching requires libviture_one_sdk.
+            SupportedDevice(0x35ca, 0x1011, Brand.VITURE, "One"),
+            SupportedDevice(0x35ca, 0x1013, Brand.VITURE, "One"),
+            SupportedDevice(0x35ca, 0x1017, Brand.VITURE, "One"),
+            SupportedDevice(0x35ca, 0x1015, Brand.VITURE, "One Lite"),
+            SupportedDevice(0x35ca, 0x101b, Brand.VITURE, "One Lite"),
+            SupportedDevice(0x35ca, 0x1019, Brand.VITURE, "Pro"),
+            SupportedDevice(0x35ca, 0x101d, Brand.VITURE, "Pro"),
+            SupportedDevice(0x35ca, 0x1131, Brand.VITURE, "Luma"),
+            SupportedDevice(0x35ca, 0x1121, Brand.VITURE, "Luma Pro"),
+            SupportedDevice(0x35ca, 0x1141, Brand.VITURE, "Luma Pro"),
+            SupportedDevice(0x35ca, 0x1101, Brand.VITURE, "Luma Ultra"),
+            SupportedDevice(0x35ca, 0x1104, Brand.VITURE, "Luma Ultra"),
+            SupportedDevice(0x35ca, 0x1151, Brand.VITURE, "Luma Cyber"),
+            SupportedDevice(0x35ca, 0x1201, Brand.VITURE, "Beast"),
+
+            // TCL / RayNeo — detection only. Switching requires the closed RayNeo SDK.
+            SupportedDevice(0x1bbb, 0xaf50, Brand.RAYNEO, "NXTWEAR / Air series"),
+
+            // Rokid — detection only. Switching requires the closed Rokid SDK.
+            // (Rokid VID is published as the literal "ROKID_GLASS_VID" macro in the upstream driver;
+            //  the public source doesn't currently expose the numeric value, so until we can grep a
+            //  paired glasses' descriptor block we leave the entry as a stub. Open an issue if you
+            //  have a Rokid Max/Air handy and we'll fill the VID in.)
         )
     }
 }
