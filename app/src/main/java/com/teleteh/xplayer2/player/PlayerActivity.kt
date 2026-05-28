@@ -632,7 +632,7 @@ class PlayerActivity : AppCompatActivity() {
                         }
                         if (stereo != detectedSourceStereoMode) {
                             detectedSourceStereoMode = stereo
-                            applySourceLayoutDetection()
+                            applyRenderMode()
                         }
                         updateHdrColorMode(isHdr)
 
@@ -1357,9 +1357,6 @@ class PlayerActivity : AppCompatActivity() {
         applyVideoPipeline()
     }
 
-    /** Back-compat name used by track/size callbacks. */
-    private fun applySourceLayoutDetection() = applyRenderMode()
-
     /**
      * Returns true on unmetered networks (Wi-Fi, Ethernet) — false on cellular or unknown.
      * Used to gate features like forcing the highest HLS variant, which would otherwise
@@ -1547,15 +1544,8 @@ class PlayerActivity : AppCompatActivity() {
         gl.setPerEyeLetterboxPx(pad, referenceHeightPx = halfH)
     }
 
-    /**
-     * Whether the source video is stereo (SBS or OU). Shares the same logic as
-     * [detectSourceLayout] so the duplicate-mono path and the source-is-sbs path
-     * can never disagree on a given clip.
-     */
-    private fun isVideoStereo(): Boolean = detectSourceLayout() != SourceLayout.Mono
-    
-    // Kept as the entry point used by lifecycle callbacks (config change / resume); the actual
-    // decision now lives in applyRenderMode(), which is layout-driven and targets the active view.
+    // Entry point used by lifecycle callbacks (config change / resume). The actual decision
+    // lives in applyRenderMode(), which is layout-driven and targets the active view.
     private fun updateSbsUi() {
         applyRenderMode()
     }
