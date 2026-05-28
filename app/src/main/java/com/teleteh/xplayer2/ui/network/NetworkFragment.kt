@@ -6,6 +6,7 @@ import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Bundle
 import android.text.InputType
+import android.view.MotionEvent
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
@@ -53,9 +54,16 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
         rv = view.findViewById(R.id.rvNetwork)
         val fab: FloatingActionButton = view.findViewById(R.id.fabAddShare)
 
-        adapter = NetworkAdapter(onClick = { item -> onItemClick(item) })
+        adapter = NetworkAdapter(
+            onClick = { item -> onItemClick(item) },
+            onDelete = { share ->
+                smbStorage.remove(share.name)
+                reloadShares()
+            }
+        )
         rv.layoutManager = LinearLayoutManager(requireContext())
         rv.adapter = adapter
+        rv.descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
 
         fun tryOpen(text: String?) {
             val raw = text?.trim()
@@ -74,14 +82,39 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
         }
 
         btnOpen.setOnClickListener { tryOpen(etUrl.text?.toString()) }
+        btnOpen.isFocusable = true
+        btnOpen.isFocusableInTouchMode = true
+        btnOpen.isLongClickable = false
+        btnOpen.setOnTouchListener { v, event ->
+            if (event.action == MotionEvent.ACTION_UP) {
+                v.requestFocus(); v.performClick(); true
+            } else false
+        }
+
         etUrl.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE) {
                 tryOpen(etUrl.text?.toString())
                 true
             } else false
         }
+        etUrl.isFocusable = true
+        etUrl.isFocusableInTouchMode = true
+        etUrl.isLongClickable = false
+        etUrl.setOnTouchListener { v, event ->
+            if (event.action == MotionEvent.ACTION_UP) {
+                v.requestFocus(); v.performClick(); true
+            } else false
+        }
 
         fab.setOnClickListener { showAddSmbDialog() }
+        fab.isFocusable = true
+        fab.isFocusableInTouchMode = true
+        fab.isLongClickable = false
+        fab.setOnTouchListener { v, event ->
+            if (event.action == MotionEvent.ACTION_UP) {
+                v.requestFocus(); v.performClick(); true
+            } else false
+        }
 
         // Initial content: saved SMB shares
         reloadShares()

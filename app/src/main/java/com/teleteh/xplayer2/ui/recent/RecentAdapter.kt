@@ -2,7 +2,9 @@ package com.teleteh.xplayer2.ui.recent
 
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.view.KeyEvent
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
@@ -37,9 +39,42 @@ class RecentAdapter(
         val sbsState: TextView? = view.findViewById(R.id.tvSbsState)
 
         init {
+            val deleteButton = view.findViewById<View?>(R.id.btnDelete)
+
+            view.isFocusable = true
+            view.isFocusableInTouchMode = true
+            view.isLongClickable = false
             view.setOnClickListener { onClick(bindingAdapterPosition) }
-            view.findViewById<View?>(R.id.btnDelete)?.setOnClickListener {
-                onDeleteIdx(bindingAdapterPosition)
+
+            // Single-tap activation (touch ACTION_UP triggers click) so touch and D-pad behave consistently.
+            view.setOnTouchListener { v, event ->
+                if (event.action == MotionEvent.ACTION_UP) {
+                    v.requestFocus(); v.performClick(); true
+                } else false
+            }
+
+            // D-pad RIGHT on a row jumps focus to its delete button (when present).
+            view.setOnKeyListener { _, keyCode, event ->
+                if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    if (deleteButton?.visibility == View.VISIBLE) {
+                        deleteButton.requestFocus(); return@setOnKeyListener true
+                    }
+                }
+                false
+            }
+
+            deleteButton?.isFocusable = true
+            deleteButton?.isFocusableInTouchMode = true
+            deleteButton?.setOnClickListener { onDeleteIdx(bindingAdapterPosition) }
+            deleteButton?.setOnKeyListener { _, keyCode, event ->
+                if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_LEFT -> { view.requestFocus(); true }
+                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                        deleteButton.performClick(); true
+                    }
+                    else -> false
+                }
             }
         }
     }

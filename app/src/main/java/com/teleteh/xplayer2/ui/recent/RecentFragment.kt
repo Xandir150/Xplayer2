@@ -57,6 +57,7 @@ class RecentFragment : Fragment(R.layout.fragment_recent) {
         })
         recycler.layoutManager = LinearLayoutManager(requireContext())
         recycler.adapter = adapter
+        recycler.descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
         loadData()
     }
 
