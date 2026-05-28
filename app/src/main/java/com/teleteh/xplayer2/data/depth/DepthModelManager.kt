@@ -12,9 +12,9 @@ import java.net.URL
  * Manages the on-device location of the depth-estimation model used by [DepthEstimator].
  *
  * Resolution order:
- *   1. Bundled in `app/src/main/assets/depth_v2_small.tflite` — preferred for offline builds
+ *   1. Bundled in `app/src/main/assets/midas_v21_small.tflite` — preferred for offline builds
  *      or developers who manually drop the file in.
- *   2. Downloaded into `context.filesDir/depth_v2_small.tflite` from [MODEL_URL] — happens on
+ *   2. Downloaded into `context.filesDir/midas_v21_small.tflite` from [MODEL_URL] — happens on
  *      first Lazy 3D enable, with progress reported through the [ensureAvailable] callback.
  *
  * Updates are handled via a cheap Content-Length comparison on a HEAD request — if the
@@ -149,12 +149,11 @@ class DepthModelManager(private val appContext: Context) {
 
     companion object {
         private const val TAG = "DepthModelManager"
-        const val MODEL_FILENAME = "depth_v2_small.tflite"
-        /**
-         * Bump this AND publish a fresh asset under a new release tag when shipping a new
-         * model build. Existing installs notice the size mismatch on next update check and
-         * re-download.
-         */
+        // MiDaS v2.1 small (256x256, FP32). Clean float NHWC I/O that matches DepthEstimator.
+        // To upgrade the model later (e.g. to a Depth-Anything-V2 export), just publish the
+        // new .tflite under a new release tag and bump REMOTE_VERSION — clients pick it up
+        // automatically on the next update check (size mismatch triggers re-download).
+        const val MODEL_FILENAME = "midas_v21_small.tflite"
         const val REMOTE_VERSION = "models-v1"
         const val MODEL_URL =
             "https://github.com/Xandir150/Xplayer2/releases/download/$REMOTE_VERSION/$MODEL_FILENAME"

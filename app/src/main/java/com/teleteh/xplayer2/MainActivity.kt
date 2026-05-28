@@ -88,7 +88,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * Quietly pre-download the Lazy-3D depth model in the background so the feature is ready
      * to use instantly later. Strictly opt-in to Wi-Fi/unmetered to avoid spending the
-     * user's cellular data on a ~24 MB file they may never need. No UI, no progress — if it
+     * user's cellular data on a ~65 MB file they may never need. No UI, no progress — if it
      * fails or the network is metered we simply try again next launch, and the on-demand
      * download in PlayerActivity remains the fallback.
      */

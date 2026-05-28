@@ -1,30 +1,32 @@
 Lazy 3D depth model
 ====================
 
-This app's "Lazy 3D" toggle synthesises stereo depth on top of any 2D source by running a
-mobile-friendly monocular-depth network on every (or every N-th) frame. The model itself
-is NOT bundled in the APK — it is ~24 MB and licensed separately.
+The "Lazy 3D" toggle synthesises stereo depth on top of any 2D source by running a
+monocular-depth network per frame. The model is NOT bundled in the APK — it is
+auto-downloaded at runtime (first time Lazy 3D is enabled, or pre-fetched in the
+background on Wi-Fi at first launch) from the project's GitHub release.
 
-To enable Lazy 3D depth:
+Model: MiDaS v2.1 small, 256x256, FP32 (~65 MB)
+  input  : float32 [1,256,256,3] RGB, ImageNet-normalised
+  output : float32 [1,256,256,1] inverse depth (higher = nearer)
 
-1. Download a TFLite build of Depth-Anything-V2-Small. Known good source:
-     https://huggingface.co/google/depth_v2_small
-   or any community export at 256x256 INT8 with NHWC float-input / float-output.
+Download URL and filename are defined in DepthModelManager (release tag `models-v1`,
+file `midas_v21_small.tflite`).
 
-2. Rename the file to  `depth_v2_small.tflite`.
+Manual / offline install
+------------------------
+Drop `midas_v21_small.tflite` into this `assets/` folder and rebuild — the bundled copy
+takes priority over the download.
 
-3. Drop it into  `app/src/main/assets/`  alongside this README and rebuild the APK.
+Upgrading the model later
+-------------------------
+Publish a new .tflite under a new release tag, bump REMOTE_VERSION in DepthModelManager.
+Clients notice the size change on their next update check and re-download automatically.
+If you switch to a different architecture (e.g. Depth-Anything-V2), keep the same float
+NHWC I/O contract or update DepthEstimator's pre/post-processing to match.
 
-If the file is missing, Lazy 3D falls back to head-tracking parallax only (the IMU path
-from XREAL goggles), and the depth-synthesis half of the feature is silently disabled.
-A line like "Lazy 3D: model asset ... not present" is emitted to logcat at startup.
-
-License notes
--------------
-Depth-Anything-V2 weights are released under Apache 2.0 and can be redistributed.
-The reference implementation, evaluation code and trainers live under the original
-project at https://github.com/DepthAnything/Depth-Anything-V2.
-
-The view-synthesis math used in our GL shader is inspired by `nunif/iw3`
-(https://github.com/nagadomi/nunif) — backward-warp + edge dilation. Algorithm only,
-not source code; no AGPL contamination.
+Credits
+-------
+View-synthesis math (depth -> per-eye disparity, edge dilation) is adapted from the ideas
+in nagadomi/nunif (iw3): https://github.com/nagadomi/nunif . Algorithm only.
+MiDaS: https://github.com/isl-org/MiDaS (MIT).

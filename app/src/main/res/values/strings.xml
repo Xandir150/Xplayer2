@@ -16,7 +16,7 @@
     <string name="glasses_send_failed">Failed to switch glasses mode</string>
     <string name="glasses_brand_unsupported">Switching glasses display mode requires the closed-source %1$s SDK, which is not bundled. Please use the glasses\' physical menu to change mode for now.</string>
     <string name="glasses_not_connected">No supported XR glasses detected on USB. Plug the goggles in (XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S) and grant USB permission when prompted.</string>
-    <string name="lazy3d_downloading">Downloading Lazy 3D depth model (~24 MB)…</string>
+    <string name="lazy3d_downloading">Downloading Lazy 3D depth model (~65 MB)…</string>
     <string name="lazy3d_downloaded">Lazy 3D depth model ready</string>
     <string name="lazy3d_download_failed">Failed to download Lazy 3D depth model</string>
     <string name="menu_stereo">Stereo: toggle</string>

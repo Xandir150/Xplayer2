@@ -1672,7 +1672,7 @@ class PlayerActivity : AppCompatActivity() {
     /**
      * Turn the Lazy-3D feature on or off. Starting it:
      *   1. Spins up the IMU reader (head-tracking parallax) if XREAL goggles are present.
-     *   2. Downloads the depth-estimation TFLite model on first use (~24 MB; only the first
+     *   2. Downloads the depth-estimation TFLite model on first use (~65 MB; only the first
      *      run on this device pays this cost), then starts depth-based stereo synthesis.
      * Stopping releases both halves so the feature costs nothing when off.
      */

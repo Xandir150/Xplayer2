@@ -11,16 +11,14 @@ import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 
 /**
- * Wraps a TFLite monocular-depth model (default: Depth-Anything-V2 Small) for the
- * "Lazy 3D" feature.
+ * Wraps a TFLite monocular-depth model (MiDaS v2.1 small) for the "Lazy 3D" feature.
  *
- * Model placement: drop `depth_v2_small.tflite` into `app/src/main/assets/`. See
- * [README.txt][com.teleteh.xplayer2.data.depth.README] in the same package — and the
- * download notes in the project README — for where to grab a mobile-friendly copy.
+ * Model is auto-downloaded at runtime by [DepthModelManager]; a bundled assets copy is also
+ * honoured if present. See the assets README for details.
  *
- * Expected I/O shape (matches the public Depth-Anything-V2 small INT8 export):
- *   input  : float32 [1, H, W, 3], RGB in 0..1, default H=W=256
- *   output : float32 [1, H, W] OR [1, H, W, 1], raw inverse-depth (higher = nearer)
+ * Verified I/O shape (MiDaS v2.1 small, 256x256 FP32):
+ *   input  : float32 [1, 256, 256, 3], RGB, ImageNet-normalised ((x/255 - mean)/std)
+ *   output : float32 [1, 256, 256, 1], raw inverse-depth (higher = nearer)
  *
  * Output is min/max-normalised to 0..1 (1 = nearest) so the GL stereo shader can use
  * it as a unit disparity multiplier without knowing model-specific scaling.
@@ -95,7 +93,10 @@ class DepthEstimator(
         val interp = interpreter ?: return null
         if (srcWidth <= 0 || srcHeight <= 0) return null
 
-        // Bilinear down-sample directly into the input buffer (avoids allocating Bitmap).
+        // Nearest-neighbour down-sample into the input buffer (avoids allocating a Bitmap),
+        // applying ImageNet normalization — MiDaS v2.1 small was trained on
+        // (pixel/255 - mean) / std with the standard ImageNet constants. Feeding plain 0..1
+        // produces washed-out, low-contrast depth.
         inputBuf.rewind()
         val scaleX = srcWidth.toFloat() / inputSize
         val scaleY = srcHeight.toFloat() / inputSize
@@ -105,9 +106,12 @@ class DepthEstimator(
             for (x in 0 until inputSize) {
                 val sx = (x * scaleX).toInt().coerceIn(0, srcWidth - 1)
                 val px = rgbaPixels[rowStart + sx]
-                inputBuf.putFloat(((px shr 16) and 0xFF) / 255f) // R
-                inputBuf.putFloat(((px shr 8) and 0xFF) / 255f)  // G
-                inputBuf.putFloat((px and 0xFF) / 255f)          // B
+                val r = ((px shr 16) and 0xFF) / 255f
+                val g = ((px shr 8) and 0xFF) / 255f
+                val b = (px and 0xFF) / 255f
+                inputBuf.putFloat((r - 0.485f) / 0.229f)
+                inputBuf.putFloat((g - 0.456f) / 0.224f)
+                inputBuf.putFloat((b - 0.406f) / 0.225f)
             }
         }
         inputBuf.rewind()
