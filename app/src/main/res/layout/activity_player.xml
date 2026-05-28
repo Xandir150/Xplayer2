@@ -25,7 +25,7 @@
                 android:layout_height="match_parent"
                 android:keepScreenOn="true"
                 android:background="@android:color/transparent"
-                app:surface_type="none"
+                app:surface_type="surface_view"
                 app:use_controller="true"
                 app:show_buffering="when_playing" />
 

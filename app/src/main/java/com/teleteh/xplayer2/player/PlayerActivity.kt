@@ -131,6 +131,14 @@ class PlayerActivity : AppCompatActivity() {
     // SBS toolbar button, or because a saved Recent entry already had sbsEnabled set. While
     // false, auto-detection is allowed to flip the SBS toggle on OU sources.
     private var sbsExplicitlyConfigured: Boolean = false
+
+    // Active video output pipeline. GL is needed when we have to transform the picture
+    // (OU→SBS, SBS source split, mono→SBS duplicate, external Presentation). For plain
+    // mono playback that doesn't need any transform we route video straight into
+    // PlayerView's SurfaceView, which skips an extra GL pass — lower CPU/GPU and
+    // better colour fidelity (especially for HDR / wide-gamut content).
+    private enum class VideoPipeline { GL, DIRECT }
+    private var currentPipeline: VideoPipeline = VideoPipeline.GL
     // Foreground service for external playback
     private var playbackService: PlaybackService? = null
     private var serviceBound = false
@@ -177,7 +185,8 @@ class PlayerActivity : AppCompatActivity() {
         glView?.setSbsEnabled(getStereoSbs())
         // Default: do not swap eyes
         glView?.setSwapEyes(false)
-        // Ensure PlayerView's internal Surface/Texture view doesn't render over GL
+        // PlayerView's internal SurfaceView is the direct-output target. Initial visibility
+        // is decided by applyVideoPipeline() once we know the player + flags.
         playerView.videoSurfaceView?.visibility = View.GONE
         // Inflate custom overlay controls into PlayerView's overlay container
         val overlay =
@@ -462,11 +471,10 @@ class PlayerActivity : AppCompatActivity() {
                     android.util.Log.i("XPlayer2", "FFmpeg extension is available. Using extension renderers: PREFER")
                 }
 
-                // Wire GL surface for video output (only if no Presentation)
+                // Wire GL surface for video output (only used when our pipeline is GL).
                 glView?.setOnSurfaceReadyListener { surface ->
                     glSurface = surface
-                    // Only bind to local GL if Presentation is not active
-                    if (presentation == null) {
+                    if (presentation == null && currentPipeline == VideoPipeline.GL) {
                         exo.setVideoSurface(surface)
                     }
                 }
@@ -518,6 +526,8 @@ class PlayerActivity : AppCompatActivity() {
                 glView?.setDuplicateMonoToSbs(false)
                 // Refresh button visuals to reflect initial per-item state
                 btnSbsRef?.let { applySbsButtonVisual(it) }
+                // Choose pipeline now that we know initial SBS state.
+                applyVideoPipeline()
                 exo.play()
                 // Listen for metadata/title updates to reflect in UI and Recent
                 exo.addListener(object : Player.Listener {
@@ -1155,10 +1165,58 @@ class PlayerActivity : AppCompatActivity() {
             glView?.setSbsEnabled(true)
             btnSbsRef?.let { applySbsButtonVisual(it) }
             applySbsShiftIfNeeded()
-            updateSbsUi()
+            updateSbsUi() // already calls applyVideoPipeline()
             // Don't mark sbsExplicitlyConfigured — leave room for the user to disable later
             // without losing the auto-detect chance for a different clip.
             saveProgress()
+        }
+    }
+
+    /**
+     * Decide whether to route video through our GL pipeline (OuToSbsGlView) or straight to
+     * PlayerView's SurfaceView, and apply the switch on ExoPlayer if it changed.
+     *
+     * Direct SurfaceView is preferable when no transform is needed: less GPU work, lower
+     * battery, and HDR/wide-gamut content reaches the display without an intermediate 8-bit
+     * RGB texture pass. We fall back to GL whenever we have to manipulate the picture:
+     *   - SBS toggle is ON (OU→SBS or SBS-source split)
+     *   - Ultrawide screen + non-stereo source (we duplicate mono into both halves)
+     *   - An external Presentation surface owns the output
+     */
+    private fun applyVideoPipeline() {
+        val exo = player ?: return
+        if (presentation != null) {
+            // External display owns the surface; do nothing here.
+            currentPipeline = VideoPipeline.GL
+            return
+        }
+
+        val sbs = getStereoSbs()
+        val dm = resources.displayMetrics
+        val ultraWide = dm.widthPixels.toFloat() /
+            dm.heightPixels.coerceAtLeast(1).toFloat() >= 3.2f
+        val needsDuplicateMono = ultraWide && !sbs && !isVideoStereo()
+        val needsGl = sbs || needsDuplicateMono
+        val target = if (needsGl) VideoPipeline.GL else VideoPipeline.DIRECT
+        if (target == currentPipeline) return
+
+        currentPipeline = target
+        when (target) {
+            VideoPipeline.GL -> {
+                playerView.videoSurfaceView?.visibility = View.GONE
+                glView?.visibility = View.VISIBLE
+                glSurface?.let { exo.setVideoSurface(it) }
+                android.util.Log.i("XPlayer2", "Pipeline: GL")
+            }
+            VideoPipeline.DIRECT -> {
+                playerView.videoSurfaceView?.visibility = View.VISIBLE
+                glView?.visibility = View.GONE
+                // Disconnect from GL surface, then rebind PlayerView so it grabs its own surface back.
+                exo.clearVideoSurface()
+                playerView.player = null
+                playerView.player = exo
+                android.util.Log.i("XPlayer2", "Pipeline: DIRECT (no GL pass)")
+            }
         }
     }
 
@@ -1232,6 +1290,7 @@ class PlayerActivity : AppCompatActivity() {
         glView?.setSbsEnabled(newSbs)
         presentation?.setSbsEnabled(newSbs)
         applySbsShiftIfNeeded()
+        applyVideoPipeline()
         saveProgress()
     }
 
@@ -1310,6 +1369,8 @@ class PlayerActivity : AppCompatActivity() {
         val shouldDuplicate = ultraWide && !getStereoSbs() && !isVideoStereo()
         android.util.Log.d("XPlayer2", "updateSbsUi: ultraWide=$ultraWide, getStereoSbs=${getStereoSbs()}, isVideoStereo=${isVideoStereo()}, shouldDuplicate=$shouldDuplicate")
         glView?.setDuplicateMonoToSbs(shouldDuplicate)
+        // Mono-on-ultrawide can flip the pipeline (duplicate-mono needs GL); re-evaluate.
+        applyVideoPipeline()
     }
 
     private fun applySbsButtonVisual(btn: MaterialButton) {
