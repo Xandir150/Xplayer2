@@ -39,6 +39,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Metadata
@@ -123,6 +124,9 @@ class PlayerActivity : AppCompatActivity() {
     // No need for reentrancy guard when we don't call show/hide inside listener
     private var lastVideoWidth: Int = 0
     private var lastVideoHeight: Int = 0
+    // Source layout detected from container metadata (Media3 Format.stereoMode).
+    // null means "no explicit metadata; fall back to aspect-ratio heuristic".
+    private var detectedSourceStereoMode: Int? = null
     // Foreground service for external playback
     private var playbackService: PlaybackService? = null
     private var serviceBound = false
@@ -516,13 +520,33 @@ class PlayerActivity : AppCompatActivity() {
                         lastVideoWidth = videoSize.width
                         lastVideoHeight = videoSize.height
                         glView?.updateVideoAspectRatio(videoSize.width, videoSize.height)
+                        applySourceLayoutDetection()
                         applySbsShiftIfNeeded()
                         // Update duplicate mono logic based on video aspect ratio
                         updateSbsUi()
                     }
                     override fun onTracksChanged(tracks: Tracks) {
-                        // Log all track info for debugging
+                        // Capture Format.stereoMode from the selected video track if present.
+                        // MKV's StereoMode and MP4's st3d/sv3d boxes both surface through this field.
+                        var stereo: Int? = null
                         val groups = tracks.groups
+                        for (i in 0 until groups.size) {
+                            val g = groups[i]
+                            if (g.type != C.TRACK_TYPE_VIDEO) continue
+                            for (j in 0 until g.length) {
+                                if (!g.isTrackSelected(j)) continue
+                                val mode = g.getTrackFormat(j).stereoMode
+                                if (mode != Format.NO_VALUE) {
+                                    stereo = mode
+                                }
+                            }
+                        }
+                        if (stereo != detectedSourceStereoMode) {
+                            detectedSourceStereoMode = stereo
+                            applySourceLayoutDetection()
+                        }
+
+                        // Diagnostic logging
                         for (i in 0 until groups.size) {
                             val g = groups[i]
                             val typeName = when (g.type) {
@@ -537,9 +561,8 @@ class PlayerActivity : AppCompatActivity() {
                                 val selected = g.isTrackSelected(j)
                                 android.util.Log.i(
                                     "XPlayer2",
-                                    "Track[$typeName] selected=$selected mime=${info.sampleMimeType} label=${info.label} lang=${info.language} id=${info.id}"
+                                    "Track[$typeName] selected=$selected mime=${info.sampleMimeType} label=${info.label} lang=${info.language} id=${info.id} stereoMode=${info.stereoMode}"
                                 )
-                                // Log metadata from format
                                 info.metadata?.let { meta ->
                                     for (k in 0 until meta.length()) {
                                         android.util.Log.i("XPlayer2", "  Format metadata[$k]: ${meta[k]}")
@@ -1075,6 +1098,41 @@ class PlayerActivity : AppCompatActivity() {
             resizeMode = resizeMode
         )
         RecentStore(this).upsert(entry)
+    }
+
+    /**
+     * Decide whether the source frame is laid out side-by-side (LEFT_RIGHT) or over-under
+     * (TOP_BOTTOM / mono), and forward the result to the GL renderer via setSourceIsSbs.
+     *
+     * Detection only runs for offline sources (file:// / content:// / smb://). HTTP(S) streams
+     * rarely carry MKV/MP4 stereo metadata and the aspect-ratio heuristic produces too many
+     * false positives there, so we leave the manual SBS button as the only signal.
+     *
+     * Order of precedence:
+     *  1. Format.stereoMode from the selected video track (read in onTracksChanged).
+     *  2. Aspect-ratio heuristic on the source video size.
+     */
+    private fun applySourceLayoutDetection() {
+        val isOnline = (resolvedStreamUri ?: sourceUri)?.scheme?.lowercase() in setOf("http", "https")
+        if (isOnline) return // setSourceIsSbs is useless without reliable metadata
+        val stereo = detectedSourceStereoMode
+        val sourceIsSbs = when (stereo) {
+            C.STEREO_MODE_LEFT_RIGHT -> true
+            C.STEREO_MODE_TOP_BOTTOM, C.STEREO_MODE_MONO -> false
+            else -> {
+                // Aspect heuristic for half-formats (most common stereo packaging for XR):
+                //   Half-SBS 3840x1080 → aspect ≈ 3.56
+                //   Half-OU  1920x2160 → aspect ≈ 0.89
+                //   Anything in between we treat as ambiguous and leave as OU (default).
+                val w = lastVideoWidth
+                val h = lastVideoHeight
+                if (w > 0 && h > 0) {
+                    val aspect = w.toFloat() / h.toFloat()
+                    aspect >= 2.5f
+                } else false
+            }
+        }
+        glView?.setSourceIsSbs(sourceIsSbs)
     }
 
     private fun applyResizeMode() {
