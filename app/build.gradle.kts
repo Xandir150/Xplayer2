@@ -11,8 +11,8 @@ android {
         applicationId = "com.teleteh.xplayer2"
         minSdk = 29
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.0.7b1"
+        versionCode = 8
+        versionName = "1.0.7b2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
