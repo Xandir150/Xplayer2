@@ -251,6 +251,12 @@ class OuToSbsGlView @JvmOverloads constructor(
         private fun drawFullScreen() {
             val viewport = IntArray(4)
             GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewport, 0)
+            // Auto (resizeMode == 0): stretch to the whole viewport, no aspect-preserving fit
+            // — this matches the original pre-aspect-button behaviour which "was almost OK".
+            if (resizeMode == 0) {
+                drawTexture(1f, 1f, 0f, 0f)
+                return
+            }
             val targetAspect = getTargetAspectRatio(resizeMode, videoAspectRatio)
             val fit = calculateFitRect(viewport[0], viewport[1], viewport[2], viewport[3], targetAspect)
             GLES20.glViewport(fit.x, fit.y, fit.width, fit.height)
@@ -262,8 +268,18 @@ class OuToSbsGlView @JvmOverloads constructor(
             val viewport = IntArray(4)
             GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewport, 0)
             val eyeWidth = viewport[2] / 2
-            val targetAspect = getTargetAspectRatio(resizeMode, videoAspectRatio)
 
+            if (resizeMode == 0) {
+                // Auto: stretch full mono frame into each half viewport (legacy behaviour).
+                GLES20.glViewport(viewport[0], viewport[1], eyeWidth, viewport[3])
+                drawTexture(1f, 1f, 0f, 0f)
+                GLES20.glViewport(viewport[0] + eyeWidth, viewport[1], eyeWidth, viewport[3])
+                drawTexture(1f, 1f, 0f, 0f)
+                GLES20.glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
+                return
+            }
+
+            val targetAspect = getTargetAspectRatio(resizeMode, videoAspectRatio)
             val l = calculateFitRect(viewport[0], viewport[1], eyeWidth, viewport[3], targetAspect)
             GLES20.glViewport(l.x, l.y, l.width, l.height)
             drawTexture(1f, 1f, 0f, 0f)
@@ -281,17 +297,26 @@ class OuToSbsGlView @JvmOverloads constructor(
 
             val eyeWidth = viewport[2] / 2
             val eyeX = if (left) viewport[0] else viewport[0] + eyeWidth
-            // For Auto mode in OU→SBS, each eye is W/2×H/2 — divide by 0.5 to get the per-eye aspect
-            // No — for OU each eye is full_width × half_height, so per-eye aspect = sourceAspect * 2.
-            // We expose this via the per-eye aspect derivation below.
-            val targetAspect = getTargetAspectRatio(resizeMode, perEyeAspectFromOu(videoAspectRatio))
-            val fit = calculateFitRect(eyeX, viewport[1], eyeWidth, viewport[3], targetAspect)
 
-            val pad = (perEyePadFrac * fit.height).toInt().coerceAtMost(fit.height - 1)
-            val yAdj = if (fromTopHalf) fit.y + pad else fit.y
-            val hAdj = fit.height - pad
+            // Compute the per-eye target rect.
+            //   - Auto (mode == 0): just fill the half-viewport, like the pre-button behaviour. Most
+            //     stereo OU content is meant to be vertically stretched 2× on display, so a "do
+            //     nothing" Auto looks correct for the common case.
+            //   - Explicit aspect (16:9, 4:3, ...): letterbox the half-viewport down to that aspect.
+            //     The per-eye native aspect for OU is sourceAspect × 2; we pass it as the fallback
+            //     so getTargetAspectRatio can use it when needed, but we don't apply ×2 in Auto.
+            val rect = if (resizeMode == 0) {
+                FitRect(eyeX, viewport[1], eyeWidth, viewport[3])
+            } else {
+                val targetAspect = getTargetAspectRatio(resizeMode, perEyeAspectFromOu(videoAspectRatio))
+                calculateFitRect(eyeX, viewport[1], eyeWidth, viewport[3], targetAspect)
+            }
 
-            GLES20.glViewport(fit.x, yAdj, fit.width, hAdj)
+            val pad = (perEyePadFrac * rect.height).toInt().coerceAtMost(rect.height - 1)
+            val yAdj = if (fromTopHalf) rect.y + pad else rect.y
+            val hAdj = rect.height - pad
+
+            GLES20.glViewport(rect.x, yAdj, rect.width, hAdj)
 
             val shift = if (left) leftEyeShiftNorm else rightEyeShiftNorm
             val base = if (fromTopHalf) 0.5f else 0f
@@ -308,11 +333,16 @@ class OuToSbsGlView @JvmOverloads constructor(
 
             val eyeWidth = viewport[2] / 2
             val eyeX = if (left) viewport[0] else viewport[0] + eyeWidth
-            // SBS source: each eye is half_width × full_height → per-eye aspect = sourceAspect / 2
-            val targetAspect = getTargetAspectRatio(resizeMode, perEyeAspectFromSbs(videoAspectRatio))
-            val fit = calculateFitRect(eyeX, viewport[1], eyeWidth, viewport[3], targetAspect)
 
-            GLES20.glViewport(fit.x, fit.y, fit.width, fit.height)
+            val rect = if (resizeMode == 0) {
+                FitRect(eyeX, viewport[1], eyeWidth, viewport[3])
+            } else {
+                // SBS source per-eye native aspect is sourceAspect / 2.
+                val targetAspect = getTargetAspectRatio(resizeMode, perEyeAspectFromSbs(videoAspectRatio))
+                calculateFitRect(eyeX, viewport[1], eyeWidth, viewport[3], targetAspect)
+            }
+
+            GLES20.glViewport(rect.x, rect.y, rect.width, rect.height)
 
             val offsetX = if (useRightHalf) 0.5f else 0f
             drawTexture(0.5f, 1f, offsetX, 0f)
