@@ -3,6 +3,7 @@
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.media.audiofx.LoudnessEnhancer
 import android.database.Cursor
 import android.graphics.Color
 import android.media.MediaMetadataRetriever
@@ -104,6 +105,11 @@ class PlayerActivity : AppCompatActivity() {
     private var currentResolvedTitle: String? = null
     private var btnSbsRef: MaterialButton? = null
     private var btnShiftRef: MaterialButton? = null
+
+    // Audio gain via LoudnessEnhancer (persisted globally in player_prefs)
+    private var loudnessEnhancer: LoudnessEnhancer? = null
+    private var lastAudioSessionId: Int = C.AUDIO_SESSION_ID_UNSET
+
     private var audioMenuRoot: android.widget.FrameLayout? = null
     private var audioMenuCenter: LinearLayout? = null
     private var audioMenuLeft: LinearLayout? = null
@@ -177,6 +183,7 @@ class PlayerActivity : AppCompatActivity() {
         val btnSbs = overlay.findViewById<MaterialButton>(R.id.btnSbs)
         val btnShift = overlay.findViewById<MaterialButton>(R.id.btnShift)
         val btnAudio = overlay.findViewById<ImageButton>(R.id.btnAudio)
+        val btnSubtitle = overlay.findViewById<ImageButton>(R.id.btnSubtitle)
         btnSbsRef = btnSbs
         btnShiftRef = btnShift
         titleCenterView = overlay.findViewById(R.id.tvTitleCenter)
@@ -205,6 +212,7 @@ class PlayerActivity : AppCompatActivity() {
             saveProgress()
         }
         btnAudio.setOnClickListener { showAudioMenu() }
+        btnSubtitle.setOnClickListener { showSubtitleMenu() }
         // Configure controllers with same behavior
         val timeoutMs = 3000
         playerView.controllerShowTimeoutMs = timeoutMs
@@ -424,6 +432,9 @@ class PlayerActivity : AppCompatActivity() {
                 exo.play()
                 // Listen for metadata/title updates to reflect in UI and Recent
                 exo.addListener(object : Player.Listener {
+                    override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                        rebindLoudnessEnhancer(audioSessionId)
+                    }
                     override fun onVideoSizeChanged(videoSize: VideoSize) {
                         lastVideoWidth = videoSize.width
                         lastVideoHeight = videoSize.height
@@ -591,7 +602,10 @@ class PlayerActivity : AppCompatActivity() {
                     getString(R.string.select_subtitle),
                     exo,
                     C.TRACK_TYPE_TEXT
-                ).build().show()
+                )
+                    .setShowDisableOption(true)
+                    .build()
+                    .show()
                 true
             }
 
@@ -635,9 +649,59 @@ class PlayerActivity : AppCompatActivity() {
             currentInstance = null
         }
         saveProgress()
+        releaseLoudnessEnhancer()
         player?.release()
         player = null
         stopPlaybackService()
+    }
+
+    // --- Audio gain (LoudnessEnhancer) ---
+    private fun getVolumeBoostMb(): Int =
+        getSharedPreferences("player_prefs", MODE_PRIVATE).getInt("volume_boost_mb", 0).coerceIn(0, 2400)
+
+    private fun setVolumeBoostMb(value: Int) {
+        val clamped = value.coerceIn(0, 2400)
+        getSharedPreferences("player_prefs", MODE_PRIVATE).edit { putInt("volume_boost_mb", clamped) }
+        loudnessEnhancer?.let { enhancer ->
+            try {
+                enhancer.setTargetGain(clamped)
+                enhancer.enabled = clamped > 0
+            } catch (e: Exception) {
+                android.util.Log.w("XPlayer2", "LoudnessEnhancer setTargetGain failed", e)
+            }
+        }
+    }
+
+    private fun rebindLoudnessEnhancer(audioSessionId: Int) {
+        if (audioSessionId == C.AUDIO_SESSION_ID_UNSET || audioSessionId == 0) {
+            releaseLoudnessEnhancer()
+            return
+        }
+        if (audioSessionId == lastAudioSessionId && loudnessEnhancer != null) return
+        releaseLoudnessEnhancer()
+        try {
+            val gainMb = getVolumeBoostMb()
+            loudnessEnhancer = LoudnessEnhancer(audioSessionId).apply {
+                setTargetGain(gainMb)
+                enabled = gainMb > 0
+            }
+            lastAudioSessionId = audioSessionId
+        } catch (e: Exception) {
+            android.util.Log.w("XPlayer2", "Failed to create LoudnessEnhancer for session $audioSessionId", e)
+            loudnessEnhancer = null
+        }
+    }
+
+    private fun releaseLoudnessEnhancer() {
+        try { loudnessEnhancer?.release() } catch (_: Exception) { }
+        loudnessEnhancer = null
+        lastAudioSessionId = C.AUDIO_SESSION_ID_UNSET
+    }
+
+    private fun boostLabel(mb: Int): String {
+        val db = mb / 100
+        return if (mb <= 0) getString(R.string.volume_boost_off)
+        else getString(R.string.volume_boost_with_value, db)
     }
 
     private fun updatePlaybackService() {
@@ -668,46 +732,55 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    // --- Custom Audio Menu (SBS-aware) ---
-    private data class AudioMenuItem(
+    // --- Custom Track Menu (SBS-aware) — used for audio and subtitle selection ---
+    private data class TrackMenuItem(
         val label: String,
         val isAuto: Boolean,
+        val isOff: Boolean,
         val group: Tracks.Group?,
         val trackIndexInGroup: Int?
     )
 
-    private fun buildAudioMenuItems(): List<AudioMenuItem> {
-        val items = mutableListOf<AudioMenuItem>()
-        // Auto item first
-        items += AudioMenuItem(label = "Auto", isAuto = true, group = null, trackIndexInGroup = null)
+    private fun buildTrackMenuItems(trackType: Int): List<TrackMenuItem> {
+        val items = mutableListOf<TrackMenuItem>()
+        when (trackType) {
+            C.TRACK_TYPE_AUDIO -> items += TrackMenuItem("Auto", isAuto = true, isOff = false, group = null, trackIndexInGroup = null)
+            C.TRACK_TYPE_TEXT -> items += TrackMenuItem(getString(R.string.subtitle_off), isAuto = false, isOff = true, group = null, trackIndexInGroup = null)
+        }
         val tracks = player?.currentTracks ?: return items
         val nameProvider = DefaultTrackNameProvider(resources)
         for (i in 0 until tracks.groups.size) {
             val g = tracks.groups[i]
-            if (g.type != C.TRACK_TYPE_AUDIO) continue
+            if (g.type != trackType) continue
             for (j in 0 until g.length) {
-                // List only supported tracks
                 if (!g.isTrackSupported(j)) continue
                 val f = g.getTrackFormat(j)
                 val pretty = nameProvider.getTrackName(f)
-                items += AudioMenuItem(label = pretty, isAuto = false, group = g, trackIndexInGroup = j)
+                items += TrackMenuItem(pretty, isAuto = false, isOff = false, group = g, trackIndexInGroup = j)
             }
         }
         return items
     }
 
-    private fun showAudioMenu() {
+    // Backward-compat alias used by remote control / public API
+    private fun buildAudioMenuItems(): List<TrackMenuItem> = buildTrackMenuItems(C.TRACK_TYPE_AUDIO)
+
+    private fun showTrackMenu(trackType: Int) {
         val root = audioMenuRoot ?: return
         val center = audioMenuCenter ?: return
         val left = audioMenuLeft ?: return
         val right = audioMenuRight ?: return
-        // Clear previous content
         center.removeAllViews()
         left.removeAllViews()
         right.removeAllViews()
-        val items = buildAudioMenuItems()
+        val items = buildTrackMenuItems(trackType)
         val sbs = getStereoSbs()
-        // Build views
+        val titleStr = when (trackType) {
+            C.TRACK_TYPE_TEXT -> getString(R.string.select_subtitle)
+            else -> getString(R.string.select_audio_track)
+        }
+        val isTextDisabled = trackSelector?.parameters?.getRendererDisabled(C.TRACK_TYPE_TEXT) == true ||
+            (trackSelector?.parameters?.disabledTrackTypes?.contains(C.TRACK_TYPE_TEXT) == true)
         fun addItemsTo(container: LinearLayout) {
             container.removeAllViews()
             fun dp(value: Int): Int =
@@ -717,34 +790,48 @@ class PlayerActivity : AppCompatActivity() {
                     resources.displayMetrics
                 ).toInt()
             val title = TextView(this).apply {
-                text = getString(R.string.select_audio_track)
+                text = titleStr
                 setPadding(dp(12), dp(8), dp(12), dp(8))
                 setTextColor(Color.WHITE)
                 textSize = 16f
                 typeface = Typeface.DEFAULT_BOLD
             }
-            // Build scrollable content
             val scroll = ScrollView(this).apply {
-                // Cap height to ~60% of the root overlay height
                 val h = (audioMenuRoot?.height ?: 0)
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     if (h > 0) (h * 0.6f).toInt() else ViewGroup.LayoutParams.WRAP_CONTENT
                 )
             }
-            val inner = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-            }
-            val items = buildAudioMenuItems()
+            val inner = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             inner.addView(title)
-            // Determine current selection for highlighting
+            // Audio menu gets a first-row loudness boost control so the user can lift quiet sources.
+            if (trackType == C.TRACK_TYPE_AUDIO) {
+                val boostTv = TextView(this).apply {
+                    text = boostLabel(getVolumeBoostMb())
+                    setPadding(dp(16), dp(10), dp(16), dp(10))
+                    setTextColor(Color.WHITE)
+                    textSize = 14f
+                    isAllCaps = false
+                    alpha = 0.95f
+                    setOnClickListener {
+                        // Cycle through 0, +6, +12, +18, +24 dB (millibels)
+                        val steps = intArrayOf(0, 600, 1200, 1800, 2400)
+                        val cur = getVolumeBoostMb()
+                        val next = steps.firstOrNull { it > cur } ?: 0
+                        setVolumeBoostMb(next)
+                        text = boostLabel(next)
+                        Toast.makeText(this@PlayerActivity, boostLabel(next), Toast.LENGTH_SHORT).show()
+                    }
+                }
+                inner.addView(boostTv)
+            }
             items.forEach { item ->
                 val isSelected = when {
+                    item.isOff -> trackType == C.TRACK_TYPE_TEXT && isTextDisabled
                     item.isAuto -> false
                     item.group != null && item.trackIndexInGroup != null -> {
-                        try {
-                            item.group.isTrackSelected(item.trackIndexInGroup)
-                        } catch (_: Exception) { false }
+                        try { item.group.isTrackSelected(item.trackIndexInGroup) } catch (_: Exception) { false }
                     }
                     else -> false
                 }
@@ -757,8 +844,8 @@ class PlayerActivity : AppCompatActivity() {
                     if (isSelected) setTypeface(typeface, Typeface.BOLD)
                     alpha = if (isSelected) 1.0f else 0.85f
                     setOnClickListener {
-                        applyAudioSelection(item)
-                        hideAudioMenu()
+                        applyTrackSelection(item, trackType)
+                        hideTrackMenu()
                     }
                 }
                 inner.addView(tv)
@@ -767,7 +854,6 @@ class PlayerActivity : AppCompatActivity() {
             container.addView(scroll)
         }
         if (sbs) {
-            // Show RIGHT panel to match button position; mirrored rendering shows in both eyes
             center.visibility = View.GONE
             left.visibility = View.GONE
             right.visibility = View.VISIBLE
@@ -781,29 +867,42 @@ class PlayerActivity : AppCompatActivity() {
         root.visibility = View.VISIBLE
     }
 
-    private fun hideAudioMenu() {
+    private fun showAudioMenu() = showTrackMenu(C.TRACK_TYPE_AUDIO)
+    private fun showSubtitleMenu() = showTrackMenu(C.TRACK_TYPE_TEXT)
+
+    private fun hideTrackMenu() {
         audioMenuRoot?.visibility = View.GONE
     }
 
-    private fun applyAudioSelection(item: AudioMenuItem) {
+    private fun hideAudioMenu() = hideTrackMenu()
+
+    private fun applyTrackSelection(item: TrackMenuItem, trackType: Int) {
         val selector = trackSelector ?: return
         val exo = player ?: return
         val builder = selector.buildUponParameters()
-        // Always ensure audio is enabled
-        builder.setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
-        // Clear previous audio overrides
-        builder.clearOverridesOfType(C.TRACK_TYPE_AUDIO)
-        if (!item.isAuto) {
-            val group = item.group ?: return
-            val index = item.trackIndexInGroup ?: return
-            val override = TrackSelectionOverride(group.mediaTrackGroup, listOf(index))
-            builder.addOverride(override)
+        builder.clearOverridesOfType(trackType)
+        if (item.isOff) {
+            builder.setTrackTypeDisabled(trackType, true)
+        } else {
+            builder.setTrackTypeDisabled(trackType, false)
+            if (!item.isAuto) {
+                val group = item.group ?: return
+                val index = item.trackIndexInGroup ?: return
+                builder.addOverride(TrackSelectionOverride(group.mediaTrackGroup, listOf(index)))
+            }
         }
         selector.parameters = builder.build()
-        // Nudge to apply immediately
         exo.playWhenReady = exo.playWhenReady
-        Toast.makeText(this, if (item.isAuto) "Audio: Auto" else item.label, Toast.LENGTH_SHORT).show()
+        val toastText = when {
+            item.isOff -> getString(R.string.subtitle_off)
+            item.isAuto -> "Audio: Auto"
+            else -> item.label
+        }
+        Toast.makeText(this, toastText, Toast.LENGTH_SHORT).show()
     }
+
+    // Backward-compat alias used by getSelectedAudioTrackIndex/selectAudioTrack remote control API
+    private fun applyAudioSelection(item: TrackMenuItem) = applyTrackSelection(item, C.TRACK_TYPE_AUDIO)
 
     private fun tryShowExternalPresentation() {
         // Find external display for Presentation

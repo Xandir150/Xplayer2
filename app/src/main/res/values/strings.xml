@@ -4,6 +4,9 @@
     <string name="menu_subtitle">Subtitles</string>
     <string name="select_audio_track">Select audio track</string>
     <string name="select_subtitle">Select subtitle</string>
+    <string name="subtitle_off">Off</string>
+    <string name="volume_boost_off">Boost: off</string>
+    <string name="volume_boost_with_value">Boost: +%1$d dB</string>
     <string name="menu_stereo">Stereo: toggle</string>
     <string name="menu_stereo_short">SBS</string>
     <string name="menu_back">Back</string>

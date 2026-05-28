@@ -73,6 +73,17 @@
             android:scaleType="centerInside"
             android:src="@drawable/ear_sound_24px"
             android:tint="@android:color/white" />
+
+        <ImageButton
+            android:id="@+id/btnSubtitle"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="4dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/select_subtitle"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_subtitle_24"
+            android:tint="@android:color/white" />
     </LinearLayout>
 
     <!-- Fullscreen tap-to-dismiss root for custom audio menu -->
