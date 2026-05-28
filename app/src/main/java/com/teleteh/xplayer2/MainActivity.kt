@@ -15,6 +15,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
@@ -24,6 +25,11 @@ import com.teleteh.xplayer2.ui.MainPagerAdapter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.EditText
 
 class MainActivity : AppCompatActivity() {
 
@@ -59,7 +65,129 @@ class MainActivity : AppCompatActivity() {
         val tabTitles = listOf("Недавние", "Файлы", "Сеть")
         TabLayoutMediator(binding.tabLayout, viewPager) { tab, position ->
             tab.text = tabTitles[position]
+            tab.contentDescription = null
         }.attach()
+
+        setupTvFocusNavigation()
+    }
+
+    // --- Android TV / D-pad keyboard navigation ---
+    private fun setupTvFocusNavigation() {
+        binding.tabLayout.isFocusable = true
+        binding.tabLayout.isFocusableInTouchMode = true
+        binding.tabLayout.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) binding.tabLayout.post { focusActiveTab() }
+        }
+        for (i in 0 until binding.tabLayout.tabCount) {
+            val tabView = binding.tabLayout.getTabAt(i)?.view ?: continue
+            tabView.isFocusable = true
+            tabView.isFocusableInTouchMode = true
+            tabView.isLongClickable = false
+            tabView.tooltipText = null
+            tabView.setOnTouchListener { v, ev ->
+                if (ev.actionMasked == MotionEvent.ACTION_DOWN) v.requestFocus()
+                false
+            }
+            tabView.setOnClickListener { v ->
+                v.requestFocus()
+                binding.tabLayout.getTabAt(i)?.select()
+            }
+            tabView.setOnKeyListener { _, keyCode, ev ->
+                if (ev.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    val fragmentView = currentFragmentView()
+                    if (fragmentView != null && focusFirstVisibleControl(fragmentView)) {
+                        return@setOnKeyListener true
+                    }
+                }
+                false
+            }
+        }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            val fragmentView = currentFragmentView()
+            if (fragmentView != null && shouldReturnToTabsOnUp(fragmentView)) {
+                focusActiveTab()
+                return true
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun currentFragmentView(): View? =
+        supportFragmentManager.findFragmentByTag("f${binding.viewPager.currentItem}")?.view
+
+    private fun focusActiveTab() {
+        val index = binding.viewPager.currentItem.coerceAtLeast(0)
+        binding.tabLayout.getTabAt(index)?.view?.takeIf { it !== currentFocus }?.requestFocus()
+    }
+
+    private fun shouldReturnToTabsOnUp(fragmentView: View): Boolean {
+        val focused = currentFocus ?: return false
+        // First-row controls on each fragment should return to tabs on UP
+        val firstRow = listOf(R.id.btnOpen, R.id.etUrl, R.id.btnOpenUrl)
+        if (firstRow.any { fragmentView.findViewById<View?>(it) === focused }) return true
+        val recycler: RecyclerView? = fragmentView.findViewById<RecyclerView?>(R.id.rvRecent)
+            ?: fragmentView.findViewById<RecyclerView?>(R.id.rvNetwork)
+        if (recycler != null && isDescendantOf(focused, recycler)) {
+            val itemView = findRecyclerItemView(focused, recycler) ?: return true
+            return recycler.getChildAdapterPosition(itemView) == 0
+        }
+        return false
+    }
+
+    private fun isDescendantOf(child: View?, ancestor: View): Boolean {
+        var cur: View? = child
+        while (cur != null) {
+            if (cur === ancestor) return true
+            val p = cur.parent
+            cur = if (p is View) p else null
+        }
+        return false
+    }
+
+    private fun findRecyclerItemView(focused: View, recycler: RecyclerView): View? {
+        var cur: View? = focused
+        while (cur != null) {
+            if (cur.parent === recycler) return cur
+            val p = cur.parent
+            cur = if (p is View) p else null
+        }
+        return null
+    }
+
+    private fun isActuallyFocusable(view: View): Boolean =
+        view.isFocusable && view.isEnabled && view.visibility == View.VISIBLE && view.isShown &&
+            view.width > 0 && view.height > 0 && view.alpha > 0f
+
+    private fun findFirstFocusable(view: View): View? {
+        if (isActuallyFocusable(view)) return view
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                val c = findFirstFocusable(view.getChildAt(i))
+                if (c != null) return c
+            }
+        }
+        return null
+    }
+
+    private fun focusFirstVisibleControl(fragmentView: View): Boolean {
+        listOf(R.id.btnOpen, R.id.etUrl, R.id.btnOpenUrl).forEach { id ->
+            fragmentView.findViewById<View?>(id)?.takeIf { isActuallyFocusable(it) }?.let {
+                it.requestFocus(); return true
+            }
+        }
+        val recycler: RecyclerView? = fragmentView.findViewById<RecyclerView?>(R.id.rvRecent)
+            ?: fragmentView.findViewById<RecyclerView?>(R.id.rvNetwork)
+        if (recycler != null && isActuallyFocusable(recycler) && recycler.childCount > 0) {
+            val first = recycler.getChildAt(0)
+            if (first != null && isActuallyFocusable(first)) {
+                first.requestFocus(); return true
+            }
+            recycler.requestFocus(); return true
+        }
+        return findFirstFocusable(fragmentView)?.also { it.requestFocus() } != null
     }
 
     private fun loadToolbarLogoAsync(toolbar: MaterialToolbar) {

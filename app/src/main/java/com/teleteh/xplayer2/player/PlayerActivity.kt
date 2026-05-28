@@ -16,6 +16,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.provider.OpenableColumns
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.MenuItem
@@ -322,6 +323,67 @@ class PlayerActivity : AppCompatActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideSystemBars()
+    }
+
+    private fun isPlaybackUiHidden(): Boolean {
+        val overlay = playerView.findViewById<android.widget.FrameLayout>(androidx.media3.ui.R.id.exo_overlay)
+        val isOverlayVisible = overlay?.visibility == View.VISIBLE
+        val isControllerVisible = playerView.isControllerFullyVisible
+        val isAudioMenuVisible = audioMenuRoot?.visibility == View.VISIBLE
+        return !isOverlayVisible && !isControllerVisible && !isAudioMenuVisible
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // When the UI is hidden, swallow LEFT/RIGHT D-pad events at the dispatch stage
+        // so PlayerView doesn't auto-show its controller before we get a chance to seek.
+        if (isPlaybackUiHidden() &&
+            (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
+        ) {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) seekRelative(-5000L)
+                else seekRelative(15000L)
+            }
+            return true
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        val overlay = playerView.findViewById<android.widget.FrameLayout>(androidx.media3.ui.R.id.exo_overlay)
+        val isOverlayVisible = overlay?.visibility == View.VISIBLE
+        val isControllerVisible = playerView.isControllerFullyVisible
+        val isAudioMenuVisible = audioMenuRoot?.visibility == View.VISIBLE
+        return when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                if (isOverlayVisible || isControllerVisible) {
+                    playerView.hideController()
+                } else {
+                    playerView.showController()
+                }
+                true
+            }
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                if (!isOverlayVisible && !isControllerVisible && !isAudioMenuVisible) {
+                    seekRelative(-5000L); true
+                } else super.onKeyDown(keyCode, event)
+            }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                if (!isOverlayVisible && !isControllerVisible && !isAudioMenuVisible) {
+                    seekRelative(15000L); true
+                } else super.onKeyDown(keyCode, event)
+            }
+            KeyEvent.KEYCODE_BACK -> {
+                if (isAudioMenuVisible) {
+                    hideTrackMenu(); true
+                } else if (isOverlayVisible || isControllerVisible) {
+                    playerView.hideController(); true
+                } else super.onKeyDown(keyCode, event)
+            }
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_SPACE -> {
+                togglePlayPause(); true
+            }
+            else -> super.onKeyDown(keyCode, event)
+        }
     }
 
     private fun initializePlayer() {
