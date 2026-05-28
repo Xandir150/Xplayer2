@@ -34,6 +34,22 @@ gradle.extra["androidxMediaModulePrefix"] = "media3-"
 val media3Root = file("external/media3")
 fun media3(path: String) = File(media3Root, path)
 
+// AGP 9 fails hard when consumerProguardFiles references a missing file. The Media3 submodule's
+// common_library_config.gradle unconditionally declares `consumerProguardFiles 'proguard-rules.txt'`,
+// and several library modules ship without that file. To keep the submodule pristine we materialise
+// empty placeholder proguard-rules.txt files in any media3 library that is missing one, before any
+// sub-project gets configured. This only touches files inside the submodule working tree on the
+// build agent and is idempotent on subsequent runs.
+File(media3Root, "libraries").takeIf { it.isDirectory }?.listFiles { f -> f.isDirectory }?.forEach { libDir ->
+    val gradleFile = File(libDir, "build.gradle")
+    if (!gradleFile.exists()) return@forEach
+    if (!gradleFile.readText().contains("common_library_config")) return@forEach
+    val proguardFile = File(libDir, "proguard-rules.txt")
+    if (!proguardFile.exists()) {
+        proguardFile.writeText("# Placeholder consumer proguard rules generated at build configuration time.\n")
+    }
+}
+
 include(":media3-lib-common")
 project(":media3-lib-common").projectDir = media3("libraries/common")
 
