@@ -418,8 +418,12 @@ class PlayerActivity : AppCompatActivity() {
         }
         val selector = DefaultTrackSelector(this)
         trackSelector = selector
+        // MODE_ON: try platform (hardware) renderers first, fall back to extension (FFmpeg)
+        // when the platform doesn't support a codec. MODE_PREFER forced FFmpeg even for
+        // plain stereo AAC, which on some devices fights with the AudioTrack downmix path
+        // and can produce no audio at all when the output is a USB-stereo sink (XREAL Air).
         val renderersFactory = DefaultRenderersFactory(this)
-            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true)
         val isLocalUri = uri.scheme?.lowercase() in setOf("file", "content")
         val playerBuilder = ExoPlayer.Builder(this, renderersFactory)
@@ -592,7 +596,11 @@ class PlayerActivity : AppCompatActivity() {
                         }
                         updateHdrColorMode(isHdr)
 
-                        // Diagnostic logging
+                        // Diagnostic logging — includes audio channel count / sample rate /
+                        // support state so silent-audio bugs (e.g. surround source that no
+                        // available decoder can handle) leave an obvious paper trail.
+                        var hasAnySupportedAudio = false
+                        var hasSelectedAudio = false
                         for (i in 0 until groups.size) {
                             val g = groups[i]
                             val typeName = when (g.type) {
@@ -605,10 +613,20 @@ class PlayerActivity : AppCompatActivity() {
                             for (j in 0 until g.length) {
                                 val info = g.getTrackFormat(j)
                                 val selected = g.isTrackSelected(j)
-                                android.util.Log.i(
-                                    "XPlayer2",
-                                    "Track[$typeName] selected=$selected mime=${info.sampleMimeType} label=${info.label} lang=${info.language} id=${info.id} stereoMode=${info.stereoMode}"
-                                )
+                                val supported = try { g.isTrackSupported(j) } catch (_: Throwable) { false }
+                                if (g.type == C.TRACK_TYPE_AUDIO) {
+                                    if (supported) hasAnySupportedAudio = true
+                                    if (selected) hasSelectedAudio = true
+                                    android.util.Log.i(
+                                        "XPlayer2",
+                                        "Track[AUDIO] selected=$selected supported=$supported mime=${info.sampleMimeType} codecs=${info.codecs} channels=${info.channelCount} rate=${info.sampleRate}Hz lang=${info.language} label=${info.label}"
+                                    )
+                                } else {
+                                    android.util.Log.i(
+                                        "XPlayer2",
+                                        "Track[$typeName] selected=$selected supported=$supported mime=${info.sampleMimeType} label=${info.label} lang=${info.language} id=${info.id} stereoMode=${info.stereoMode}"
+                                    )
+                                }
                                 info.metadata?.let { meta ->
                                     for (k in 0 until meta.length()) {
                                         android.util.Log.i("XPlayer2", "  Format metadata[$k]: ${meta[k]}")
@@ -616,7 +634,13 @@ class PlayerActivity : AppCompatActivity() {
                                 }
                             }
                         }
+                        if (!hasSelectedAudio && hasAnySupportedAudio) {
+                            android.util.Log.w("XPlayer2", "Audio: a supported track exists but none is selected — selector parameters issue?")
+                        } else if (!hasAnySupportedAudio) {
+                            android.util.Log.e("XPlayer2", "Audio: no audio track is supported by any available decoder — surround codec missing from FFmpeg .so?")
+                        }
                     }
+
                     override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
                         // Log all media metadata
                         android.util.Log.i("XPlayer2", "MediaMetadata changed:")
