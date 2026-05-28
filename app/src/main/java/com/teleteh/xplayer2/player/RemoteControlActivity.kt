@@ -318,8 +318,9 @@ class RemoteControlActivity : AppCompatActivity() {
     private fun updateButtons() {
         val player = PlayerActivity.currentInstance ?: return
 
-        // SBS button
+        // SBS button — 3-state (2D / OU→SBS / SBS); label reflects current mode.
         val sbsEnabled = player.isStereoSbsEnabled()
+        btnSbs.text = player.getStereoModeLabel()
         btnSbs.isChecked = sbsEnabled
         applyButtonStyle(btnSbs, sbsEnabled)
 

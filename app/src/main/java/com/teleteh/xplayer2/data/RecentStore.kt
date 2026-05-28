@@ -83,7 +83,8 @@ class RecentStore(private val context: Context) {
             sbsShiftEnabled = if (has("sbsShiftEnabled") && !isNull("sbsShiftEnabled")) optBoolean("sbsShiftEnabled") else null,
             sourceType = sourceType,
             resizeMode = optInt("resizeMode", 0),
-            sourceIsSbs = optBoolean("sourceIsSbs", false)
+            sourceIsSbs = optBoolean("sourceIsSbs", false),
+            stereoMode = optInt("stereoMode", -1)
         )
     } catch (_: Throwable) {
         null
@@ -101,6 +102,7 @@ class RecentStore(private val context: Context) {
         if (sourceType != null) put("sourceType", sourceType.name)
         if (resizeMode != 0) put("resizeMode", resizeMode)
         if (sourceIsSbs) put("sourceIsSbs", sourceIsSbs)
+        if (stereoMode >= 0) put("stereoMode", stereoMode)
     }
 
     private fun ensureNiceTitle(entry: RecentEntry): String {

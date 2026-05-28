@@ -27,6 +27,10 @@ data class RecentEntry(
     val resizeMode: Int = 0,
     // Marks that the source video itself is already SBS-packed (so SBS mode samples left/right halves)
     val sourceIsSbs: Boolean = false,
+    // Manually chosen stereo mode for this clip: -1 = auto-detect, 0 = 2D, 1 = OU→SBS, 2 = SBS.
+    // Persisted only when the user explicitly picked it, so a saved value overrides auto-detect
+    // on reopen (important for Full-SBS / Full-OU clips that look like 2D by resolution).
+    val stereoMode: Int = -1,
 ) {
     fun uriObj(): Uri = Uri.parse(uri)
     
