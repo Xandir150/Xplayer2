@@ -18,6 +18,8 @@ coordinatorlayout = "1.2.0"
 media3 = "1.8.0"
 coroutines = "1.9.0"
 lifecycle = "2.8.6"
+tflite = "2.16.1"
+tfliteGpu = "2.16.1"
 
 [libraries]
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -44,6 +46,9 @@ androidx-media3-decoder-ffmpeg = { group = "androidx.media3", name = "media3-exo
 org-jetbrains-kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 org-jetbrains-kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
+tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tflite" }
+tensorflow-lite-gpu = { group = "org.tensorflow", name = "tensorflow-lite-gpu", version.ref = "tfliteGpu" }
+tensorflow-lite-gpu-api = { group = "org.tensorflow", name = "tensorflow-lite-gpu-api", version.ref = "tfliteGpu" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

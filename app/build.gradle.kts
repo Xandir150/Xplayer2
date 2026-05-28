@@ -79,6 +79,11 @@ dependencies {
     implementation(libs.coil)
     // Local Media3 FFmpeg decoder module
     implementation(project(":media3-lib-decoder-ffmpeg"))
+    // TensorFlow Lite for the Lazy-3D depth estimator (Depth-Anything-V2-Small).
+    // NNAPI (NPU) delegate is built into the core runtime; GPU delegate is split out.
+    implementation(libs.tensorflow.lite)
+    implementation(libs.tensorflow.lite.gpu)
+    implementation(libs.tensorflow.lite.gpu.api)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

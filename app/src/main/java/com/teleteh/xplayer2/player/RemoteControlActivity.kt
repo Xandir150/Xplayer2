@@ -331,13 +331,13 @@ class RemoteControlActivity : AppCompatActivity() {
         // Resize mode (Auto/16:9/...). Label only — no checked state.
         btnResizeMode.text = player.getResizeModeLabel()
 
-        // Lazy 3D toggle visible only when XREAL glasses are connected (the brand we read IMU
-        // from). Other brands leave the button hidden so the UI doesn't claim a feature we
-        // can't actually run.
-        val brand = com.teleteh.xplayer2.MainActivity.glassesControllerForPlayback?.currentBrand()
-        btnLazy3d.visibility = if (brand == com.teleteh.xplayer2.data.glasses.GlassesController.Brand.XREAL) {
-            View.VISIBLE
-        } else View.GONE
+        // Lazy 3D toggle: visible when (a) at least one runnable backend exists — IMU
+        // parallax needs XREAL goggles, depth synthesis needs the bundled TFLite model —
+        // AND (b) the clip is plain 2D. Real SBS / OU sources already carry depth info,
+        // synthesising more on top of them adds nothing.
+        val supported = player.isLazy3dSupported()
+        val applicable = player.isLazy3dApplicable()
+        btnLazy3d.visibility = if (supported && applicable) View.VISIBLE else View.GONE
         val lazy3d = player.isLazy3dEnabled()
         btnLazy3d.isChecked = lazy3d
         applyButtonStyle(btnLazy3d, lazy3d)
