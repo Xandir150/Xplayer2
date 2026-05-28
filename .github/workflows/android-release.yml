@@ -14,19 +14,19 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
           cache: 'gradle'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Accept licenses
         run: yes | sdkmanager --licenses
@@ -52,14 +52,14 @@ jobs:
           mv app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/XPlayer2-${TAG}.apk"
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: XPlayer2-${{ github.ref_name }}
           path: app/build/outputs/apk/release/XPlayer2-*.apk
 
       - name: Attach APK to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: app/build/outputs/apk/release/XPlayer2-*.apk
           tag_name: ${{ github.ref_name }}
