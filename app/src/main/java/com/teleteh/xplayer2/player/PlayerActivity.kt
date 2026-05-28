@@ -262,26 +262,51 @@ class PlayerActivity : AppCompatActivity() {
         hideSystemBars()
         updateSbsUi()
 
-        // Resolve source from ACTION_VIEW or ACTION_SEND
+        // Resolve and start playback from the launching intent.
+        loadFromIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // launchMode="singleTop": a second ACTION_VIEW (e.g. from Recent, Files, or notification)
+        // routes through onNewIntent instead of spinning up a second PlayerActivity. Tear the
+        // previous playback down completely before re-using this instance — leaving the prior
+        // ExoPlayer + LoudnessEnhancer alive while a new one starts has been observed to lock
+        // the USB audio device on XREAL Air goggles (no audio in any app until uninstall).
+        setIntent(intent)
+        releaseLoudnessEnhancer()
+        try { player?.clearVideoSurface() } catch (_: Throwable) { }
+        try { player?.release() } catch (_: Throwable) { }
+        player = null
+        trackSelector = null
+        resolvedStreamUri = null
+        currentResolvedTitle = null
+        detectedSourceStereoMode = null
+        sbsExplicitlyConfigured = false
+        currentPipeline = VideoPipeline.GL
+        lastVideoWidth = 0
+        lastVideoHeight = 0
+        loadFromIntent(intent)
+    }
+
+    private fun loadFromIntent(intent: Intent?) {
         val action = intent?.action
         sourceUri = when (action) {
             Intent.ACTION_SEND -> {
-                // Try URL in EXTRA_TEXT first
-                val text = intent?.getStringExtra(Intent.EXTRA_TEXT)
+                val text = intent.getStringExtra(Intent.EXTRA_TEXT)
                 val parsed = try {
                     if (!text.isNullOrBlank()) text.toUri() else null
                 } catch (_: Throwable) {
                     null
                 }
                 val stream = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent?.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
                 } else {
                     @Suppress("DEPRECATION")
-                    intent?.getParcelableExtra(Intent.EXTRA_STREAM)
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM)
                 }
                 parsed ?: stream
             }
-
             else -> intent?.data
         }
         if (sourceUri == null) {
@@ -289,11 +314,9 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
 
-        // Check if URL needs stream extraction (ok.ru, vkvideo, etc.)
         val uri = sourceUri!!
         android.util.Log.i("XPlayer2", "Source URI: $uri, host=${uri.host}, isSupported=${VideoStreamExtractor.isSupported(uri)}")
         if (VideoStreamExtractor.isSupported(uri)) {
-            // Show loading indicator
             titleCenterView?.text = getString(R.string.loading_stream)
             android.util.Log.i("XPlayer2", "Starting stream extraction for: $uri")
             isExtractingStream = true
@@ -311,11 +334,9 @@ class PlayerActivity : AppCompatActivity() {
                         initializePlayer()
                         updateCenterTitle()
                     } else {
-                        // Extraction failed - show error but don't try original URL (it won't work)
                         android.util.Log.w("XPlayer2", "Stream extraction failed for: $uri")
                         Toast.makeText(this@PlayerActivity, R.string.stream_extraction_failed, Toast.LENGTH_LONG).show()
                         titleCenterView?.text = getString(R.string.stream_extraction_failed)
-                        // Don't initialize player with original URL - it won't work for these sites
                     }
                 } catch (e: Exception) {
                     isExtractingStream = false
@@ -327,9 +348,7 @@ class PlayerActivity : AppCompatActivity() {
         } else {
             resolvedStreamUri = uri
             initializePlayer()
-            // Set initial title in UI if possible
             updateCenterTitle()
-            // Try to extract container title (e.g., MKV Title) early
             tryProbeTitleFromRetriever()
         }
     }
@@ -725,6 +744,12 @@ class PlayerActivity : AppCompatActivity() {
         saveProgress()
         // If external Presentation is active or activity is on external display, keep the player alive to continue playback on the secondary display
         if (!(presentation != null || isOnExternalDisplay())) {
+            // Release audio-side resources FIRST. LoudnessEnhancer is attached to the player's
+            // audio session and the system has been observed to leave the underlying audio
+            // effect alive after the session is torn down — which on some devices (notably
+            // XREAL Air via USB audio) locks the output device and starves every other app's
+            // audio until the process is killed.
+            releaseLoudnessEnhancer()
             player?.clearVideoSurface()
             player?.release()
             player = null
@@ -833,13 +858,29 @@ class PlayerActivity : AppCompatActivity() {
     private fun setVolumeBoostMb(value: Int) {
         val clamped = value.coerceIn(0, 2400)
         getSharedPreferences("player_prefs", MODE_PRIVATE).edit { putInt("volume_boost_mb", clamped) }
-        loudnessEnhancer?.let { enhancer ->
+        if (clamped <= 0) {
+            // No boost requested — detach the effect entirely. Letting an enabled=false
+            // LoudnessEnhancer linger on the audio session has been observed to lock the
+            // USB audio device on XREAL Air goggles, killing audio system-wide until the
+            // app process is uninstalled.
+            releaseLoudnessEnhancer()
+            return
+        }
+        val enhancer = loudnessEnhancer ?: run {
+            val sid = lastAudioSessionId
+            if (sid == C.AUDIO_SESSION_ID_UNSET || sid == 0) return
             try {
-                enhancer.setTargetGain(clamped)
-                enhancer.enabled = clamped > 0
+                LoudnessEnhancer(sid).also { loudnessEnhancer = it }
             } catch (e: Exception) {
-                android.util.Log.w("XPlayer2", "LoudnessEnhancer setTargetGain failed", e)
+                android.util.Log.w("XPlayer2", "Failed to attach LoudnessEnhancer to session $sid", e)
+                null
             }
+        } ?: return
+        try {
+            enhancer.setTargetGain(clamped)
+            enhancer.enabled = true
+        } catch (e: Exception) {
+            android.util.Log.w("XPlayer2", "LoudnessEnhancer setTargetGain failed", e)
         }
     }
 
@@ -848,15 +889,25 @@ class PlayerActivity : AppCompatActivity() {
             releaseLoudnessEnhancer()
             return
         }
-        if (audioSessionId == lastAudioSessionId && loudnessEnhancer != null) return
-        releaseLoudnessEnhancer()
+        // Audio session changed — drop any prior effect tied to the old one.
+        if (audioSessionId != lastAudioSessionId) {
+            releaseLoudnessEnhancer()
+            lastAudioSessionId = audioSessionId
+        }
+        // Only attach the effect if the user actually asked for boost. Otherwise leave the
+        // audio session untouched (avoids both the device-lock and the cost of attaching
+        // an effect we won't use).
+        val gainMb = getVolumeBoostMb()
+        if (gainMb <= 0) {
+            releaseLoudnessEnhancer()
+            return
+        }
+        if (loudnessEnhancer != null) return
         try {
-            val gainMb = getVolumeBoostMb()
             loudnessEnhancer = LoudnessEnhancer(audioSessionId).apply {
                 setTargetGain(gainMb)
-                enabled = gainMb > 0
+                enabled = true
             }
-            lastAudioSessionId = audioSessionId
         } catch (e: Exception) {
             android.util.Log.w("XPlayer2", "Failed to create LoudnessEnhancer for session $audioSessionId", e)
             loudnessEnhancer = null

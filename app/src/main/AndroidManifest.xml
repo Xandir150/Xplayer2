@@ -67,6 +67,7 @@
             android:name=".player.PlayerActivity"
             android:exported="true"
             android:grantUriPermissions="true"
+            android:launchMode="singleTop"
             android:screenOrientation="sensorLandscape"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode|density"
             android:resizeableActivity="true"
