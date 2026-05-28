@@ -26,6 +26,14 @@ class ExternalPlayerPresentation(
     private var glView: OuToSbsGlView? = null
     private var playerView: PlayerView? = null
 
+    /**
+     * The GL view that actually renders video on the external display. PlayerActivity routes
+     * all render-state (SBS / source-layout / resize / parallax / depth) to this view when a
+     * presentation is active, because the decoded frames go to *its* surface, not the
+     * activity's local glView.
+     */
+    val renderView: OuToSbsGlView? get() = glView
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.presentation_player)

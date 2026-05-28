@@ -20,6 +20,7 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.tabs.TabLayoutMediator
+import com.teleteh.xplayer2.data.depth.DepthModelManager
 import com.teleteh.xplayer2.data.glasses.GlassesController
 import com.teleteh.xplayer2.data.glasses.GlassesProtocol
 import com.teleteh.xplayer2.databinding.ActivityMainBinding
@@ -81,6 +82,38 @@ class MainActivity : AppCompatActivity() {
         }.attach()
 
         setupTvFocusNavigation()
+        prefetchDepthModelIfNeeded()
+    }
+
+    /**
+     * Quietly pre-download the Lazy-3D depth model in the background so the feature is ready
+     * to use instantly later. Strictly opt-in to Wi-Fi/unmetered to avoid spending the
+     * user's cellular data on a ~24 MB file they may never need. No UI, no progress — if it
+     * fails or the network is metered we simply try again next launch, and the on-demand
+     * download in PlayerActivity remains the fallback.
+     */
+    private fun prefetchDepthModelIfNeeded() {
+        val mgr = DepthModelManager(applicationContext)
+        if (mgr.isAvailable()) return
+        if (!isUnmeteredNetwork()) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                if (!mgr.isAvailable()) {
+                    android.util.Log.i("MainActivity", "Prefetching Lazy 3D depth model in background…")
+                    val ok = mgr.ensureAvailable(null)
+                    android.util.Log.i("MainActivity", "Lazy 3D depth model prefetch ${if (ok) "done" else "failed"}")
+                }
+            } catch (_: Throwable) { }
+        }
+    }
+
+    private fun isUnmeteredNetwork(): Boolean = try {
+        val cm = getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val net = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(net) ?: return false
+        caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+    } catch (_: Throwable) {
+        false
     }
 
     // --- Android TV / D-pad keyboard navigation ---

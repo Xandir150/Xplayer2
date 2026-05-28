@@ -156,6 +156,10 @@ class PlayerActivity : AppCompatActivity() {
     // Source layout detected from container metadata (Media3 Format.stereoMode).
     // null means "no explicit metadata; fall back to aspect-ratio heuristic".
     private var detectedSourceStereoMode: Int? = null
+    // Desired GL render config — the single source of truth, pushed to whichever glView is
+    // active (the Presentation's when glasses are connected, otherwise the local one).
+    private var renderSourceIsSbs: Boolean = false
+    private var renderDuplicateMono: Boolean = false
     // Becomes true once the user has chosen an SBS state explicitly — either by tapping the
     // SBS toolbar button, or because a saved Recent entry already had sbsEnabled set. While
     // false, auto-detection is allowed to flip the SBS toggle on OU sources.
@@ -578,23 +582,18 @@ class PlayerActivity : AppCompatActivity() {
                 // Initialize per-item resize mode from recents
                 resizeMode = recent?.resizeMode ?: 0
                 applyResizeMode()
-                // Initialize SBS state per item
-                val dm = resources.displayMetrics
-                val ultraWide = (dm.widthPixels.toFloat() / (dm.heightPixels.takeIf { it > 0 }
-                    ?: 1).toFloat()) >= 3.2f
-                val initialSbs = recent?.sbsEnabled ?: ultraWide
-                android.util.Log.i("XPlayer2", "Initializing SBS: recent?.sbsEnabled=${recent?.sbsEnabled}, ultraWide=$ultraWide, initialSbs=$initialSbs")
-                setStereoSbs(initialSbs)
-                glView?.setSbsEnabled(initialSbs)
-                // If the user already configured SBS for this clip (Recent entry carries a value),
-                // keep auto-detect out of the way. New clips are still eligible for auto OU→SBS.
-                sbsExplicitlyConfigured = recent?.sbsEnabled != null
-                // Don't set duplicateMonoToSbs here - wait for onVideoSizeChanged to know if video is stereo
-                // Initially disable duplication, it will be enabled in updateSbsUi() if needed
-                glView?.setDuplicateMonoToSbs(false)
-                // Refresh button visuals to reflect initial per-item state
+                // Render mode is decided automatically from the source layout once the first
+                // frame size / track info arrives (see applyRenderMode). Start neutral —
+                // plain full-screen passthrough — so we never show a wrong OU/SBS cut before
+                // detection. We intentionally do NOT restore SBS from the Recent entry: the
+                // layout detector is the source of truth, and manual overrides only last for
+                // the current session.
+                sbsExplicitlyConfigured = false
+                setStereoSbs(false)
+                renderSourceIsSbs = false
+                renderDuplicateMono = false
+                applyRenderConfig()
                 btnSbsRef?.let { applySbsButtonVisual(it) }
-                // Choose pipeline now that we know initial SBS state.
                 applyVideoPipeline()
                 exo.play()
                 // Listen for metadata/title updates to reflect in UI and Recent
@@ -605,11 +604,9 @@ class PlayerActivity : AppCompatActivity() {
                     override fun onVideoSizeChanged(videoSize: VideoSize) {
                         lastVideoWidth = videoSize.width
                         lastVideoHeight = videoSize.height
-                        glView?.updateVideoAspectRatio(videoSize.width, videoSize.height)
-                        applySourceLayoutDetection()
-                        applySbsShiftIfNeeded()
-                        // Update duplicate mono logic based on video aspect ratio
-                        updateSbsUi()
+                        activeGlView()?.updateVideoAspectRatio(videoSize.width, videoSize.height)
+                        // Re-derive the whole render mode from the now-known frame size.
+                        applyRenderMode()
                     }
                     override fun onTracksChanged(tracks: Tracks) {
                         // Capture Format.stereoMode and HDR transfer from the selected video track.
@@ -1185,17 +1182,13 @@ class PlayerActivity : AppCompatActivity() {
             // Clear main surface - video will render on Presentation
             player?.clearVideoSurface()
             glView?.visibility = View.GONE
-            
-            // Configure SBS for ultrawide
-            val dm = android.util.DisplayMetrics()
-            @Suppress("DEPRECATION")
-            ext.getMetrics(dm)
-            val ratio = dm.widthPixels.toFloat() / dm.heightPixels.coerceAtLeast(1)
-            val isUltrawide = ratio >= 3.2f
-            
-            // Enable SBS on Presentation
-            pres.setSbsEnabled(getStereoSbs() || isUltrawide)
+
             pres.setPlayer(player)
+            // The Presentation's glView is now the active render target — push the full
+            // current render config (SBS / source-layout / resize / aspect) and re-derive
+            // the mode for this display so resize, OU/SBS and parallax all take effect.
+            applyRenderMode()
+            if (lazy3dEnabled) reapplyLazy3dToActiveView()
         } catch (e: Throwable) {
             android.util.Log.e("XPlayer2", "Failed to show Presentation", e)
             presentation = null
@@ -1214,6 +1207,9 @@ class PlayerActivity : AppCompatActivity() {
             // Restore local GL view
             glView?.visibility = View.VISIBLE
             glSurface?.let { player?.setVideoSurface(it) }
+            // Local glView is the active target again — re-push render config to it.
+            applyRenderMode()
+            if (lazy3dEnabled) reapplyLazy3dToActiveView()
             updatePlaybackService()
         }
     }
@@ -1281,33 +1277,88 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Apply the result of detectSourceLayout() to the GL renderer and — when the user has not
-     * yet picked an SBS state for this clip — auto-enable the OU→SBS toggle for detected OU
-     * sources (the project's main feature). For SBS sources we leave the SBS toggle OFF: the
-     * goggles' display hardware does the L/R split automatically when the panel is in
-     * 3840x1080 SBS mode, so the cleanest output is just to pass the frame straight through.
-     */
-    private fun applySourceLayoutDetection() {
-        val layout = detectSourceLayout()
-        glView?.setSourceIsSbs(layout == SourceLayout.Sbs)
+    /** The glView that currently owns the decoded frames: the Presentation's when glasses are
+     *  connected, otherwise the activity's local one. All render-state must target this view. */
+    private fun activeGlView(): OuToSbsGlView? = presentation?.renderView ?: glView
 
-        // Auto OU→SBS: flip the SBS toggle on the first time we see an OU source for this
-        // clip. Skip when the user (or a saved Recent entry) has already chosen an SBS state.
-        if (!sbsExplicitlyConfigured && layout == SourceLayout.Ou && !getStereoSbs()) {
-            android.util.Log.i("XPlayer2", "Auto-enabling SBS for OU source (layout=$layout)")
-            setStereoSbs(true)
-            glView?.setSbsEnabled(true)
-            btnSbsRef?.let { applySbsButtonVisual(it) }
-            applySbsShiftIfNeeded()
-            updateSbsUi() // already calls applyVideoPipeline()
-            saveProgress()
-        } else {
-            // Layout might have changed without flipping the SBS toggle (e.g. SBS source on
-            // ultrawide display should drop duplicate-mono). Re-evaluate downstream UI.
-            updateSbsUi()
+    /** Whether the active output display is an ultrawide (≈32:9) panel — i.e. the glasses. */
+    private fun activeDisplayIsUltrawide(): Boolean {
+        return try {
+            val pres = presentation
+            if (pres != null) {
+                val dm = android.util.DisplayMetrics()
+                @Suppress("DEPRECATION") pres.display.getMetrics(dm)
+                dm.widthPixels.toFloat() / dm.heightPixels.coerceAtLeast(1) >= 3.2f
+            } else {
+                val dm = resources.displayMetrics
+                dm.widthPixels.toFloat() / dm.heightPixels.coerceAtLeast(1) >= 3.2f
+            }
+        } catch (_: Throwable) {
+            false
         }
     }
+
+    /**
+     * Push the current desired render config to the active GL view. Called whenever the config
+     * changes OR the active view changes (presentation created/dismissed), so the freshly
+     * active view immediately shows the right thing.
+     */
+    private fun applyRenderConfig() {
+        val v = activeGlView() ?: return
+        v.setSbsEnabled(getStereoSbs())
+        v.setSourceIsSbs(renderSourceIsSbs)
+        v.setDuplicateMonoToSbs(renderDuplicateMono)
+        v.updateResizeMode(resizeMode)
+        if (lastVideoWidth > 0 && lastVideoHeight > 0) {
+            v.updateVideoAspectRatio(lastVideoWidth, lastVideoHeight)
+        }
+    }
+
+    /**
+     * Decide what to render from the detected source layout. This is the single place that
+     * maps "what is this clip" → "how do we show it", per the product rules:
+     *
+     *   - Wide / SBS source  → pass through, split L/R per eye. No OU cut, no duplication.
+     *   - OU source          → convert OU→SBS (the app's signature feature). SBS button lit.
+     *   - 2D / mono source   → do NOT cut. On the glasses' ultrawide panel, duplicate the
+     *                          frame into both eye-halves so it sits centred per eye; the
+     *                          Lazy-3D button is then offered for optional depth synthesis.
+     *
+     * A manual SBS-button press ([sbsExplicitlyConfigured]) overrides the auto choice for the
+     * rest of the clip — letting the user force an OU cut if detection guessed wrong.
+     */
+    private fun applyRenderMode() {
+        val layout = detectSourceLayout()
+        when (layout) {
+            SourceLayout.Sbs -> {
+                if (!sbsExplicitlyConfigured) setStereoSbs(true)
+                renderSourceIsSbs = true
+                renderDuplicateMono = false
+            }
+            SourceLayout.Ou -> {
+                if (!sbsExplicitlyConfigured) setStereoSbs(true)
+                renderSourceIsSbs = false
+                renderDuplicateMono = false
+            }
+            SourceLayout.Mono -> {
+                if (!sbsExplicitlyConfigured) setStereoSbs(false)
+                renderSourceIsSbs = false
+                // Duplicate only when SBS isn't manually forced and we're on the wide panel.
+                renderDuplicateMono = activeDisplayIsUltrawide() && !getStereoSbs()
+            }
+        }
+        android.util.Log.i(
+            "XPlayer2",
+            "applyRenderMode: layout=$layout sbs=${getStereoSbs()} sourceIsSbs=$renderSourceIsSbs dup=$renderDuplicateMono"
+        )
+        applyRenderConfig()
+        btnSbsRef?.let { applySbsButtonVisual(it) }
+        applySbsShiftIfNeeded()
+        applyVideoPipeline()
+    }
+
+    /** Back-compat name used by track/size callbacks. */
+    private fun applySourceLayoutDetection() = applyRenderMode()
 
     /**
      * Returns true on unmetered networks (Wi-Fi, Ethernet) — false on cellular or unknown.
@@ -1364,12 +1415,10 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
 
-        val sbs = getStereoSbs()
-        val dm = resources.displayMetrics
-        val ultraWide = dm.widthPixels.toFloat() /
-            dm.heightPixels.coerceAtLeast(1).toFloat() >= 3.2f
-        val needsDuplicateMono = ultraWide && !sbs && !isVideoStereo()
-        val needsGl = sbs || needsDuplicateMono
+        // GL pass is needed whenever we transform the picture: SBS split/convert, or
+        // duplicate-mono on an ultrawide panel. Plain mono passthrough goes DIRECT for
+        // best quality / battery.
+        val needsGl = getStereoSbs() || renderDuplicateMono
         val target = if (needsGl) VideoPipeline.GL else VideoPipeline.DIRECT
         if (target == currentPipeline) return
 
@@ -1395,7 +1444,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun applyResizeMode() {
         btnResizeModeRef?.text = resizeModeLabel(resizeMode)
-        glView?.updateResizeMode(resizeMode)
+        activeGlView()?.updateResizeMode(resizeMode)
     }
 
     private fun bestTitleForCurrent(): String {
@@ -1445,17 +1494,14 @@ class PlayerActivity : AppCompatActivity() {
     private fun toggleStereoMode() {
         val newSbs = !getStereoSbs()
         setStereoSbs(newSbs)
-        // TODO: when XR Subspace is wired, apply here:
-        // applyStereoModeXR(if (newSbs) XR StereoMode.LEFT_RIGHT else XR StereoMode.MONO)
+        // Manual press wins over auto-detection for the rest of this clip.
+        sbsExplicitlyConfigured = true
         Toast.makeText(
             this,
             if (newSbs) getString(R.string.stereo_mode_sbs) else getString(R.string.stereo_mode_normal),
             Toast.LENGTH_SHORT
         ).show()
-        glView?.setSbsEnabled(newSbs)
-        presentation?.setSbsEnabled(newSbs)
-        applySbsShiftIfNeeded()
-        applyVideoPipeline()
+        applyRenderMode()
         saveProgress()
     }
 
@@ -1471,7 +1517,7 @@ class PlayerActivity : AppCompatActivity() {
 
     // --- SBS vertical shift to approximate 16:9 without bars ---
     private fun applySbsShiftIfNeeded() {
-        val gl = glView ?: return
+        val gl = activeGlView() ?: return
         if (!sbsShiftEnabled || !getStereoSbs()) {
             gl.setEyeVerticalShiftNormalized(0f, 0f)
             gl.setPerEyeLetterboxPx(0f, referenceHeightPx = 1f)
@@ -1508,24 +1554,10 @@ class PlayerActivity : AppCompatActivity() {
      */
     private fun isVideoStereo(): Boolean = detectSourceLayout() != SourceLayout.Mono
     
+    // Kept as the entry point used by lifecycle callbacks (config change / resume); the actual
+    // decision now lives in applyRenderMode(), which is layout-driven and targets the active view.
     private fun updateSbsUi() {
-        val dm = resources.displayMetrics
-        val w = dm.widthPixels
-        val h = dm.heightPixels.takeIf { it > 0 } ?: 1
-        val ultraWide = w.toFloat() / h.toFloat() >= 3.2f
-
-        // Only duplicate mono to SBS when we *know* the source is mono. Before the first
-        // VideoSize callback the size is 0 and isVideoStereo() defaults to false, which used
-        // to flip duplicate-mono on for an unknown frame — so a wide SBS clip would briefly
-        // show as two copies until the first onVideoSizeChanged callback could correct it.
-        // Waiting for sizeKnown means the picture starts paused-at-black instead, which is a
-        // much better failure mode than wrong duplicated content.
-        val sizeKnown = lastVideoWidth > 0 && lastVideoHeight > 0
-        val shouldDuplicate = ultraWide && !getStereoSbs() && sizeKnown && !isVideoStereo()
-        android.util.Log.d("XPlayer2", "updateSbsUi: ultraWide=$ultraWide, sbs=${getStereoSbs()}, sizeKnown=$sizeKnown, isVideoStereo=${isVideoStereo()}, shouldDuplicate=$shouldDuplicate")
-        glView?.setDuplicateMonoToSbs(shouldDuplicate)
-        // Mono-on-ultrawide can flip the pipeline (duplicate-mono needs GL); re-evaluate.
-        applyVideoPipeline()
+        applyRenderMode()
     }
 
     private fun applySbsButtonVisual(btn: MaterialButton) {
@@ -1597,13 +1629,9 @@ class PlayerActivity : AppCompatActivity() {
     fun isStereoSbsEnabled(): Boolean = getStereoSbs()
 
     fun toggleStereoSbs() {
-        val newValue = !getStereoSbs()
-        setStereoSbs(newValue)
-        glView?.setSbsEnabled(newValue)
-        presentation?.setSbsEnabled(newValue)
-        btnSbsRef?.let { applySbsButtonVisual(it) }
-        updateSbsUi()
-        applySbsShiftIfNeeded()
+        setStereoSbs(!getStereoSbs())
+        sbsExplicitlyConfigured = true
+        applyRenderMode()
         saveProgress()
     }
 
@@ -1729,7 +1757,7 @@ class PlayerActivity : AppCompatActivity() {
                 val tick = object : Runnable {
                     override fun run() {
                         val (x, y) = headPoseTracker.snapshot()
-                        glView?.setParallaxOffset(x, y)
+                        activeGlView()?.setParallaxOffset(x, y)
                         if (lazy3dEnabled) poseUiHandler.postDelayed(this, 16)
                     }
                 }
@@ -1754,13 +1782,13 @@ class PlayerActivity : AppCompatActivity() {
             depthEstimator = estimator
             val worker = DepthFrameWorker(estimator).also { it.start() }
             depthWorker = worker
-            glView?.setLazy3dStereoEnabled(true)
-            glView?.setStereoParams(divergence = 0.020f, convergence = 0.5f)
-            glView?.setOnFrameReadbackListener { pixels, w, h, ts ->
+            activeGlView()?.setLazy3dStereoEnabled(true)
+            activeGlView()?.setStereoParams(divergence = 0.020f, convergence = 0.5f)
+            activeGlView()?.setOnFrameReadbackListener { pixels, w, h, ts ->
                 // Called on the GL thread when a fresh source snapshot is ready.
                 worker.submit(pixels, w, h, ts)
             }
-            // Pump fresh depth results into the GL view every ~33 ms.
+            // Pump fresh depth results into the active GL view every ~33 ms.
             val depthTick = object : Runnable {
                 override fun run() {
                     val depth = worker.pollLatestDepth()
@@ -1769,7 +1797,7 @@ class PlayerActivity : AppCompatActivity() {
                         for (i in depth.indices) {
                             bytes[i] = (depth[i].coerceIn(0f, 1f) * 255f).toInt().toByte()
                         }
-                        glView?.setDepthMap(bytes, estimator.inputSize, estimator.inputSize)
+                        activeGlView()?.setDepthMap(bytes, estimator.inputSize, estimator.inputSize)
                     }
                     if (lazy3dEnabled) poseUiHandler.postDelayed(this, 33)
                 }
@@ -1795,15 +1823,34 @@ class PlayerActivity : AppCompatActivity() {
         pendingDepthTick = null
         imuReader?.stop()
         imuReader = null
-        glView?.setOnFrameReadbackListener(null)
-        glView?.setLazy3dStereoEnabled(false)
+        // Clear lazy3d state on both possible render targets so nothing lingers after a
+        // display switch.
+        for (v in listOfNotNull(glView, presentation?.renderView)) {
+            v.setOnFrameReadbackListener(null)
+            v.setLazy3dStereoEnabled(false)
+            v.setParallaxOffset(0f, 0f)
+        }
         depthWorker?.stop()
         depthWorker = null
         depthEstimator?.close()
         depthEstimator = null
-        glView?.setParallaxOffset(0f, 0f)
         headPoseTracker.reset()
         android.util.Log.i("XPlayer2", "Lazy 3D disabled (both halves released)")
+    }
+
+    /**
+     * Re-bind the depth-stereo flag, params and readback listener to whatever glView is now
+     * active (after a presentation create/dismiss). The IMU/depth worker threads keep running;
+     * only the GL-side wiring needs to move to the new view.
+     */
+    private fun reapplyLazy3dToActiveView() {
+        val v = activeGlView() ?: return
+        val worker = depthWorker
+        if (depthEstimator?.isReady() == true && worker != null) {
+            v.setLazy3dStereoEnabled(true)
+            v.setStereoParams(divergence = 0.020f, convergence = 0.5f)
+            v.setOnFrameReadbackListener { pixels, w, h, ts -> worker.submit(pixels, w, h, ts) }
+        }
     }
 
     /** Current resize-mode label for the RemoteControlActivity to display. */
