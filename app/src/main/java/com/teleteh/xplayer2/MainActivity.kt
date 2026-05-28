@@ -296,20 +296,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateGlassesMenu() {
         val item = glassesMenuItem ?: return
-        // Always visible so the user (and us during debugging) can verify the toggle is wired.
-        // When no glasses are attached, tapping it shows an informative dialog instead of
-        // silently doing nothing.
+        // Always visible, always enabled. The previous "disable during playback" rule was
+        // over-cautious — switching the panel between 2D and 3D SBS mid-clip works fine on
+        // XREAL once the player re-negotiates the output, and it's specifically useful while
+        // playback is running.
         item.isVisible = true
-        // Disable while the player is on-screen — the glasses' EDID-reported resolution changes
-        // when 2D <-> 3D SBS, which can confuse a live playback session.
-        item.isEnabled = PlayerActivity.currentInstance == null
+        item.isEnabled = true
     }
 
     private fun showGlassesModePicker() {
-        if (PlayerActivity.currentInstance != null) {
-            Toast.makeText(this, R.string.glasses_disabled_while_playing, Toast.LENGTH_SHORT).show()
-            return
-        }
         when (glasses.currentState()) {
             GlassesController.ConnectionState.NeedsPermission -> {
                 Toast.makeText(this, R.string.glasses_needs_permission, Toast.LENGTH_SHORT).show()
@@ -347,14 +342,17 @@ class MainActivity : AppCompatActivity() {
             GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_90_SBS to getString(R.string.glasses_mode_3d_sbs, 90),
         )
         val labels = items.map { it.second }.toTypedArray()
-        val current = getStoredGlassesMode()
+        // Highlight the mode the glasses are actually in, not the last one we persisted.
+        // The controller resets this to the 2D default whenever the device (re)connects, so
+        // after unplug/replug the picker shows 2D — matching the hardware — instead of a
+        // stale 3D entry.
+        val current = glasses.lastMode()
         val checked = items.indexOfFirst { it.first == current }.coerceAtLeast(0)
         AlertDialog.Builder(this)
             .setTitle(R.string.glasses_mode_title)
             .setSingleChoiceItems(labels, checked) { dialog, which ->
                 val (mode, label) = items[which]
                 if (glasses.setDisplayMode(mode)) {
-                    setStoredGlassesMode(mode)
                     Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(this, R.string.glasses_send_failed, Toast.LENGTH_SHORT).show()
@@ -363,14 +361,6 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton(R.string.common_cancel, null)
             .show()
-    }
-
-    private fun getStoredGlassesMode(): Int =
-        getSharedPreferences("player_prefs", MODE_PRIVATE)
-            .getInt("glasses_mode", GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60)
-
-    private fun setStoredGlassesMode(mode: Int) {
-        getSharedPreferences("player_prefs", MODE_PRIVATE).edit { putInt("glasses_mode", mode) }
     }
 
     private fun getStereoSbs(): Boolean {

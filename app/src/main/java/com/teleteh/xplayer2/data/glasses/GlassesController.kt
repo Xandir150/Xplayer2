@@ -232,7 +232,13 @@ class GlassesController(private val appContext: Context) {
         }
         device = dev
         connection = conn
-        Log.i(TAG, "Glasses connected: ${dev.deviceName}, ${claimedInterfaces.size} HID interface(s) claimed")
+        // XREAL glasses always power up / re-attach in 2D mode regardless of what they were
+        // showing before they were unplugged. Reset our notion of the current mode to match
+        // the hardware so the mode picker doesn't keep highlighting a stale "3D SBS" entry
+        // after a reconnect. (We can't read the mode back reliably across all firmware, so we
+        // trust the known power-on default.)
+        lastReportedMode = GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60
+        Log.i(TAG, "Glasses connected: ${dev.deviceName}, ${claimedInterfaces.size} HID interface(s) claimed; mode reset to 2D default")
         notifyState()
     }
 
