@@ -207,11 +207,11 @@ class GlassesController(private val appContext: Context) {
         }
         // CRITICAL: only claim HID interfaces. XREAL Air is a composite USB device that also
         // exposes a USB Audio Class interface (stereo over USB) and a display interface — if we
-        // claim those with force=true we yank them away from Android's audio / display drivers,
-        // killing system-wide audio (YouTube etc. go silent) the moment our app appears with the
-        // glasses connected, even before any playback starts. HID is where the MCU OUT endpoint
-        // for our display-mode commands lives, and it's also the class we're allowed to drive
-        // from userspace without disrupting anything else.
+        // touch those at all (even with force=false) we risk yanking them away from Android's
+        // audio / display drivers, killing system-wide audio. The HID interfaces, on the other
+        // hand, the kernel always grabs first with the generic HID driver, so we DO need
+        // force=true there to take over — otherwise bulkTransfer on the MCU endpoint silently
+        // fails and the 2D/3D mode toggle stops working.
         claimedInterfaces.clear()
         for (i in 0 until dev.interfaceCount) {
             val intf = dev.getInterface(i)
@@ -219,10 +219,10 @@ class GlassesController(private val appContext: Context) {
                 Log.d(TAG, "Skipping non-HID interface $i (class=0x${intf.interfaceClass.toString(16)}) — leaving it to the kernel")
                 continue
             }
-            // force=false: refuse to steal from a kernel driver if one is already attached.
-            // No USB Audio / display driver will ever be attached to a HID interface, so this
-            // is safe to leave non-forceful.
-            val ok = conn.claimInterface(intf, false)
+            // force=true is safe here: the only thing competing for an XREAL HID interface is
+            // Android's generic kernel HID handler, not the audio / display HALs. Those live on
+            // different interfaces (class != HID) which we skipped above.
+            val ok = conn.claimInterface(intf, true)
             if (ok) {
                 claimedInterfaces.add(intf)
                 Log.d(TAG, "Claimed HID interface $i (subclass=0x${intf.interfaceSubclass.toString(16)})")

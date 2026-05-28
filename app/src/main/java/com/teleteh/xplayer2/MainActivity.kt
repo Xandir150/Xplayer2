@@ -296,11 +296,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateGlassesMenu() {
         val item = glassesMenuItem ?: return
-        val attached = glasses.isGlassesAttached()
-        item.isVisible = attached
+        // Always visible so the user (and us during debugging) can verify the toggle is wired.
+        // When no glasses are attached, tapping it shows an informative dialog instead of
+        // silently doing nothing.
+        item.isVisible = true
         // Disable while the player is on-screen — the glasses' EDID-reported resolution changes
         // when 2D <-> 3D SBS, which can confuse a live playback session.
-        item.isEnabled = attached && PlayerActivity.currentInstance == null
+        item.isEnabled = PlayerActivity.currentInstance == null
     }
 
     private fun showGlassesModePicker() {
@@ -313,7 +315,14 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, R.string.glasses_needs_permission, Toast.LENGTH_SHORT).show()
                 return
             }
-            GlassesController.ConnectionState.Disconnected -> return
+            GlassesController.ConnectionState.Disconnected -> {
+                AlertDialog.Builder(this)
+                    .setTitle(R.string.glasses_mode_title)
+                    .setMessage(R.string.glasses_not_connected)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show()
+                return
+            }
             GlassesController.ConnectionState.Connected -> Unit
         }
 
