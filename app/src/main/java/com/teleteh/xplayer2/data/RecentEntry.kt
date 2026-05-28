@@ -22,7 +22,11 @@ data class RecentEntry(
     val framePacking: Int? = null,
     val sbsEnabled: Boolean? = null,
     val sbsShiftEnabled: Boolean? = null,
-    val sourceType: SourceType? = null
+    val sourceType: SourceType? = null,
+    // 0=Auto, 1=16:9, 2=4:3, 3=21:9, 4=32:9, 5=1:1, 6=2.39:1
+    val resizeMode: Int = 0,
+    // Marks that the source video itself is already SBS-packed (so SBS mode samples left/right halves)
+    val sourceIsSbs: Boolean = false,
 ) {
     fun uriObj(): Uri = Uri.parse(uri)
     

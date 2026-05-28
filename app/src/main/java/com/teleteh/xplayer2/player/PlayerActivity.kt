@@ -105,6 +105,9 @@ class PlayerActivity : AppCompatActivity() {
     private var currentResolvedTitle: String? = null
     private var btnSbsRef: MaterialButton? = null
     private var btnShiftRef: MaterialButton? = null
+    private var btnResizeModeRef: MaterialButton? = null
+    // 0=Auto, 1=16:9, 2=4:3, 3=21:9, 4=32:9, 5=1:1, 6=2.39:1
+    private var resizeMode: Int = 0
 
     // Audio gain via LoudnessEnhancer (persisted globally in player_prefs)
     private var loudnessEnhancer: LoudnessEnhancer? = null
@@ -182,10 +185,12 @@ class PlayerActivity : AppCompatActivity() {
         val btnBack = overlay.findViewById<MaterialButton>(R.id.btnBack)
         val btnSbs = overlay.findViewById<MaterialButton>(R.id.btnSbs)
         val btnShift = overlay.findViewById<MaterialButton>(R.id.btnShift)
+        val btnResizeMode = overlay.findViewById<MaterialButton>(R.id.btnResizeMode)
         val btnAudio = overlay.findViewById<ImageButton>(R.id.btnAudio)
         val btnSubtitle = overlay.findViewById<ImageButton>(R.id.btnSubtitle)
         btnSbsRef = btnSbs
         btnShiftRef = btnShift
+        btnResizeModeRef = btnResizeMode
         titleCenterView = overlay.findViewById(R.id.tvTitleCenter)
         // Audio menu containers
         audioMenuRoot = overlay.findViewById(R.id.audioMenuRoot)
@@ -201,6 +206,13 @@ class PlayerActivity : AppCompatActivity() {
             toggleStereoMode()
             applySbsButtonVisual(btnSbs)
         }
+        // Resize mode button cycles through aspect ratios
+        btnResizeMode.setOnClickListener {
+            resizeMode = (resizeMode + 1) % 7
+            applyResizeMode()
+            saveProgress()
+        }
+        applyResizeMode()
         // Shift debug button
         btnShift.isCheckable = true
         btnShift.isChecked = sbsShiftEnabled
@@ -416,6 +428,9 @@ class PlayerActivity : AppCompatActivity() {
                 sbsShiftEnabled = recent?.sbsShiftEnabled ?: false
                 btnShiftRef?.isChecked = sbsShiftEnabled
                 applySbsShiftIfNeeded()
+                // Initialize per-item resize mode from recents
+                resizeMode = recent?.resizeMode ?: 0
+                applyResizeMode()
                 // Initialize SBS state per item
                 val dm = resources.displayMetrics
                 val ultraWide = (dm.widthPixels.toFloat() / (dm.heightPixels.takeIf { it > 0 }
@@ -438,6 +453,7 @@ class PlayerActivity : AppCompatActivity() {
                     override fun onVideoSizeChanged(videoSize: VideoSize) {
                         lastVideoWidth = videoSize.width
                         lastVideoHeight = videoSize.height
+                        glView?.updateVideoAspectRatio(videoSize.width, videoSize.height)
                         applySbsShiftIfNeeded()
                         // Update duplicate mono logic based on video aspect ratio
                         updateSbsUi()
@@ -993,9 +1009,23 @@ class PlayerActivity : AppCompatActivity() {
             framePacking = framePacking,
             sbsEnabled = getStereoSbs(),
             sbsShiftEnabled = sbsShiftEnabled,
-            sourceType = RecentEntry.detectSourceType(uri)
+            sourceType = RecentEntry.detectSourceType(uri),
+            resizeMode = resizeMode
         )
         RecentStore(this).upsert(entry)
+    }
+
+    private fun applyResizeMode() {
+        btnResizeModeRef?.text = when (resizeMode) {
+            1 -> "16:9"
+            2 -> "4:3"
+            3 -> "21:9"
+            4 -> "32:9"
+            5 -> "1:1"
+            6 -> "2.39:1"
+            else -> "Auto"
+        }
+        glView?.updateResizeMode(resizeMode)
     }
 
     private fun bestTitleForCurrent(): String {

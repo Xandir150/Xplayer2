@@ -18,7 +18,16 @@ import javax.microedition.khronos.opengles.GL10
 
 /**
  * GLSurfaceView that accepts video frames from ExoPlayer via SurfaceTexture
- * and renders OU (Over-Under) frames as SBS (Side-By-Side) on screen when enabled.
+ * and renders them with optional Over-Under → Side-By-Side conversion.
+ *
+ * Resize modes:
+ *  0 = Auto (use source aspect)
+ *  1 = 16:9
+ *  2 = 4:3
+ *  3 = 21:9
+ *  4 = 32:9
+ *  5 = 1:1
+ *  6 = 2.39:1
  */
 class OuToSbsGlView @JvmOverloads constructor(
     context: Context,
@@ -38,7 +47,6 @@ class OuToSbsGlView @JvmOverloads constructor(
     fun setOnSurfaceReadyListener(listener: (Surface) -> Unit) {
         renderer.onSurfaceReady = listener
         renderer.surface?.let { surf ->
-            // Ensure callback is on main thread
             if (Looper.myLooper() == Looper.getMainLooper()) {
                 listener(surf)
             } else {
@@ -49,6 +57,16 @@ class OuToSbsGlView @JvmOverloads constructor(
 
     fun setSbsEnabled(enabled: Boolean) {
         renderer.sbsEnabled.set(enabled)
+        requestRender()
+    }
+
+    /**
+     * Marks the source as already side-by-side (instead of the default Over-Under).
+     * When SBS mode is enabled and source is also SBS, the renderer samples left/right
+     * halves of the texture rather than top/bottom.
+     */
+    fun setSourceIsSbs(enabled: Boolean) {
+        renderer.sourceIsSbs.set(enabled)
         requestRender()
     }
 
@@ -71,7 +89,6 @@ class OuToSbsGlView @JvmOverloads constructor(
      * Positive value lowers the image on screen for that eye.
      */
     fun setEyeVerticalShiftNormalized(left: Float, right: Float) {
-        // Clamp to safe range then forward to renderer on GL thread
         val l = left.coerceIn(-0.25f, 0.25f)
         val r = right.coerceIn(-0.25f, 0.25f)
         queueEvent {
@@ -80,18 +97,11 @@ class OuToSbsGlView @JvmOverloads constructor(
         requestRender()
     }
 
-    /**
-     * Convenience: set per-eye vertical shift in pixels relative to a reference full-frame height.
-     */
     fun setEyeVerticalShiftPx(leftPx: Float, rightPx: Float, referenceHeightPx: Float) {
         if (referenceHeightPx <= 0f) return
         setEyeVerticalShiftNormalized(leftPx / referenceHeightPx, rightPx / referenceHeightPx)
     }
 
-    /**
-     * Apply opposite shifts to left/right eyes with a single positive amount (in pixels):
-     * bottom-half eye goes DOWN, top-half eye goes UP. Respects current swapEyes mapping.
-     */
     fun setOppositeVerticalShiftPx(amountPx: Float, referenceHeightPx: Float) {
         if (referenceHeightPx <= 0f) return
         val amt = (amountPx / referenceHeightPx).coerceIn(0f, 0.25f)
@@ -108,9 +118,6 @@ class OuToSbsGlView @JvmOverloads constructor(
 
     /**
      * Set per-eye letterbox padding as a pixel amount relative to a reference full-frame height.
-     * The same positive amount is applied, but for the eye sampling the top half the bar is added on TOP,
-     * and for the eye sampling the bottom half the bar is added on BOTTOM. This preserves 16:9 per eye
-     * when the OU source lacks top/bottom black bars.
      */
     fun setPerEyeLetterboxPx(amountPx: Float, referenceHeightPx: Float) {
         if (referenceHeightPx <= 0f) return
@@ -118,6 +125,18 @@ class OuToSbsGlView @JvmOverloads constructor(
         queueEvent {
             renderer.perEyePadFrac = frac
         }
+        requestRender()
+    }
+
+    /** 0 = Auto, 1 = 16:9, 2 = 4:3, 3 = 21:9, 4 = 32:9, 5 = 1:1, 6 = 2.39:1 */
+    fun updateResizeMode(mode: Int) {
+        renderer.updateResizeMode(mode)
+        requestRender()
+    }
+
+    /** Tells the renderer the source video pixel dimensions so Auto mode preserves aspect. */
+    fun updateVideoAspectRatio(width: Int, height: Int) {
+        renderer.updateVideoAspectRatio(width, height)
         requestRender()
     }
 
@@ -129,6 +148,7 @@ class OuToSbsGlView @JvmOverloads constructor(
 
         var onSurfaceReady: ((Surface) -> Unit)? = null
         val sbsEnabled = AtomicBoolean(false)
+        val sourceIsSbs = AtomicBoolean(false)
         val swapEyes = AtomicBoolean(false)
         val duplicateMonoToSbs = AtomicBoolean(false)
 
@@ -139,12 +159,12 @@ class OuToSbsGlView @JvmOverloads constructor(
         private var uTexMatrixLoc = 0
         private var uScaleLoc = 0
         private var uOffsetLoc = 0
-        // Normalized per-eye vertical shift (in full texture space, 0..1). Positive value intends to lower the image on screen.
-        // These are applied symmetrically depending on whether the eye samples from top or bottom half.
+
         @Volatile private var leftEyeShiftNorm: Float = 0f
         @Volatile private var rightEyeShiftNorm: Float = 0f
-        // Fraction of per-eye vertical letterbox relative to full-frame height (0..~0.25)
         @Volatile var perEyePadFrac: Float = 0f
+        @Volatile private var resizeMode: Int = 0
+        @Volatile private var videoAspectRatio: Float = 16f / 9f
         private val texMatrix = FloatArray(16)
 
         // Fullscreen quad (two triangles)
@@ -197,95 +217,162 @@ class OuToSbsGlView @JvmOverloads constructor(
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
             GLES20.glUniform1i(uTexLoc, 0)
 
-            vertexData.position(0)
-            GLES20.glEnableVertexAttribArray(aPosLoc)
-            GLES20.glVertexAttribPointer(aPosLoc, 2, GLES20.GL_FLOAT, false, 16, vertexData)
-
-            vertexData.position(2)
-            GLES20.glEnableVertexAttribArray(aTexLoc)
-            GLES20.glVertexAttribPointer(aTexLoc, 2, GLES20.GL_FLOAT, false, 16, vertexData)
-
             if (sbsEnabled.get()) {
-                // Map OU -> SBS. Default: Left <- BOTTOM, Right <- TOP
-                val swap = swapEyes.get()
-                val leftFromTop = if (swap) true else false
-                val rightFromTop = if (swap) false else true
-                drawHalf(left = true, fromTopHalf = leftFromTop)
-                drawHalf(left = false, fromTopHalf = rightFromTop)
-            } else {
-                // Mono: either full screen, or duplicate into left/right halves for stereo displays
-                if (duplicateMonoToSbs.get()) {
-                    drawMonoIntoHalf(left = true)
-                    drawMonoIntoHalf(left = false)
+                if (sourceIsSbs.get()) {
+                    drawSbsSource()
                 } else {
-                    drawFull()
+                    drawOuToSbs()
+                }
+            } else {
+                if (duplicateMonoToSbs.get()) {
+                    drawMonoToSbs()
+                } else {
+                    drawFullScreen()
                 }
             }
 
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0)
         }
 
-        private fun drawFull() {
-            // Use full texture (scale=1,1 offset=0,0)
-            GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, texMatrix, 0)
-            GLES20.glUniform2f(uScaleLoc, 1f, 1f)
-            GLES20.glUniform2f(uOffsetLoc, 0f, 0f)
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+        private fun drawOuToSbs() {
+            val swap = swapEyes.get()
+            val leftFromTop = if (swap) true else false
+            val rightFromTop = if (swap) false else true
+            drawEyeFromOu(left = true, fromTopHalf = leftFromTop)
+            drawEyeFromOu(left = false, fromTopHalf = rightFromTop)
         }
 
-        private fun drawMonoIntoHalf(left: Boolean) {
+        private fun drawSbsSource() {
+            val swap = swapEyes.get()
+            drawEyeFromSbs(left = true, useRightHalf = swap)
+            drawEyeFromSbs(left = false, useRightHalf = !swap)
+        }
+
+        private fun drawFullScreen() {
             val viewport = IntArray(4)
             GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewport, 0)
-            val x = if (left) viewport[0] else viewport[0] + viewport[2] / 2
-            val y = viewport[1]
-            val w = viewport[2] / 2
-            val h = viewport[3]
-            // Draw full texture into the half viewport
-            GLES20.glViewport(x, y, w, h)
-            GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, texMatrix, 0)
-            GLES20.glUniform2f(uScaleLoc, 1f, 1f)
-            GLES20.glUniform2f(uOffsetLoc, 0f, 0f)
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+            val targetAspect = getTargetAspectRatio(resizeMode, videoAspectRatio)
+            val fit = calculateFitRect(viewport[0], viewport[1], viewport[2], viewport[3], targetAspect)
+            GLES20.glViewport(fit.x, fit.y, fit.width, fit.height)
+            drawTexture(1f, 1f, 0f, 0f)
             GLES20.glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
         }
 
-        private fun drawHalf(left: Boolean, fromTopHalf: Boolean) {
-            // Adjust viewport to left or right half
-            // Viewport will be set by caller via glViewport; here we change temporarily
-            // We need current viewport size; since we don't have it, compute via glGetIntegerv
+        private fun drawMonoToSbs() {
             val viewport = IntArray(4)
             GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewport, 0)
-            val x = if (left) viewport[0] else viewport[0] + viewport[2] / 2
-            val y = viewport[1]
-            val w = viewport[2] / 2
-            val h = viewport[3]
-            // Apply per-eye letterbox by shrinking the half-viewport vertically and anchoring:
-            // - Top-half eye: anchor to TOP (bar appears at BOTTOM)
-            // - Bottom-half eye: anchor to BOTTOM (bar appears at TOP)
-            // Use provided per-eye pad fraction (relative to source half height) scaled to current half-viewport
-            val pad = (perEyePadFrac * h).toInt().coerceAtMost(h - 1)
-            // Top-half anchored to top: keep top edge, so shift y up by pad
-            // Bottom-half anchored to bottom: keep bottom edge, so y stays
-            val yAdj = if (fromTopHalf) y + pad else y
-            val hAdj = h - pad
-            GLES20.glViewport(x, yAdj, w, hAdj)
+            val eyeWidth = viewport[2] / 2
+            val targetAspect = getTargetAspectRatio(resizeMode, videoAspectRatio)
 
-            // Apply SurfaceTexture transform and crop to top/bottom half via uniforms
-            // With v origin at bottom: top half starts at 0.5, bottom half at 0.0
-            GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, texMatrix, 0)
-            GLES20.glUniform2f(uScaleLoc, 1f, 0.5f)
-            // Choose per-eye vertical shift. Convention: positive shift lowers the image on screen.
+            val l = calculateFitRect(viewport[0], viewport[1], eyeWidth, viewport[3], targetAspect)
+            GLES20.glViewport(l.x, l.y, l.width, l.height)
+            drawTexture(1f, 1f, 0f, 0f)
+
+            val r = calculateFitRect(viewport[0] + eyeWidth, viewport[1], eyeWidth, viewport[3], targetAspect)
+            GLES20.glViewport(r.x, r.y, r.width, r.height)
+            drawTexture(1f, 1f, 0f, 0f)
+
+            GLES20.glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
+        }
+
+        private fun drawEyeFromOu(left: Boolean, fromTopHalf: Boolean) {
+            val viewport = IntArray(4)
+            GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewport, 0)
+
+            val eyeWidth = viewport[2] / 2
+            val eyeX = if (left) viewport[0] else viewport[0] + eyeWidth
+            // For Auto mode in OU→SBS, each eye is W/2×H/2 — divide by 0.5 to get the per-eye aspect
+            // No — for OU each eye is full_width × half_height, so per-eye aspect = sourceAspect * 2.
+            // We expose this via the per-eye aspect derivation below.
+            val targetAspect = getTargetAspectRatio(resizeMode, perEyeAspectFromOu(videoAspectRatio))
+            val fit = calculateFitRect(eyeX, viewport[1], eyeWidth, viewport[3], targetAspect)
+
+            val pad = (perEyePadFrac * fit.height).toInt().coerceAtMost(fit.height - 1)
+            val yAdj = if (fromTopHalf) fit.y + pad else fit.y
+            val hAdj = fit.height - pad
+
+            GLES20.glViewport(fit.x, yAdj, fit.width, hAdj)
+
             val shift = if (left) leftEyeShiftNorm else rightEyeShiftNorm
-            // For bottom half, increasing offset samples higher in the source, making the image appear lower on screen.
-            // For top half, decreasing offset samples lower in the source, likewise lowering image on screen.
             val base = if (fromTopHalf) 0.5f else 0f
             val offsetY = if (fromTopHalf) base - shift else base + shift
-            GLES20.glUniform2f(uOffsetLoc, 0f, offsetY)
 
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+            drawTexture(1f, 0.5f, 0f, offsetY)
 
-            // Restore full viewport for next draw step
             GLES20.glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
+        }
+
+        private fun drawEyeFromSbs(left: Boolean, useRightHalf: Boolean) {
+            val viewport = IntArray(4)
+            GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewport, 0)
+
+            val eyeWidth = viewport[2] / 2
+            val eyeX = if (left) viewport[0] else viewport[0] + eyeWidth
+            // SBS source: each eye is half_width × full_height → per-eye aspect = sourceAspect / 2
+            val targetAspect = getTargetAspectRatio(resizeMode, perEyeAspectFromSbs(videoAspectRatio))
+            val fit = calculateFitRect(eyeX, viewport[1], eyeWidth, viewport[3], targetAspect)
+
+            GLES20.glViewport(fit.x, fit.y, fit.width, fit.height)
+
+            val offsetX = if (useRightHalf) 0.5f else 0f
+            drawTexture(0.5f, 1f, offsetX, 0f)
+
+            GLES20.glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
+        }
+
+        private fun drawTexture(scaleX: Float, scaleY: Float, offsetX: Float, offsetY: Float) {
+            GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, texMatrix, 0)
+            GLES20.glUniform2f(uScaleLoc, scaleX, scaleY)
+            GLES20.glUniform2f(uOffsetLoc, offsetX, offsetY)
+            vertexData.position(0)
+            GLES20.glEnableVertexAttribArray(aPosLoc)
+            GLES20.glVertexAttribPointer(aPosLoc, 2, GLES20.GL_FLOAT, false, 16, vertexData)
+            vertexData.position(2)
+            GLES20.glEnableVertexAttribArray(aTexLoc)
+            GLES20.glVertexAttribPointer(aTexLoc, 2, GLES20.GL_FLOAT, false, 16, vertexData)
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+        }
+
+        private fun calculateFitRect(x: Int, y: Int, width: Int, height: Int, targetAspect: Float): FitRect {
+            if (width <= 0 || height <= 0 || targetAspect <= 0f) {
+                return FitRect(x, y, width, height)
+            }
+            val viewAspect = width.toFloat() / height.toFloat()
+            return if (viewAspect > targetAspect) {
+                val newWidth = (height * targetAspect).toInt().coerceAtLeast(1)
+                val offsetX = (width - newWidth) / 2
+                FitRect(x + offsetX, y, newWidth, height)
+            } else {
+                val newHeight = (width / targetAspect).toInt().coerceAtLeast(1)
+                val offsetY = (height - newHeight) / 2
+                FitRect(x, y + offsetY, width, newHeight)
+            }
+        }
+
+        // For OU sources, per-eye image is full_width × half_height so its native aspect is 2× source aspect.
+        private fun perEyeAspectFromOu(sourceAspect: Float): Float = sourceAspect * 2f
+
+        // For SBS sources, per-eye image is half_width × full_height so its native aspect is source aspect / 2.
+        private fun perEyeAspectFromSbs(sourceAspect: Float): Float = sourceAspect / 2f
+
+        private fun getTargetAspectRatio(mode: Int, fallbackAspect: Float): Float = when (mode) {
+            1 -> 16f / 9f
+            2 -> 4f / 3f
+            3 -> 21f / 9f
+            4 -> 32f / 9f
+            5 -> 1f / 1f
+            6 -> 2.39f
+            else -> fallbackAspect
+        }
+
+        fun updateResizeMode(mode: Int) {
+            resizeMode = mode
+        }
+
+        fun updateVideoAspectRatio(width: Int, height: Int) {
+            if (width > 0 && height > 0) {
+                videoAspectRatio = width.toFloat() / height.toFloat()
+            }
         }
 
         fun setEyeShiftNormalized(left: Float, right: Float) {
@@ -302,26 +389,10 @@ class OuToSbsGlView @JvmOverloads constructor(
             val tex = IntArray(1)
             GLES20.glGenTextures(1, tex, 0)
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, tex[0])
-            GLES20.glTexParameteri(
-                GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-                GLES20.GL_TEXTURE_MIN_FILTER,
-                GLES20.GL_LINEAR
-            )
-            GLES20.glTexParameteri(
-                GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-                GLES20.GL_TEXTURE_MAG_FILTER,
-                GLES20.GL_LINEAR
-            )
-            GLES20.glTexParameteri(
-                GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-                GLES20.GL_TEXTURE_WRAP_S,
-                GLES20.GL_CLAMP_TO_EDGE
-            )
-            GLES20.glTexParameteri(
-                GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-                GLES20.GL_TEXTURE_WRAP_T,
-                GLES20.GL_CLAMP_TO_EDGE
-            )
+            GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+            GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+            GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+            GLES20.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0)
             return tex[0]
         }
@@ -360,6 +431,8 @@ class OuToSbsGlView @JvmOverloads constructor(
         }
     }
 }
+
+private data class FitRect(val x: Int, val y: Int, val width: Int, val height: Int)
 
 private fun floatBufferOf(vararg floats: Float): FloatBuffer =
     ByteBuffer.allocateDirect(floats.size * 4)
