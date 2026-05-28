@@ -20,20 +20,30 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.tabs.TabLayoutMediator
+import com.teleteh.xplayer2.data.glasses.GlassesController
+import com.teleteh.xplayer2.data.glasses.GlassesProtocol
 import com.teleteh.xplayer2.databinding.ActivityMainBinding
+import com.teleteh.xplayer2.player.PlayerActivity
 import com.teleteh.xplayer2.ui.MainPagerAdapter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import android.view.KeyEvent
+import android.view.Menu
+import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
+import androidx.core.content.edit
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
+    private val glasses: GlassesController by lazy { GlassesController(applicationContext) }
+    private var glassesMenuItem: MenuItem? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -249,23 +259,95 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onCreateOptionsMenu(menu: android.view.Menu): Boolean {
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
-        menu.findItem(R.id.menu_stereo)?.let { item ->
-            item.isCheckable = true
-            item.isChecked = getStereoSbs()
-            val actionView = item.actionView
-            val btn = actionView?.findViewById<MaterialButton>(R.id.btnSbs)
-            if (btn != null) {
-                btn.isCheckable = true
-                btn.isChecked = getStereoSbs()
-                btn.setOnClickListener {
-                    toggleStereoMode()
-                    btn.isChecked = getStereoSbs()
-                }
-            }
-        }
+        glassesMenuItem = menu.findItem(R.id.menu_glasses)
+        updateGlassesMenu()
         return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
+        R.id.menu_glasses -> {
+            showGlassesModePicker()
+            true
+        }
+        else -> super.onOptionsItemSelected(item)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        glasses.setListener { _, _ -> updateGlassesMenu() }
+        glasses.register()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        glasses.setListener(null)
+        glasses.unregister()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // PlayerActivity might have come and gone in the background; re-evaluate enabled state.
+        updateGlassesMenu()
+    }
+
+    private fun updateGlassesMenu() {
+        val item = glassesMenuItem ?: return
+        val attached = glasses.isGlassesAttached()
+        item.isVisible = attached
+        // Disable while the player is on-screen — the glasses' EDID-reported resolution changes
+        // when 2D <-> 3D SBS, which can confuse a live playback session.
+        item.isEnabled = attached && PlayerActivity.currentInstance == null
+    }
+
+    private fun showGlassesModePicker() {
+        if (PlayerActivity.currentInstance != null) {
+            Toast.makeText(this, R.string.glasses_disabled_while_playing, Toast.LENGTH_SHORT).show()
+            return
+        }
+        when (glasses.currentState()) {
+            GlassesController.ConnectionState.NeedsPermission -> {
+                Toast.makeText(this, R.string.glasses_needs_permission, Toast.LENGTH_SHORT).show()
+                return
+            }
+            GlassesController.ConnectionState.Disconnected -> return
+            GlassesController.ConnectionState.Connected -> Unit
+        }
+
+        val items = listOf(
+            GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60 to getString(R.string.glasses_mode_2d, 60),
+            GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_72 to getString(R.string.glasses_mode_2d, 72),
+            GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_90 to getString(R.string.glasses_mode_2d, 90),
+            GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_60_SBS to getString(R.string.glasses_mode_3d_sbs, 60),
+            GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_72_SBS to getString(R.string.glasses_mode_3d_sbs, 72),
+            GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_90_SBS to getString(R.string.glasses_mode_3d_sbs, 90),
+        )
+        val labels = items.map { it.second }.toTypedArray()
+        val current = getStoredGlassesMode()
+        val checked = items.indexOfFirst { it.first == current }.coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.glasses_mode_title)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                val (mode, label) = items[which]
+                if (glasses.setDisplayMode(mode)) {
+                    setStoredGlassesMode(mode)
+                    Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, R.string.glasses_send_failed, Toast.LENGTH_SHORT).show()
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.common_cancel, null)
+            .show()
+    }
+
+    private fun getStoredGlassesMode(): Int =
+        getSharedPreferences("player_prefs", MODE_PRIVATE)
+            .getInt("glasses_mode", GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60)
+
+    private fun setStoredGlassesMode(mode: Int) {
+        getSharedPreferences("player_prefs", MODE_PRIVATE).edit { putInt("glasses_mode", mode) }
     }
 
     private fun getStereoSbs(): Boolean {

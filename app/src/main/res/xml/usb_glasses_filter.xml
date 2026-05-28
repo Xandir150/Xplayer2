@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra -->
+    <usb-device vendor-id="13080" product-id="1074" />
+</resources>

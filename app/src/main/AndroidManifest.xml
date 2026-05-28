@@ -13,6 +13,11 @@
         android:name="android.hardware.camera"
         android:required="false" />
 
+    <!-- XR glasses USB host access (e.g., XREAL Air) — optional. -->
+    <uses-feature
+        android:name="android.hardware.usb.host"
+        android:required="false" />
+
     <supports-screens
         android:smallScreens="true"
         android:normalScreens="true"
@@ -50,6 +55,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
+            <!-- Auto-launch / surface MainActivity when XR glasses are connected over USB. -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_glasses_filter" />
         </activity>
         <activity
             android:name=".player.PlayerActivity"

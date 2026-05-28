@@ -1,2 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<menu></menu>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- Toggle for XR glasses display mode (2D/3D SBS, with optional refresh-rate picker).
+         Hidden until a supported pair of glasses is detected over USB. -->
+    <item
+        android:id="@+id/menu_glasses"
+        android:title="@string/glasses_mode"
+        android:icon="@drawable/ic_glasses"
+        android:visible="false"
+        app:showAsAction="always" />
+</menu>

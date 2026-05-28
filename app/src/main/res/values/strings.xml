@@ -7,6 +7,13 @@
     <string name="subtitle_off">Off</string>
     <string name="volume_boost_off">Boost: off</string>
     <string name="volume_boost_with_value">Boost: +%1$d dB</string>
+    <string name="glasses_mode">Glasses mode</string>
+    <string name="glasses_mode_title">Glasses display mode</string>
+    <string name="glasses_mode_2d">2D %1$dHz</string>
+    <string name="glasses_mode_3d_sbs">3D SBS %1$dHz</string>
+    <string name="glasses_disabled_while_playing">Pause playback to change glasses mode</string>
+    <string name="glasses_needs_permission">USB permission required for glasses</string>
+    <string name="glasses_send_failed">Failed to switch glasses mode</string>
     <string name="menu_stereo">Stereo: toggle</string>
     <string name="menu_stereo_short">SBS</string>
     <string name="menu_back">Back</string>
