@@ -42,7 +42,9 @@ import androidx.core.content.edit
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private val glasses: GlassesController by lazy { GlassesController(applicationContext) }
+    private val glasses: GlassesController by lazy {
+        GlassesController(applicationContext).also { glassesControllerForPlayback = it }
+    }
     private var glassesMenuItem: MenuItem? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -390,5 +392,13 @@ class MainActivity : AppCompatActivity() {
         init {
             System.loadLibrary("xplayer2")
         }
+
+        /**
+         * Exposed for [com.teleteh.xplayer2.player.PlayerActivity] / RemoteControlActivity so
+         * the Lazy-3D feature can reuse the live USB connection MainActivity already owns
+         * (it's where glasses permission and interface claims happen).
+         */
+        @Volatile var glassesControllerForPlayback: GlassesController? = null
+            private set
     }
 }

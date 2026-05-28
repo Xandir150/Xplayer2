@@ -140,6 +140,17 @@ class OuToSbsGlView @JvmOverloads constructor(
         requestRender()
     }
 
+    /**
+     * Set a small parallax offset to apply to every sampled texel, in normalized
+     * texture units (positive X shifts the picture right on screen, positive Y shifts up).
+     * Drive this from [com.teleteh.xplayer2.data.glasses.HeadPoseTracker] to fake depth via
+     * head-tracking when the "Lazy 3D" feature is active. Pass 0/0 to disable.
+     */
+    fun setParallaxOffset(x: Float, y: Float) {
+        renderer.setParallaxOffset(x, y)
+        requestRender()
+    }
+
     private inner class OuToSbsRenderer : Renderer, SurfaceTexture.OnFrameAvailableListener {
         private var textureId: Int = 0
         private var surfaceTexture: SurfaceTexture? = null
@@ -151,6 +162,8 @@ class OuToSbsGlView @JvmOverloads constructor(
         val sourceIsSbs = AtomicBoolean(false)
         val swapEyes = AtomicBoolean(false)
         val duplicateMonoToSbs = AtomicBoolean(false)
+        @Volatile var parallaxX: Float = 0f
+        @Volatile var parallaxY: Float = 0f
 
         private var program = 0
         private var aPosLoc = 0
@@ -159,6 +172,7 @@ class OuToSbsGlView @JvmOverloads constructor(
         private var uTexMatrixLoc = 0
         private var uScaleLoc = 0
         private var uOffsetLoc = 0
+        private var uParallaxLoc = 0
 
         @Volatile private var leftEyeShiftNorm: Float = 0f
         @Volatile private var rightEyeShiftNorm: Float = 0f
@@ -184,6 +198,7 @@ class OuToSbsGlView @JvmOverloads constructor(
             uTexMatrixLoc = GLES20.glGetUniformLocation(program, "uTexMatrix")
             uScaleLoc = GLES20.glGetUniformLocation(program, "uScale")
             uOffsetLoc = GLES20.glGetUniformLocation(program, "uOffset")
+            uParallaxLoc = GLES20.glGetUniformLocation(program, "uParallax")
 
             textureId = createOesTexture()
             surfaceTexture = SurfaceTexture(textureId).also {
@@ -354,6 +369,7 @@ class OuToSbsGlView @JvmOverloads constructor(
             GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, texMatrix, 0)
             GLES20.glUniform2f(uScaleLoc, scaleX, scaleY)
             GLES20.glUniform2f(uOffsetLoc, offsetX, offsetY)
+            GLES20.glUniform2f(uParallaxLoc, parallaxX, parallaxY)
             vertexData.position(0)
             GLES20.glEnableVertexAttribArray(aPosLoc)
             GLES20.glVertexAttribPointer(aPosLoc, 2, GLES20.GL_FLOAT, false, 16, vertexData)
@@ -397,6 +413,11 @@ class OuToSbsGlView @JvmOverloads constructor(
 
         fun updateResizeMode(mode: Int) {
             resizeMode = mode
+        }
+
+        fun setParallaxOffset(x: Float, y: Float) {
+            parallaxX = x
+            parallaxY = y
         }
 
         fun updateVideoAspectRatio(width: Int, height: Int) {
@@ -491,11 +512,21 @@ uniform samplerExternalOES uTexture;
 uniform mat4 uTexMatrix;
 uniform vec2 uScale;
 uniform vec2 uOffset;
+// "Lazy 3D" parallax: small per-frame texel shift driven from the goggles' IMU.
+// Driven by HeadPoseTracker via OuToSbsGlView.setParallaxOffset(). Zero when the
+// feature is off, so this shader is identical to the original in that case.
+uniform vec2 uParallax;
 void main() {
   // Apply SurfaceTexture transform first to account for decoder orientation,
   // then crop to top/bottom half in the transformed texture space
   vec2 tc = (uTexMatrix * vec4(vTexCoord, 0.0, 1.0)).xy;
-  tc = tc * uScale + uOffset;
-  gl_FragColor = texture2D(uTexture, tc);
+  // Apply just enough overscan zoom to cover the current parallax magnitude so the
+  // shifted picture stays edge-to-edge. When the IMU isn't active (uParallax == 0)
+  // the factor is exactly 1.0 — i.e. behaviour is identical to the original shader.
+  float pmag = length(uParallax);
+  float overscan = 1.0 - clamp(pmag * 1.6, 0.0, 0.1);
+  vec2 zoomed = (tc - 0.5) * overscan + 0.5;
+  vec2 finalTc = zoomed * uScale + uOffset + uParallax * uScale;
+  gl_FragColor = texture2D(uTexture, finalTc);
 }
 """

@@ -39,6 +39,7 @@ class RemoteControlActivity : AppCompatActivity() {
     private lateinit var btnSbs: MaterialButton
     private lateinit var btnShift: MaterialButton
     private lateinit var btnResizeMode: MaterialButton
+    private lateinit var btnLazy3d: MaterialButton
 
     private val handler = Handler(Looper.getMainLooper())
     private val updateRunnable = object : Runnable {
@@ -67,6 +68,7 @@ class RemoteControlActivity : AppCompatActivity() {
         btnSbs = findViewById(R.id.btnSbs)
         btnShift = findViewById(R.id.btnShift)
         btnResizeMode = findViewById(R.id.btnResizeMode)
+        btnLazy3d = findViewById(R.id.btnLazy3d)
 
         // Play/Pause
         btnPlayPause.setOnClickListener {
@@ -111,6 +113,15 @@ class RemoteControlActivity : AppCompatActivity() {
         btnResizeMode.setOnClickListener {
             val newLabel = PlayerActivity.currentInstance?.cycleResizeMode()
             if (newLabel != null) btnResizeMode.text = newLabel
+        }
+
+        // Lazy 3D: head-tracking parallax from the goggles' IMU. The button is only shown
+        // when XREAL Air-series glasses (the brand we can read IMU from) are attached; for
+        // any other brand the row stays hidden.
+        btnLazy3d.setOnClickListener {
+            val player = PlayerActivity.currentInstance ?: return@setOnClickListener
+            player.setLazy3dEnabled(!player.isLazy3dEnabled())
+            updateButtons()
         }
 
         // Audio track
@@ -319,6 +330,17 @@ class RemoteControlActivity : AppCompatActivity() {
 
         // Resize mode (Auto/16:9/...). Label only — no checked state.
         btnResizeMode.text = player.getResizeModeLabel()
+
+        // Lazy 3D toggle visible only when XREAL glasses are connected (the brand we read IMU
+        // from). Other brands leave the button hidden so the UI doesn't claim a feature we
+        // can't actually run.
+        val brand = com.teleteh.xplayer2.MainActivity.glassesControllerForPlayback?.currentBrand()
+        btnLazy3d.visibility = if (brand == com.teleteh.xplayer2.data.glasses.GlassesController.Brand.XREAL) {
+            View.VISIBLE
+        } else View.GONE
+        val lazy3d = player.isLazy3dEnabled()
+        btnLazy3d.isChecked = lazy3d
+        applyButtonStyle(btnLazy3d, lazy3d)
     }
 
     private fun applyButtonStyle(btn: MaterialButton, checked: Boolean) {

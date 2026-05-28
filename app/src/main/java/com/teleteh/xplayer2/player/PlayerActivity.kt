@@ -71,6 +71,9 @@ import com.teleteh.xplayer2.MainActivity
 import com.teleteh.xplayer2.R
 import com.teleteh.xplayer2.data.RecentEntry
 import com.teleteh.xplayer2.data.RecentStore
+import com.teleteh.xplayer2.data.glasses.GlassesController
+import com.teleteh.xplayer2.data.glasses.HeadPoseTracker
+import com.teleteh.xplayer2.data.glasses.XrealImuReader
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import com.teleteh.xplayer2.util.VideoStreamExtractor
 import androidx.lifecycle.lifecycleScope
@@ -119,6 +122,14 @@ class PlayerActivity : AppCompatActivity() {
     // Audio gain via LoudnessEnhancer (persisted globally in player_prefs)
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var lastAudioSessionId: Int = C.AUDIO_SESSION_ID_UNSET
+
+    // "Lazy 3D" head-tracking parallax. IMU reader is only spun up while the toggle is on,
+    // so a phone with goggles attached but the feature off costs nothing.
+    private var lazy3dEnabled: Boolean = false
+    private var imuReader: XrealImuReader? = null
+    private val headPoseTracker = HeadPoseTracker()
+    private val poseUiHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var pendingPoseTick: Runnable? = null
 
     private var audioMenuRoot: android.widget.FrameLayout? = null
     private var audioMenuCenter: LinearLayout? = null
@@ -845,6 +856,7 @@ class PlayerActivity : AppCompatActivity() {
             currentInstance = null
         }
         saveProgress()
+        if (lazy3dEnabled) stopLazy3d()
         releaseLoudnessEnhancer()
         player?.release()
         player = null
@@ -1586,6 +1598,72 @@ class PlayerActivity : AppCompatActivity() {
         btnShiftRef?.isChecked = sbsShiftEnabled
         applySbsShiftIfNeeded()
         saveProgress()
+    }
+
+    // --- Lazy 3D (head-tracking parallax via XREAL IMU) ---
+
+    /** Whether the Lazy-3D toggle is currently on. */
+    fun isLazy3dEnabled(): Boolean = lazy3dEnabled
+
+    /**
+     * Turn the Lazy-3D parallax feature on or off. Starting it spins up the IMU reader
+     * on the glasses' HID interface and starts feeding gyro samples to the head-pose
+     * tracker, which in turn drives the parallax uniform in [OuToSbsGlView]. Turning
+     * it off stops the reader, releases the IMU stream on the glasses, resets the
+     * picture offset to zero, and re-centres the pose for the next session.
+     */
+    fun setLazy3dEnabled(enabled: Boolean) {
+        if (enabled == lazy3dEnabled) return
+        lazy3dEnabled = enabled
+        if (enabled) {
+            startLazy3d()
+        } else {
+            stopLazy3d()
+        }
+    }
+
+    private fun startLazy3d() {
+        val deviceConnection = MainActivity.glassesControllerForPlayback?.connectionForFeature()
+        if (deviceConnection == null) {
+            android.util.Log.w("XPlayer2", "Lazy 3D requested but no glasses connection available")
+            lazy3dEnabled = false
+            return
+        }
+        val (dev, conn) = deviceConnection
+        headPoseTracker.reset()
+        val reader = XrealImuReader(dev, conn)
+        val started = reader.start { gx, gy, gz, t ->
+            headPoseTracker.accumulate(gx, gy, gz, t)
+        }
+        if (!started) {
+            android.util.Log.w("XPlayer2", "Lazy 3D: IMU reader failed to start")
+            lazy3dEnabled = false
+            return
+        }
+        imuReader = reader
+        // Drive the GL uniform from the main thread on a fixed cadence — the GL view will only
+        // redraw when a new video frame arrives, so re-running every ~16 ms is enough to keep
+        // the parallax current without burning extra cycles between frames.
+        val tick = object : Runnable {
+            override fun run() {
+                val (x, y) = headPoseTracker.snapshot()
+                glView?.setParallaxOffset(x, y)
+                if (lazy3dEnabled) poseUiHandler.postDelayed(this, 16)
+            }
+        }
+        pendingPoseTick = tick
+        poseUiHandler.post(tick)
+        android.util.Log.i("XPlayer2", "Lazy 3D enabled (IMU streaming)")
+    }
+
+    private fun stopLazy3d() {
+        pendingPoseTick?.let { poseUiHandler.removeCallbacks(it) }
+        pendingPoseTick = null
+        imuReader?.stop()
+        imuReader = null
+        glView?.setParallaxOffset(0f, 0f)
+        headPoseTracker.reset()
+        android.util.Log.i("XPlayer2", "Lazy 3D disabled")
     }
 
     /** Current resize-mode label for the RemoteControlActivity to display. */

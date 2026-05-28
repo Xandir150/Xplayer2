@@ -163,6 +163,17 @@ class GlassesController(private val appContext: Context) {
 
     fun lastMode(): Int = lastReportedMode
 
+    /**
+     * Hand the live USB connection + device to a feature that needs to read from a
+     * different endpoint (e.g. [XrealImuReader]). Returns null until the user grants
+     * USB permission and we successfully claim the HID interfaces.
+     */
+    fun connectionForFeature(): Pair<UsbDevice, UsbDeviceConnection>? {
+        val d = device ?: return null
+        val c = connection ?: return null
+        return d to c
+    }
+
     // --- internals ---
 
     private fun findAttachedGlasses(): UsbDevice? =
