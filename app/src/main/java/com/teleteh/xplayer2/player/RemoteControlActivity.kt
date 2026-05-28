@@ -38,6 +38,7 @@ class RemoteControlActivity : AppCompatActivity() {
     private lateinit var btnPlayPause: ImageButton
     private lateinit var btnSbs: MaterialButton
     private lateinit var btnShift: MaterialButton
+    private lateinit var btnResizeMode: MaterialButton
 
     private val handler = Handler(Looper.getMainLooper())
     private val updateRunnable = object : Runnable {
@@ -65,6 +66,7 @@ class RemoteControlActivity : AppCompatActivity() {
         btnPlayPause = findViewById(R.id.btnPlayPause)
         btnSbs = findViewById(R.id.btnSbs)
         btnShift = findViewById(R.id.btnShift)
+        btnResizeMode = findViewById(R.id.btnResizeMode)
 
         // Play/Pause
         btnPlayPause.setOnClickListener {
@@ -103,6 +105,12 @@ class RemoteControlActivity : AppCompatActivity() {
         btnShift.setOnClickListener {
             PlayerActivity.currentInstance?.toggleShift()
             updateButtons()
+        }
+
+        // Resize mode cycle (mirrors the overlay button on the goggles side)
+        btnResizeMode.setOnClickListener {
+            val newLabel = PlayerActivity.currentInstance?.cycleResizeMode()
+            if (newLabel != null) btnResizeMode.text = newLabel
         }
 
         // Audio track
@@ -308,6 +316,9 @@ class RemoteControlActivity : AppCompatActivity() {
         val shiftEnabled = player.isShiftEnabled()
         btnShift.isChecked = shiftEnabled
         applyButtonStyle(btnShift, shiftEnabled)
+
+        // Resize mode (Auto/16:9/...). Label only — no checked state.
+        btnResizeMode.text = player.getResizeModeLabel()
     }
 
     private fun applyButtonStyle(btn: MaterialButton, checked: Boolean) {

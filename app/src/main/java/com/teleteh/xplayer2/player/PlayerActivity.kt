@@ -1222,56 +1222,65 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * Decide whether the source frame is laid out side-by-side (LEFT_RIGHT) or over-under
-     * (TOP_BOTTOM / mono), forward that to the GL renderer via setSourceIsSbs, and — when
-     * the user has not yet picked an SBS state for this clip — auto-enable the OU→SBS
-     * toggle for OU sources (the project's main feature).
-     *
-     * Detection only runs for offline sources (file:// / content:// / smb://). HTTP(S) streams
-     * rarely carry MKV/MP4 stereo metadata and the aspect-ratio heuristic produces too many
-     * false positives there, so we leave the manual SBS button as the only signal.
-     *
-     * Order of precedence:
-     *  1. Format.stereoMode from the selected video track (read in onTracksChanged).
-     *  2. Aspect-ratio heuristic on the source video size.
+     * Three layouts the source frame might be in.
      */
-    private fun applySourceLayoutDetection() {
-        val isOnline = (resolvedStreamUri ?: sourceUri)?.scheme?.lowercase() in setOf("http", "https")
-        if (isOnline) return // setSourceIsSbs is useless without reliable metadata
+    private enum class SourceLayout { Mono, Sbs, Ou }
 
-        val stereo = detectedSourceStereoMode
+    /**
+     * Single source of truth for "what is the layout of this video?". Metadata first
+     * (MKV StereoMode / MP4 st3d/sv3d in Format.stereoMode), aspect heuristic as fallback.
+     * Online streams almost never carry stereo metadata, so for them we rely entirely on the
+     * aspect fallback (which is safer than filename parsing — filenames are arbitrary).
+     *
+     * Aspect thresholds:
+     *   - aspect ≥ 1.95 → SBS source (wider than mono 16:9 = 1.78; covers 2:1, 21:9 cinema-SBS,
+     *     32:9 Half-SBS). Anything close to but not quite 16:9 is treated as mono since pure
+     *     16:9 frames are ambiguous with Full-SBS / Full-OU encoded into the same canvas.
+     *   - aspect ≤ 1.05 → OU source (1:1 stacked, 8:9 Half-OU).
+     *   - otherwise   → mono (ambiguous Full-* formats fall here and need a manual SBS toggle).
+     */
+    private fun detectSourceLayout(): SourceLayout {
+        when (detectedSourceStereoMode) {
+            C.STEREO_MODE_LEFT_RIGHT -> return SourceLayout.Sbs
+            C.STEREO_MODE_TOP_BOTTOM -> return SourceLayout.Ou
+            C.STEREO_MODE_MONO -> return SourceLayout.Mono
+        }
         val w = lastVideoWidth
         val h = lastVideoHeight
-        val aspect = if (w > 0 && h > 0) w.toFloat() / h.toFloat() else 0f
-
-        // Aspect ranges for half-packed stereo content (the common XR delivery format):
-        //   Half-SBS:  3840x1080 → ≈3.56,  1920x540  → ≈3.56
-        //   Half-OU:   1920x2160 → ≈0.89,  3840x2160 → ≈1.78 (ambiguous with mono 16:9)
-        val (sourceIsSbs, sourceIsOu) = when (stereo) {
-            C.STEREO_MODE_LEFT_RIGHT -> true to false
-            C.STEREO_MODE_TOP_BOTTOM -> false to true
-            C.STEREO_MODE_MONO -> false to false
-            else -> {
-                val sbsByAspect = aspect >= 2.5f
-                val ouByAspect = aspect in 0.4f..1.15f && aspect > 0f
-                sbsByAspect to (ouByAspect && !sbsByAspect)
-            }
+        if (w <= 0 || h <= 0) return SourceLayout.Mono
+        val aspect = w.toFloat() / h.toFloat()
+        return when {
+            aspect >= 1.95f -> SourceLayout.Sbs
+            aspect <= 1.05f -> SourceLayout.Ou
+            else -> SourceLayout.Mono
         }
-        glView?.setSourceIsSbs(sourceIsSbs)
+    }
 
-        // Auto OU→SBS: kick the SBS toggle on for OU sources the first time we recognise them.
-        // We only do this when the user (or a saved Recent entry) hasn't already chosen a state,
-        // so subsequent manual flips stick.
-        if (!sbsExplicitlyConfigured && sourceIsOu && !getStereoSbs()) {
-            android.util.Log.i("XPlayer2", "Auto-enabling SBS for OU source (stereoMode=$stereo, aspect=$aspect)")
+    /**
+     * Apply the result of detectSourceLayout() to the GL renderer and — when the user has not
+     * yet picked an SBS state for this clip — auto-enable the OU→SBS toggle for detected OU
+     * sources (the project's main feature). For SBS sources we leave the SBS toggle OFF: the
+     * goggles' display hardware does the L/R split automatically when the panel is in
+     * 3840x1080 SBS mode, so the cleanest output is just to pass the frame straight through.
+     */
+    private fun applySourceLayoutDetection() {
+        val layout = detectSourceLayout()
+        glView?.setSourceIsSbs(layout == SourceLayout.Sbs)
+
+        // Auto OU→SBS: flip the SBS toggle on the first time we see an OU source for this
+        // clip. Skip when the user (or a saved Recent entry) has already chosen an SBS state.
+        if (!sbsExplicitlyConfigured && layout == SourceLayout.Ou && !getStereoSbs()) {
+            android.util.Log.i("XPlayer2", "Auto-enabling SBS for OU source (layout=$layout)")
             setStereoSbs(true)
             glView?.setSbsEnabled(true)
             btnSbsRef?.let { applySbsButtonVisual(it) }
             applySbsShiftIfNeeded()
             updateSbsUi() // already calls applyVideoPipeline()
-            // Don't mark sbsExplicitlyConfigured — leave room for the user to disable later
-            // without losing the auto-detect chance for a different clip.
             saveProgress()
+        } else {
+            // Layout might have changed without flipping the SBS toggle (e.g. SBS source on
+            // ultrawide display should drop duplicate-mono). Re-evaluate downstream UI.
+            updateSbsUi()
         }
     }
 
@@ -1360,15 +1369,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun applyResizeMode() {
-        btnResizeModeRef?.text = when (resizeMode) {
-            1 -> "16:9"
-            2 -> "4:3"
-            3 -> "21:9"
-            4 -> "32:9"
-            5 -> "1:1"
-            6 -> "2.39:1"
-            else -> "Auto"
-        }
+        btnResizeModeRef?.text = resizeModeLabel(resizeMode)
         glView?.updateResizeMode(resizeMode)
     }
 
@@ -1476,24 +1477,11 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * Check if video appears to be stereo based on aspect ratio:
-     * - SBS (Side-by-Side): ~2:1 aspect ratio (each eye is 1:1 or 16:9 after split)
-     * - OU (Over-Under): ~1:1 aspect ratio (each eye is 2:1 or 16:9 after split)
+     * Whether the source video is stereo (SBS or OU). Shares the same logic as
+     * [detectSourceLayout] so the duplicate-mono path and the source-is-sbs path
+     * can never disagree on a given clip.
      */
-    private fun isVideoStereo(): Boolean {
-        val vw = lastVideoWidth
-        val vh = lastVideoHeight
-        if (vw <= 0 || vh <= 0) return false
-        
-        val aspect = vw.toFloat() / vh.toFloat()
-        // SBS: aspect ~2:1 (1.8 - 2.2) or ~32:9 (3.4 - 3.8)
-        // OU: aspect ~1:1 (0.9 - 1.1) or ~8:9 (0.85 - 0.95)
-        val isSbs = aspect in 1.8f..2.2f || aspect in 3.4f..3.8f
-        val isOu = aspect in 0.85f..1.15f
-        
-        android.util.Log.d("XPlayer2", "isVideoStereo: ${vw}x${vh}, aspect=$aspect, isSbs=$isSbs, isOu=$isOu")
-        return isSbs || isOu
-    }
+    private fun isVideoStereo(): Boolean = detectSourceLayout() != SourceLayout.Mono
     
     private fun updateSbsUi() {
         val dm = resources.displayMetrics
@@ -1598,6 +1586,28 @@ class PlayerActivity : AppCompatActivity() {
         btnShiftRef?.isChecked = sbsShiftEnabled
         applySbsShiftIfNeeded()
         saveProgress()
+    }
+
+    /** Current resize-mode label for the RemoteControlActivity to display. */
+    fun getResizeModeLabel(): String = resizeModeLabel(resizeMode)
+
+    /** Advance through the resize-mode cycle (same one the player overlay button uses)
+     *  and return the new label so a remote UI can refresh its button text. */
+    fun cycleResizeMode(): String {
+        resizeMode = (resizeMode + 1) % 7
+        applyResizeMode()
+        saveProgress()
+        return resizeModeLabel(resizeMode)
+    }
+
+    private fun resizeModeLabel(mode: Int): String = when (mode) {
+        1 -> "16:9"
+        2 -> "4:3"
+        3 -> "21:9"
+        4 -> "32:9"
+        5 -> "1:1"
+        6 -> "2.39:1"
+        else -> "Auto"
     }
 
     /**

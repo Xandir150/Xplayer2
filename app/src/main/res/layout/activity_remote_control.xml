@@ -63,6 +63,17 @@
             android:checkable="true" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnResizeMode"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="56dp"
+            android:layout_marginEnd="8dp"
+            android:text="Auto"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnShift"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="0dp"
