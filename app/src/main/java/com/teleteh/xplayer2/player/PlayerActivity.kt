@@ -127,6 +127,10 @@ class PlayerActivity : AppCompatActivity() {
     // Source layout detected from container metadata (Media3 Format.stereoMode).
     // null means "no explicit metadata; fall back to aspect-ratio heuristic".
     private var detectedSourceStereoMode: Int? = null
+    // Becomes true once the user has chosen an SBS state explicitly — either by tapping the
+    // SBS toolbar button, or because a saved Recent entry already had sbsEnabled set. While
+    // false, auto-detection is allowed to flip the SBS toggle on OU sources.
+    private var sbsExplicitlyConfigured: Boolean = false
     // Foreground service for external playback
     private var playbackService: PlaybackService? = null
     private var serviceBound = false
@@ -208,6 +212,7 @@ class PlayerActivity : AppCompatActivity() {
         btnSbs.isChecked = getStereoSbs()
         applySbsButtonVisual(btnSbs)
         btnSbs.setOnClickListener {
+            sbsExplicitlyConfigured = true
             toggleStereoMode()
             applySbsButtonVisual(btnSbs)
         }
@@ -505,6 +510,9 @@ class PlayerActivity : AppCompatActivity() {
                 android.util.Log.i("XPlayer2", "Initializing SBS: recent?.sbsEnabled=${recent?.sbsEnabled}, ultraWide=$ultraWide, initialSbs=$initialSbs")
                 setStereoSbs(initialSbs)
                 glView?.setSbsEnabled(initialSbs)
+                // If the user already configured SBS for this clip (Recent entry carries a value),
+                // keep auto-detect out of the way. New clips are still eligible for auto OU→SBS.
+                sbsExplicitlyConfigured = recent?.sbsEnabled != null
                 // Don't set duplicateMonoToSbs here - wait for onVideoSizeChanged to know if video is stereo
                 // Initially disable duplication, it will be enabled in updateSbsUi() if needed
                 glView?.setDuplicateMonoToSbs(false)
@@ -1102,7 +1110,9 @@ class PlayerActivity : AppCompatActivity() {
 
     /**
      * Decide whether the source frame is laid out side-by-side (LEFT_RIGHT) or over-under
-     * (TOP_BOTTOM / mono), and forward the result to the GL renderer via setSourceIsSbs.
+     * (TOP_BOTTOM / mono), forward that to the GL renderer via setSourceIsSbs, and — when
+     * the user has not yet picked an SBS state for this clip — auto-enable the OU→SBS
+     * toggle for OU sources (the project's main feature).
      *
      * Detection only runs for offline sources (file:// / content:// / smb://). HTTP(S) streams
      * rarely carry MKV/MP4 stereo metadata and the aspect-ratio heuristic produces too many
@@ -1115,24 +1125,41 @@ class PlayerActivity : AppCompatActivity() {
     private fun applySourceLayoutDetection() {
         val isOnline = (resolvedStreamUri ?: sourceUri)?.scheme?.lowercase() in setOf("http", "https")
         if (isOnline) return // setSourceIsSbs is useless without reliable metadata
+
         val stereo = detectedSourceStereoMode
-        val sourceIsSbs = when (stereo) {
-            C.STEREO_MODE_LEFT_RIGHT -> true
-            C.STEREO_MODE_TOP_BOTTOM, C.STEREO_MODE_MONO -> false
+        val w = lastVideoWidth
+        val h = lastVideoHeight
+        val aspect = if (w > 0 && h > 0) w.toFloat() / h.toFloat() else 0f
+
+        // Aspect ranges for half-packed stereo content (the common XR delivery format):
+        //   Half-SBS:  3840x1080 → ≈3.56,  1920x540  → ≈3.56
+        //   Half-OU:   1920x2160 → ≈0.89,  3840x2160 → ≈1.78 (ambiguous with mono 16:9)
+        val (sourceIsSbs, sourceIsOu) = when (stereo) {
+            C.STEREO_MODE_LEFT_RIGHT -> true to false
+            C.STEREO_MODE_TOP_BOTTOM -> false to true
+            C.STEREO_MODE_MONO -> false to false
             else -> {
-                // Aspect heuristic for half-formats (most common stereo packaging for XR):
-                //   Half-SBS 3840x1080 → aspect ≈ 3.56
-                //   Half-OU  1920x2160 → aspect ≈ 0.89
-                //   Anything in between we treat as ambiguous and leave as OU (default).
-                val w = lastVideoWidth
-                val h = lastVideoHeight
-                if (w > 0 && h > 0) {
-                    val aspect = w.toFloat() / h.toFloat()
-                    aspect >= 2.5f
-                } else false
+                val sbsByAspect = aspect >= 2.5f
+                val ouByAspect = aspect in 0.4f..1.15f && aspect > 0f
+                sbsByAspect to (ouByAspect && !sbsByAspect)
             }
         }
         glView?.setSourceIsSbs(sourceIsSbs)
+
+        // Auto OU→SBS: kick the SBS toggle on for OU sources the first time we recognise them.
+        // We only do this when the user (or a saved Recent entry) hasn't already chosen a state,
+        // so subsequent manual flips stick.
+        if (!sbsExplicitlyConfigured && sourceIsOu && !getStereoSbs()) {
+            android.util.Log.i("XPlayer2", "Auto-enabling SBS for OU source (stereoMode=$stereo, aspect=$aspect)")
+            setStereoSbs(true)
+            glView?.setSbsEnabled(true)
+            btnSbsRef?.let { applySbsButtonVisual(it) }
+            applySbsShiftIfNeeded()
+            updateSbsUi()
+            // Don't mark sbsExplicitlyConfigured — leave room for the user to disable later
+            // without losing the auto-detect chance for a different clip.
+            saveProgress()
+        }
     }
 
     private fun applyResizeMode() {
