@@ -270,8 +270,18 @@ object VideoStreamExtractor {
         val ownerId = parts[0]
         val id = parts[1]
 
-        // Method 1 (Primary): Use embed player page - most reliable!
-        // The embed page contains HLS URLs directly in the HTML
+        // Method 1 (Primary): al_video.php XHR endpoint.
+        // VK no longer ships stream URLs inside video_ext.php — that page became an empty
+        // JS shell, which is why the old HTML scraping started returning nothing. The web
+        // player now pulls them from al_video.php, so we replicate that request. A desktop
+        // UA is required (a mobile UA gets a stripped payload with no player params). The
+        // signed CDN URLs are IP-locked but not UA-locked, so ExoPlayer on the same device
+        // plays them fine.
+        extractVkViaApi("${ownerId}_$id")?.let { return@withContext it }
+        Log.d(TAG, "VK al_video.php yielded nothing, falling back to legacy HTML scraping")
+
+        // Method 2 (Legacy fallback): embed player page HTML scraping.
+        // The embed page used to contain HLS URLs directly in the HTML.
         val embedUrl = "https://vk.com/video_ext.php?oid=$ownerId&id=$id&hash=0"
         Log.d(TAG, "Trying VK embed page: $embedUrl")
         val embedHtml = fetchPage(embedUrl)
@@ -310,7 +320,7 @@ object VideoStreamExtractor {
             }
         }
 
-        // Method 2: Try regular video page as fallback
+        // Method 3: Try regular video page as fallback
         val urls = listOf(
             "https://vk.com/video${ownerId}_$id"
         )
@@ -467,26 +477,105 @@ object VideoStreamExtractor {
         return result.trim()
     }
     
-    private fun extractVkUrlsFromJson(json: JSONObject): ExtractedStream? {
-        val title = json.optString("title").takeIf { it.isNotBlank() }
-        
-        // Try HLS first
-        val hlsUrl = json.optString("hls").takeIf { it.isNotBlank() }
-            ?: json.optString("hls_ondemand").takeIf { it.isNotBlank() }
-        if (!hlsUrl.isNullOrBlank()) {
-            return ExtractedStream(decodeUrl(hlsUrl), title, "hls")
+    /**
+     * Primary VK extraction: POST to the al_video.php XHR endpoint the web player uses.
+     * Response envelope (windows-1251): {"payload":[code, [title, html, ..., opts]]},
+     * with stream URLs in opts.player.params[0] (hls_ondemand / urlNNNN).
+     */
+    private fun extractVkViaApi(videoFull: String): ExtractedStream? {
+        val json = postAlVideo(videoFull) ?: return null
+        val payload = json.optJSONArray("payload")
+        if (payload == null) {
+            Log.w(TAG, "VK al_video: response has no payload array")
+            return null
         }
-        
-        // Try MP4 URLs
-        val qualities = listOf("url1080", "url720", "url480", "url360", "url240")
-        for (q in qualities) {
-            val url = json.optString(q).takeIf { it.isNotBlank() }
-            if (!url.isNullOrBlank()) {
-                return ExtractedStream(decodeUrl(url), title, q.removePrefix("url"))
+        // payload = [code, inner]; code is 0 (Int) on success, a string (e.g. "8") on error.
+        val codeOk = when (val c = payload.opt(0)) {
+            is Number -> c.toInt() == 0
+            is String -> c == "0"
+            else -> false
+        }
+        val inner = payload.optJSONArray(1)
+        if (!codeOk || inner == null) {
+            Log.w(TAG, "VK al_video: error response (code=${payload.opt(0)})")
+            return null
+        }
+        val opts = inner.optJSONObject(inner.length() - 1)
+        if (opts == null) {
+            Log.w(TAG, "VK al_video: payload has no opts object")
+            return null
+        }
+        if (opts.optInt("player_unavailable", 0) == 1) {
+            Log.w(TAG, "VK al_video: player_unavailable for $videoFull")
+            return null
+        }
+        val p = opts.optJSONObject("player")?.optJSONArray("params")?.optJSONObject(0)
+        if (p == null) {
+            Log.w(TAG, "VK al_video: no player.params[0] in response")
+            return null
+        }
+        val title = p.optString("md_title").takeIf { it.isNotBlank() }
+            ?: p.optString("md_author").takeIf { it.isNotBlank() }
+        return extractVkPlayerParams(p, title)
+    }
+
+    /** Pick the best playable stream from a VK player params[0] object. */
+    private fun extractVkPlayerParams(p: JSONObject, title: String?): ExtractedStream? {
+        // Adaptive HLS first: one URL carries every quality + audio track and plays via
+        // the media3 HLS module. (dash_ondemand is skipped on purpose — no DASH module.)
+        for (key in listOf("hls_ondemand", "hls")) {
+            val u = p.optString(key).takeIf { it.startsWith("http") }
+            if (u != null) {
+                Log.i(TAG, "VK HLS extracted (title=$title)")
+                return ExtractedStream(decodeUrl(u), title, "hls")
             }
         }
-        
+        // Progressive MP4 fallback, highest resolution first.
+        for (q in listOf("url2160", "url1440", "url1080", "url720", "url480", "url360", "url240")) {
+            val u = p.optString(q).takeIf { it.startsWith("http") }
+            if (u != null) {
+                val label = q.removePrefix("url") + "p"
+                Log.i(TAG, "VK MP4 $label extracted (title=$title)")
+                return ExtractedStream(decodeUrl(u), title, label)
+            }
+        }
+        Log.w(TAG, "VK al_video: params[0] had no hls/url* fields")
         return null
+    }
+
+    private fun postAlVideo(videoFull: String): JSONObject? {
+        return try {
+            Log.d(TAG, "POST al_video.php for video=$videoFull")
+            val conn = (URL("https://vk.com/al_video.php").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 15000
+                readTimeout = 20000
+                doOutput = true
+                // Desktop UA: a mobile UA returns a stripped payload with no player params.
+                setRequestProperty("User-Agent", API_USER_AGENT)
+                setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                setRequestProperty("X-Requested-With", "XMLHttpRequest")
+                setRequestProperty("Referer", "https://vk.com/al_video.php")
+                setRequestProperty("Accept", "*/*")
+                setRequestProperty("Accept-Language", "en-US,en;q=0.9,ru;q=0.8")
+                setRequestProperty("Accept-Encoding", "identity")
+                instanceFollowRedirects = true
+            }
+            conn.outputStream.use { it.write("act=show&video=$videoFull&al=1".toByteArray(Charsets.US_ASCII)) }
+            val code = conn.responseCode
+            Log.d(TAG, "al_video.php HTTP $code")
+            if (code !in 200..299) {
+                Log.w(TAG, "al_video.php returned HTTP $code")
+                return null
+            }
+            // VK serves this JSON as windows-1251; decode directly so md_title stays correct.
+            val text = conn.inputStream.bufferedReader(charset("windows-1251")).use { it.readText() }
+            val start = text.indexOf('{')
+            JSONObject(if (start > 0) text.substring(start) else text)
+        } catch (e: Exception) {
+            Log.e(TAG, "al_video.php POST failed", e)
+            null
+        }
     }
 
     private fun extractOkRuVideoId(uri: Uri): String? {
@@ -509,7 +598,11 @@ object VideoStreamExtractor {
     // This is important because VK/OK generate URLs with srcIp and srcAg parameters
     // that are validated on the CDN side
     private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-    
+
+    // Desktop Chrome UA for the al_video.php API call: VK returns the full player payload
+    // (with params/hls) only for desktop clients; a mobile UA yields a stripped response.
+    private const val API_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+
     private fun fetchPage(urlStr: String): String? {
         return try {
             Log.d(TAG, "Fetching: $urlStr")
