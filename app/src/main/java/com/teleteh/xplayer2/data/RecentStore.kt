@@ -84,7 +84,8 @@ class RecentStore(private val context: Context) {
             sourceType = sourceType,
             resizeMode = optInt("resizeMode", 0),
             sourceIsSbs = optBoolean("sourceIsSbs", false),
-            stereoMode = optInt("stereoMode", -1)
+            stereoMode = optInt("stereoMode", -1),
+            volumeBoostMb = optInt("volumeBoostMb", 0)
         )
     } catch (_: Throwable) {
         null
@@ -103,6 +104,7 @@ class RecentStore(private val context: Context) {
         if (resizeMode != 0) put("resizeMode", resizeMode)
         if (sourceIsSbs) put("sourceIsSbs", sourceIsSbs)
         if (stereoMode >= 0) put("stereoMode", stereoMode)
+        if (volumeBoostMb > 0) put("volumeBoostMb", volumeBoostMb)
     }
 
     private fun ensureNiceTitle(entry: RecentEntry): String {

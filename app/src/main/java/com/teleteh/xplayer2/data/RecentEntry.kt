@@ -31,6 +31,9 @@ data class RecentEntry(
     // Persisted only when the user explicitly picked it, so a saved value overrides auto-detect
     // on reopen (important for Full-SBS / Full-OU clips that look like 2D by resolution).
     val stereoMode: Int = -1,
+    // Per-clip audio gain boost in millibels (0 = off, max 2400 = +24 dB). Per-clip because a
+    // gain that rescues a quiet upload clips/distorts a normally-mastered one.
+    val volumeBoostMb: Int = 0,
 ) {
     fun uriObj(): Uri = Uri.parse(uri)
     

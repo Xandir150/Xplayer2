@@ -33,7 +33,6 @@ import android.view.ViewGroup
 import android.view.Display
 import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.edit
 import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
@@ -123,9 +122,11 @@ class PlayerActivity : AppCompatActivity() {
     // 0=Auto, 1=16:9, 2=4:3, 3=21:9, 4=32:9, 5=1:1, 6=2.39:1
     private var resizeMode: Int = 0
 
-    // Audio gain via LoudnessEnhancer (persisted globally in player_prefs)
+    // Audio gain via LoudnessEnhancer. The boost level is per-clip (restored from / saved to
+    // the clip's RecentEntry), held here for the currently playing item.
     private var loudnessEnhancer: LoudnessEnhancer? = null
     private var lastAudioSessionId: Int = C.AUDIO_SESSION_ID_UNSET
+    private var volumeBoostMb: Int = 0
 
     // "Lazy 3D" — combined feature with two independent pieces, both gated by the same
     // toggle so the user just flips one switch:
@@ -602,6 +603,9 @@ class PlayerActivity : AppCompatActivity() {
                     stereoMode = StereoMode.Off
                     sbsExplicitlyConfigured = false
                 }
+                // Restore this clip's audio boost (0 = off). Applied once the audio session
+                // is ready — see rebindLoudnessEnhancer on onAudioSessionIdChanged.
+                volumeBoostMb = (recent?.volumeBoostMb ?: 0).coerceIn(0, 2400)
                 renderSourceIsSbs = false
                 renderDuplicateMono = false
                 applyRenderConfig()
@@ -886,12 +890,15 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     // --- Audio gain (LoudnessEnhancer) ---
-    private fun getVolumeBoostMb(): Int =
-        getSharedPreferences("player_prefs", MODE_PRIVATE).getInt("volume_boost_mb", 0).coerceIn(0, 2400)
+    // Per-clip: held in [volumeBoostMb], persisted to / restored from the clip's RecentEntry.
+    private fun getVolumeBoostMb(): Int = volumeBoostMb.coerceIn(0, 2400)
 
     private fun setVolumeBoostMb(value: Int) {
         val clamped = value.coerceIn(0, 2400)
-        getSharedPreferences("player_prefs", MODE_PRIVATE).edit { putInt("volume_boost_mb", clamped) }
+        volumeBoostMb = clamped
+        // Persist against the current clip so the level comes back when it is reopened —
+        // a boost that fixes one quiet upload would distort a normally-mastered video.
+        saveProgress()
         if (clamped <= 0) {
             // No boost requested — detach the effect entirely. Letting an enabled=false
             // LoudnessEnhancer linger on the audio session has been observed to lock the
@@ -1260,7 +1267,8 @@ class PlayerActivity : AppCompatActivity() {
             resizeMode = resizeMode,
             // Persist the stereo mode only when the user picked it manually (so auto-detected
             // values don't pollute the next session); -1 means "let auto-detect decide".
-            stereoMode = if (sbsExplicitlyConfigured) stereoMode.toInt() else -1
+            stereoMode = if (sbsExplicitlyConfigured) stereoMode.toInt() else -1,
+            volumeBoostMb = volumeBoostMb
         )
         RecentStore(this).upsert(entry)
     }
