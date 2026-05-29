@@ -116,9 +116,6 @@ class PlayerActivity : AppCompatActivity() {
     // Display id the Presentation is currently shown on (-1 = none). Used to tell apart "our
     // external panel went away" from any other display event.
     private var presentationDisplayId: Int = -1
-    // True when WE paused because the goggles' panel powered down (proximity sensor / external
-    // display removed) so we know to auto-resume when it comes back.
-    private var pausedByDisplayRemoval = false
     private val uiHandler = Handler(Looper.getMainLooper())
     private var sourceUri: Uri? = null
     private var titleCenterView: TextView? = null
@@ -756,26 +753,28 @@ class PlayerActivity : AppCompatActivity() {
         updateSbsUi()
     }
 
-    private var remoteControlLaunched = false
-    
     override fun onStart() {
         super.onStart()
         // Don't initialize player if stream extraction is in progress
         if (player == null && sourceUri != null && !isExtractingStream) initializePlayer()
         // Try to show Presentation on external display
         tryShowExternalPresentation()
-        // If Presentation is active, launch RemoteControlActivity on phone
-        launchRemoteControlIfNeeded()
+        // If the picture is on the goggles, bring the phone-side remote to the front.
+        showRemoteControlFront()
     }
 
-    /** Bring up the phone-side remote once the picture is on the external panel. */
-    private fun launchRemoteControlIfNeeded() {
-        if (presentation != null && !remoteControlLaunched) {
-            remoteControlLaunched = true
-            val intent = Intent(this, RemoteControlActivity::class.java)
-            intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-            startActivity(intent)
-        }
+    /**
+     * Bring the phone-side remote to the front while the picture is on the external panel. Uses
+     * REORDER_TO_FRONT + singleTop so an already-running remote (kept alive when the goggles come
+     * off) just resurfaces rather than relaunching. No-op when there's no external presentation
+     * (goggles off) — then the player itself stays in front on the phone. This keeps the stack as
+     * Main < Player < Remote and only flips which of Player/Remote is on top by display state.
+     */
+    private fun showRemoteControlFront() {
+        if (presentation == null) return
+        startActivity(Intent(this, RemoteControlActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        })
     }
 
     override fun onPause() {
@@ -1306,20 +1305,13 @@ class PlayerActivity : AppCompatActivity() {
         val extAlive = ext != null &&
             (dm?.getDisplay(ext.displayId)?.state ?: Display.STATE_ON) != Display.STATE_OFF
         if (extAlive) {
+            // Panel present (e.g. glasses connected after starting on the phone): move the
+            // picture to the goggles, push the saved mode and bring up the remote.
             val wasShowing = presentation != null
             tryShowExternalPresentation()
-            if (presentation != null) {
-                if (!wasShowing) {
-                    // Panel just (re)appeared (goggles put on): re-assert the saved glasses mode —
-                    // it may have powered up in 2D — and bring the phone-side remote back.
-                    MainActivity.glassesControllerForPlayback?.reapplySavedMode()
-                }
-                launchRemoteControlIfNeeded()
-                if (pausedByDisplayRemoval) {
-                    pausedByDisplayRemoval = false
-                    player?.playWhenReady = true
-                    android.util.Log.i("XPlayer2", "External panel back -> resumed playback")
-                }
+            if (presentation != null && !wasShowing) {
+                MainActivity.glassesControllerForPlayback?.reapplySavedMode()
+                showRemoteControlFront()
             }
         } else if (presentation != null) {
             onExternalPanelLost()
@@ -1327,15 +1319,12 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     // Goggles came off (proximity sensor cut the panel) or the external display was unplugged:
-    // pause and move the picture back to the phone, dropping the now-pointless remote so the
-    // player itself (paused) is what the user sees.
+    // just stop, as if the user hit Stop. The position is saved, so they pick the clip back up
+    // from Recent when ready. Far simpler and more predictable than juggling player/remote layers.
     private fun onExternalPanelLost() {
-        android.util.Log.i("XPlayer2", "External panel gone -> pause + move player to phone")
-        pausedByDisplayRemoval = true
-        player?.playWhenReady = false
-        dismissPresentation()                            // restores local (phone) rendering
-        remoteControlLaunched = false                    // let it re-open when the goggles return
-        RemoteControlActivity.currentInstance?.finish()  // reveals this PlayerActivity on the phone
+        android.util.Log.i("XPlayer2", "External panel gone -> stop playback")
+        saveProgress()
+        finishAndClose()
     }
 
     private fun saveProgress() {
