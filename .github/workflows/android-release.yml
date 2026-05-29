@@ -31,6 +31,15 @@ jobs:
       - name: Accept licenses
         run: yes | sdkmanager --licenses
 
+      - name: Download and extract VITURE SDK
+        # The VITURE One SDK .aar is fetched at build time (not committed — no redistribution)
+        # and dropped into app/libs, where the fileTree dependency picks it up.
+        run: |
+          curl -L -o viture_sdk.tar.xz https://static.viture.dev/external-file/sdk/viture_android_sdk_v1.0.7.tar.xz
+          tar -xf viture_sdk.tar.xz
+          mkdir -p app/libs
+          cp aar/VITURE-SDK-1.0.7.aar app/libs/
+
       - name: Decode keystore
         shell: bash
         env:

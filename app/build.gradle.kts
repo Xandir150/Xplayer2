@@ -56,6 +56,13 @@ android {
     buildFeatures {
         viewBinding = true
     }
+    packaging {
+        jniLibs {
+            // VITURE SDK ships libsdk.so (arm64-v8a + armeabi-v7a). Legacy packaging extracts it
+            // on install so System.loadLibrary finds it on older boxes (e.g. Amlogic S905Y4 / v7a).
+            useLegacyPackaging = true
+        }
+    }
 }
 
 dependencies {
@@ -85,6 +92,10 @@ dependencies {
     implementation(libs.tensorflow.lite)
     implementation(libs.tensorflow.lite.gpu)
     implementation(libs.tensorflow.lite.gpu.api)
+    // VITURE One SDK (ArManager) for VITURE glasses 2D/3D switching. The .aar is NOT committed
+    // (no redistribution): the release workflow downloads it into app/libs, and devs fetch it
+    // locally. The fileTree include is empty-safe if the .aar is absent (build still succeeds).
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

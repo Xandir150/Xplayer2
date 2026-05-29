@@ -63,6 +63,11 @@ class GlassesController(private val appContext: Context) {
     // goggles are linked. Exposed via [headOrientationDegrees]; null when nothing is streaming.
     private var imuReader: XrealImuReader? = null
     private val headOrientation = HeadOrientationTracker()
+    // VITURE glasses switch 2D/3D through their own SDK (ArManager), not our HID MCU. Created on
+    // connect for a VITURE device (the SDK owns the USB link + permission); null otherwise.
+    private var viture: VitureController? = null
+    private var vitureModeApplied = false
+    @Volatile private var vitureStarting = false
     // The user's chosen display mode is sticky: seeded from persisted prefs, not the hardware.
     private var lastReportedMode: Int = savedMode()
     // Interfaces we successfully claimed — we only ever release what we actually took.
@@ -152,6 +157,11 @@ class GlassesController(private val appContext: Context) {
     fun isGlassesAttached(): Boolean = findAttachedGlasses() != null
 
     fun currentState(): ConnectionState = when {
+        currentBrand() == Brand.VITURE -> when {
+            viture?.isReady() == true -> ConnectionState.Connected
+            device != null -> ConnectionState.NeedsPermission
+            else -> ConnectionState.Disconnected
+        }
         connection != null -> ConnectionState.Connected
         device != null -> ConnectionState.NeedsPermission
         else -> ConnectionState.Disconnected
@@ -163,8 +173,9 @@ class GlassesController(private val appContext: Context) {
     /** Human-readable model string for the currently attached glasses, or null. */
     fun currentModel(): String? = (device ?: findAttachedGlasses())?.matchedDevice()?.model
 
-    /** True only for brands whose protocol we actually speak. Other brands need their vendor SDK. */
-    fun supportsRemoteSwitch(): Boolean = currentBrand() == Brand.XREAL
+    /** True only for brands whose protocol/SDK we actually speak: XREAL (HID MCU) and VITURE (SDK). */
+    fun supportsRemoteSwitch(): Boolean =
+        currentBrand() == Brand.XREAL || currentBrand() == Brand.VITURE
 
     /**
      * Send a `Write display mode` MCU command to the connected glasses.
@@ -176,8 +187,13 @@ class GlassesController(private val appContext: Context) {
      * The caller is expected to gate UI on [currentState] and [supportsRemoteSwitch] first.
      */
     fun setDisplayMode(mode: Int): Boolean {
-        if (!supportsRemoteSwitch()) return false
-        val ok = sendMcuCommand(GlassesProtocol.MCU_MSG_W_DISP_MODE, byteArrayOf(mode.toByte()))
+        val ok = when (currentBrand()) {
+            // XREAL: HID MCU "write display mode".
+            Brand.XREAL -> sendMcuCommand(GlassesProtocol.MCU_MSG_W_DISP_MODE, byteArrayOf(mode.toByte()))
+            // VITURE: SDK binary 2D/3D toggle — any SBS mode means "3D on".
+            Brand.VITURE -> viture?.set3d(GlassesProtocol.is3DMode(mode)) ?: false
+            else -> false
+        }
         if (ok) {
             lastReportedMode = mode
             // Remember the choice so we can re-assert it on the next (re)connect.
@@ -187,7 +203,12 @@ class GlassesController(private val appContext: Context) {
         return ok
     }
 
-    fun lastMode(): Int = lastReportedMode
+    fun lastMode(): Int = when (currentBrand()) {
+        // For VITURE the truth is the SDK's live 3D state; map it to a representative mode const.
+        Brand.VITURE -> if (viture?.is3dOn() == true) GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_90_SBS
+            else GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60
+        else -> lastReportedMode
+    }
 
     /** The display mode the user last selected (persisted), or the 2D default if none. */
     private fun savedMode(): Int =
@@ -219,6 +240,12 @@ class GlassesController(private val appContext: Context) {
 
     private fun attachOrRequestPermission(dev: UsbDevice) {
         device = dev
+        if (dev.matchedDevice()?.brand == Brand.VITURE) {
+            // VITURE: the SDK owns the USB device + permission prompt — don't claim HID ourselves.
+            startViture()
+            notifyState()
+            return
+        }
         if (usbManager.hasPermission(dev)) {
             openDevice(dev)
         } else {
@@ -283,8 +310,47 @@ class GlassesController(private val appContext: Context) {
         startImuTelemetry()
     }
 
+    /**
+     * Bring up the VITURE SDK for an attached VITURE device. init()/3D-state changes return
+     * asynchronously via the callback, so we (re)apply the saved 2D/3D choice once the SDK reports
+     * ready — whether that's immediately or after the user grants USB permission.
+     */
+    private fun startViture() {
+        if (vitureStarting) return
+        val vc = viture ?: VitureController(appContext).also { created ->
+            // init() / 3D-state changes return on the SDK's callback thread — funnel them onto
+            // the main thread and (re)apply the saved 2D/3D choice once the SDK reports ready.
+            created.setListener { mainHandler.post { onVitureStateChanged(created) } }
+            viture = created
+        }
+        if (vc.isReady()) { onVitureStateChanged(vc); return }
+        // init() does blocking USB I/O — run it off the main thread so attach doesn't jank.
+        vitureStarting = true
+        Thread({
+            val code = vc.init()
+            Log.i(TAG, "VITURE init=$code")
+            mainHandler.post {
+                vitureStarting = false
+                onVitureStateChanged(vc)
+            }
+        }, "VitureInit").start()
+    }
+
+    /** Runs on the main thread when VITURE init/3D state changes: refresh UI, apply saved mode once. */
+    private fun onVitureStateChanged(vc: VitureController) {
+        notifyState()
+        if (vc.isReady() && !vitureModeApplied) {
+            vitureModeApplied = true
+            reapplySavedMode()
+        }
+    }
+
     private fun releaseConnection() {
         stopImuTelemetry()
+        viture?.release()
+        viture = null
+        vitureModeApplied = false
+        vitureStarting = false
         mainHandler.removeCallbacksAndMessages(null)
         val c = connection
         if (c != null) {
@@ -407,8 +473,8 @@ class GlassesController(private val appContext: Context) {
         private const val MODE_PUSH_DELAY_MS = 700L
 
         // VID/PID list mirrored from wheaney/XRLinuxDriver (covers every model that ships at the time
-        // of writing). Brand identification is exposed via [currentBrand]; remote switching is only
-        // implemented for XREAL right now — see the class-level kdoc for the protocol situation.
+        // of writing). Brand identification is exposed via [currentBrand]; remote 2D/3D switching is
+        // implemented for XREAL (HID MCU) and VITURE (bundled VITURE One SDK — see VitureController).
         private val SUPPORTED_DEVICES = listOf(
             // XREAL Air series (open MCU protocol, fully supported here)
             SupportedDevice(0x3318, 0x0424, Brand.XREAL, "Air"),
@@ -421,7 +487,7 @@ class GlassesController(private val appContext: Context) {
             SupportedDevice(0x3318, 0x0438, Brand.XREAL, "One"),
             SupportedDevice(0x3318, 0x043e, Brand.XREAL, "One S"),
 
-            // VITURE — detection only. Switching requires libviture_one_sdk.
+            // VITURE — 2D/3D switching via the bundled VITURE One SDK (see VitureController).
             SupportedDevice(0x35ca, 0x1011, Brand.VITURE, "One"),
             SupportedDevice(0x35ca, 0x1013, Brand.VITURE, "One"),
             SupportedDevice(0x35ca, 0x1017, Brand.VITURE, "One"),

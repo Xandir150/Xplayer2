@@ -16,3 +16,6 @@
 .cxx
 local.properties
 app/release/*
+# VITURE SDK is fetched at build time (CI / local), never committed — no redistribution.
+/app/libs/*.aar
+/viture_sdk.tar.xz

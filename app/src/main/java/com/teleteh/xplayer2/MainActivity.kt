@@ -389,7 +389,10 @@ class MainActivity : AppCompatActivity() {
         val connected = glasses.currentState() == GlassesController.ConnectionState.Connected &&
             glasses.supportsRemoteSwitch()
         if (connected) {
-            tv.text = GlassesProtocol.shortModeName(glasses.lastMode())
+            // VITURE is a plain 2D/3D toggle (no Hz), so drop the frequency for it.
+            tv.text = if (glasses.currentBrand() == GlassesController.Brand.VITURE)
+                (if (GlassesProtocol.is3DMode(glasses.lastMode())) "3D" else "2D")
+            else GlassesProtocol.shortModeName(glasses.lastMode())
             tv.visibility = View.VISIBLE
         } else {
             tv.visibility = View.GONE
@@ -425,14 +428,22 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val items = listOf(
-            GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60 to getString(R.string.glasses_mode_2d, 60),
-            GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_72 to getString(R.string.glasses_mode_2d, 72),
-            GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_90 to getString(R.string.glasses_mode_2d, 90),
-            GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_60_SBS to getString(R.string.glasses_mode_3d_sbs, 60),
-            GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_72_SBS to getString(R.string.glasses_mode_3d_sbs, 72),
-            GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_90_SBS to getString(R.string.glasses_mode_3d_sbs, 90),
-        )
+        val items = if (glasses.currentBrand() == GlassesController.Brand.VITURE) {
+            // VITURE switches 2D/3D as a binary toggle (no Hz variants).
+            listOf(
+                GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60 to getString(R.string.glasses_mode_2d_plain),
+                GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_90_SBS to getString(R.string.glasses_mode_3d_plain),
+            )
+        } else {
+            listOf(
+                GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60 to getString(R.string.glasses_mode_2d, 60),
+                GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_72 to getString(R.string.glasses_mode_2d, 72),
+                GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_90 to getString(R.string.glasses_mode_2d, 90),
+                GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_60_SBS to getString(R.string.glasses_mode_3d_sbs, 60),
+                GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_72_SBS to getString(R.string.glasses_mode_3d_sbs, 72),
+                GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_90_SBS to getString(R.string.glasses_mode_3d_sbs, 90),
+            )
+        }
         val labels = items.map { it.second }.toTypedArray()
         // Highlight the mode the user last chose. The controller persists it and re-asserts it
         // on the glasses on every (re)connect, so the picker and the hardware stay in sync

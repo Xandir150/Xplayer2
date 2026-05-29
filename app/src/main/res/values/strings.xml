@@ -53,6 +53,9 @@
     <string name="glasses_mode_title">Glasses display mode</string>
     <string name="glasses_mode_2d">2D %1$dHz</string>
     <string name="glasses_mode_3d_sbs">3D SBS %1$dHz</string>
+    <!-- VITURE: plain 2D/3D (no Hz variants) -->
+    <string name="glasses_mode_2d_plain">2D</string>
+    <string name="glasses_mode_3d_plain">3D (SBS)</string>
     <string name="glasses_disabled_while_playing">Pause playback to change glasses mode</string>
     <string name="glasses_needs_permission">USB permission required for glasses</string>
     <string name="glasses_send_failed">Failed to switch glasses mode</string>
