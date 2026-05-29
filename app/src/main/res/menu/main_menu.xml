@@ -9,5 +9,6 @@
         android:title="@string/glasses_mode"
         android:icon="@drawable/ic_glasses"
         android:visible="false"
+        app:actionLayout="@layout/action_glasses_mode"
         app:showAsAction="always" />
 </menu>

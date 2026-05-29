@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Toolbar action view for the glasses mode item: glasses icon + the current mode
+     ("3D 90Hz" / "2D 60Hz"). Tapping anywhere opens the mode picker. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:minWidth="48dp"
+    android:paddingStart="8dp"
+    android:paddingEnd="12dp"
+    android:background="?attr/actionBarItemBackground"
+    android:clickable="true"
+    android:focusable="true">
+
+    <ImageView
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:src="@drawable/ic_glasses"
+        android:tint="@android:color/white"
+        android:contentDescription="@string/glasses_mode" />
+
+    <TextView
+        android:id="@+id/tvGlassesMode"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:textColor="@android:color/white"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+</LinearLayout>

@@ -296,6 +296,9 @@ class MainActivity : AppCompatActivity() {
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main_menu, menu)
         glassesMenuItem = menu.findItem(R.id.menu_glasses)
+        // The item uses a custom actionView (icon + mode chip), so taps arrive through the view,
+        // not onOptionsItemSelected.
+        glassesMenuItem?.actionView?.setOnClickListener { showGlassesModePicker() }
         updateGlassesMenu()
         return true
     }
@@ -334,6 +337,17 @@ class MainActivity : AppCompatActivity() {
         // playback is running.
         item.isVisible = true
         item.isEnabled = true
+        // Show the current mode as a chip ("3D 90Hz" / "2D 60Hz") next to the icon, but only for
+        // connected XREAL glasses (the brand we actually switch); otherwise just the icon.
+        val tv = item.actionView?.findViewById<android.widget.TextView>(R.id.tvGlassesMode) ?: return
+        val connected = glasses.currentState() == GlassesController.ConnectionState.Connected &&
+            glasses.supportsRemoteSwitch()
+        if (connected) {
+            tv.text = GlassesProtocol.shortModeName(glasses.lastMode())
+            tv.visibility = View.VISIBLE
+        } else {
+            tv.visibility = View.GONE
+        }
     }
 
     private fun showGlassesModePicker() {

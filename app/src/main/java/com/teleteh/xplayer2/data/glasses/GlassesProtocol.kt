@@ -137,6 +137,19 @@ object GlassesProtocol {
         }
     }
     
+    /** Compact label for the toolbar chip: "2D 60Hz" / "3D 90Hz" (drops the "SBS" suffix). */
+    fun shortModeName(mode: Int): String {
+        val hz = when (mode) {
+            MCU_DISPLAY_MODE_1920x1080_60, MCU_DISPLAY_MODE_3840x1080_60_SBS -> 60
+            MCU_DISPLAY_MODE_1920x1080_72, MCU_DISPLAY_MODE_3840x1080_72_SBS -> 72
+            MCU_DISPLAY_MODE_1920x1080_90, MCU_DISPLAY_MODE_3840x1080_90_SBS -> 90
+            MCU_DISPLAY_MODE_1920x1080_120 -> 120
+            else -> 0
+        }
+        val dim = if (is3DMode(mode)) "3D" else "2D"
+        return if (hz > 0) "$dim ${hz}Hz" else dim
+    }
+
     /**
      * Check if display mode is 3D
      */
