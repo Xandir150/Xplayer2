@@ -46,6 +46,9 @@ class RemoteControlActivity : AppCompatActivity() {
     private val updateRunnable = object : Runnable {
         override fun run() {
             updateProgress()
+            // Refresh the title too: for online sources (VK/OK) it's resolved asynchronously
+            // after extraction/metadata, so a one-shot title in onResume would stay "video-…".
+            updateTitle()
             handler.postDelayed(this, 500)
         }
     }
