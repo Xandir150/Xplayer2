@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
@@ -17,6 +18,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.toColorInt
 import androidx.media3.common.util.UnstableApi
 import com.google.android.material.button.MaterialButton
@@ -43,6 +45,7 @@ class RemoteControlActivity : AppCompatActivity() {
     private lateinit var btnLazy3d: MaterialButton
     private lateinit var btnVolumeBoost: MaterialButton
     private lateinit var tvLazyDebug: TextView
+    private var lastLazyStarting: Boolean? = null
 
     private val handler = Handler(Looper.getMainLooper())
     private val updateRunnable = object : Runnable {
@@ -186,6 +189,15 @@ class RemoteControlActivity : AppCompatActivity() {
         // Setup dim overlay for screen dimming
         setupDimOverlay()
 
+        // Make D-pad / TV focus obvious on every button (the default highlight is too subtle).
+        applyTvFocusHighlight(findViewById(android.R.id.content))
+
+        // Give D-pad navigation a definite starting point — without this, on a TV/box without a
+        // touchscreen the first key press has nothing focused to react to.
+        btnPlayPause.isFocusableInTouchMode = false
+        btnPlayPause.isFocusable = true
+        btnPlayPause.post { btnPlayPause.requestFocus() }
+
         // Back press: jump straight to MainActivity instead of revealing PlayerActivity behind us.
         // Without this, swipe-back from the remote pops the back stack to PlayerActivity, which
         // then redraws its full player UI on the phone even though the glasses still own the
@@ -211,7 +223,10 @@ class RemoteControlActivity : AppCompatActivity() {
             alpha = 0f
             visibility = View.GONE
             isClickable = true
-            isFocusable = true
+            // NOT focusable: on a D-pad/TV device a focusable full-screen overlay would steal
+            // focus when it appears and trap navigation. Touch wakes it via the click listener;
+            // D-pad/keys wake it via dispatchKeyEvent.
+            isFocusable = false
             setOnClickListener { wakeScreen() }
         }
         rootView.addView(dimOverlay, android.view.ViewGroup.LayoutParams(
@@ -299,6 +314,21 @@ class RemoteControlActivity : AppCompatActivity() {
             scheduleDim()
         }
         return super.dispatchTouchEvent(ev)
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // D-pad / remote-key equivalent of the touch handler above: keep the dim timer from
+        // firing while the user is navigating, and wake on the first key when already dimmed.
+        // Without this, on a TV/box (no touchscreen) the screen dims after 5 s and navigation
+        // appears frozen.
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            if (isScreenDimmed) {
+                wakeScreen()
+                return true
+            }
+            scheduleDim()
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onResume() {
@@ -430,8 +460,22 @@ class RemoteControlActivity : AppCompatActivity() {
      */
     private fun applyLazy3dLabel(player: PlayerActivity) {
         val starting = player.lazy3dStatus() == PlayerActivity.Lazy3dStatus.Starting
+        // Only touch the button when the state actually changes — the debug poll calls this at
+        // ~8 Hz, and setText/isEnabled churn on a focused button can disrupt D-pad navigation.
+        if (lastLazyStarting == starting) return
+        lastLazyStarting = starting
         btnLazy3d.setText(if (starting) R.string.remote_lazy3d_starting else R.string.remote_lazy3d)
         btnLazy3d.isEnabled = !starting
+    }
+
+    /** Draw a bright focus ring over every button so D-pad / TV selection is visible. */
+    private fun applyTvFocusHighlight(v: View) {
+        if (v is MaterialButton || v is ImageButton) {
+            v.foreground = ContextCompat.getDrawable(this, R.drawable.tv_focus_ring)
+        }
+        if (v is android.view.ViewGroup) {
+            for (i in 0 until v.childCount) applyTvFocusHighlight(v.getChildAt(i))
+        }
     }
 
     private fun applyButtonStyle(btn: MaterialButton, checked: Boolean) {

@@ -285,7 +285,12 @@ class PlayerActivity : AppCompatActivity() {
         audioMenuCenter = overlay.findViewById(R.id.audioMenuCenter)
         audioMenuLeft = overlay.findViewById(R.id.audioMenuLeft)
         audioMenuRight = overlay.findViewById(R.id.audioMenuRight)
+        // Tap-to-dismiss, but NOT focusable: on a D-pad/TV device a focusable full-screen layer
+        // would swallow focus so the menu items couldn't be reached.
+        audioMenuRoot?.isFocusable = false
         audioMenuRoot?.setOnClickListener { hideAudioMenu() }
+        // Make D-pad / TV focus visible on the overlay's top-bar controls.
+        com.teleteh.xplayer2.ui.util.TvFocus.applyToButtons(overlay)
         btnBack.setOnClickListener { navigateBackToPrimary() }
         btnSbs.isCheckable = true
         btnSbs.isChecked = getStereoSbs()
@@ -1108,6 +1113,8 @@ class PlayerActivity : AppCompatActivity() {
         }
         val isTextDisabled = trackSelector?.parameters?.getRendererDisabled(C.TRACK_TYPE_TEXT) == true ||
             (trackSelector?.parameters?.disabledTrackTypes?.contains(C.TRACK_TYPE_TEXT) == true)
+        // First D-pad-focusable row, so we can move focus into the menu when it opens (TV/box).
+        var firstFocusable: View? = null
         fun addItemsTo(container: LinearLayout) {
             container.removeAllViews()
             fun dp(value: Int): Int =
@@ -1147,6 +1154,8 @@ class PlayerActivity : AppCompatActivity() {
                         Toast.makeText(this@PlayerActivity, label, Toast.LENGTH_SHORT).show()
                     }
                 }
+                com.teleteh.xplayer2.ui.util.TvFocus.makeFocusableItem(boostTv)
+                if (firstFocusable == null) firstFocusable = boostTv
                 inner.addView(boostTv)
             }
             items.forEach { item ->
@@ -1180,6 +1189,8 @@ class PlayerActivity : AppCompatActivity() {
                         hideTrackMenu()
                     }
                 }
+                com.teleteh.xplayer2.ui.util.TvFocus.makeFocusableItem(tv)
+                if (firstFocusable == null) firstFocusable = tv
                 inner.addView(tv)
             }
             scroll.addView(inner)
@@ -1197,6 +1208,8 @@ class PlayerActivity : AppCompatActivity() {
             addItemsTo(center)
         }
         root.visibility = View.VISIBLE
+        // Move focus into the menu so D-pad works immediately (no-op on touch devices).
+        firstFocusable?.let { fv -> root.post { fv.requestFocus() } }
     }
 
     private fun showAudioMenu() = showTrackMenu(C.TRACK_TYPE_AUDIO)
