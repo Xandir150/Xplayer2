@@ -31,8 +31,8 @@ import java.io.File
  * Lists a VK owner's (user/group) videos with covers and opens the chosen one in the player.
  * Driven entirely by intent extras so it's reusable for any club — the "Hughey" button in the
  * Network tab passes that group's owner id and a "3D" title filter. Results are cached to disk
- * (the unauthenticated list is just the newest window, so a short TTL is plenty) and can be
- * filtered by title on screen.
+ * for a short 10-minute window so reopening is instant, but once that expires the list is
+ * re-fetched on open so new uploads show up. Can be filtered by title on screen.
  */
 class VkClubActivity : AppCompatActivity() {
 
@@ -76,7 +76,7 @@ class VkClubActivity : AppCompatActivity() {
 
     private fun load(ownerId: String, titleFilter: String?) {
         val cacheFile = File(cacheDir, "vkclub_${ownerId}_${titleFilter ?: "all"}.json")
-        readCache(cacheFile)?.let { showItems(it); return }   // fresh cache — show instantly
+        readCache(cacheFile)?.let { showItems(it); return }   // fresh cache (<10 min) — show instantly
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
             val items = runCatching { VideoStreamExtractor.listOwnerVideos(ownerId, titleFilter) }
@@ -105,7 +105,7 @@ class VkClubActivity : AppCompatActivity() {
         })
     }
 
-    // --- disk cache (cacheDir/vkclub_<owner>_<filter>.json, TTL-gated by file mtime) ---
+    // --- disk cache (cacheDir/vkclub_<owner>_<filter>.json, 10-min TTL gated by file mtime) ---
     private fun readCache(f: File): List<VideoStreamExtractor.VkVideoItem>? {
         if (!f.exists() || System.currentTimeMillis() - f.lastModified() > CACHE_TTL_MS) return null
         return runCatching {
@@ -188,6 +188,6 @@ class VkClubActivity : AppCompatActivity() {
         const val EXTRA_TITLE_FILTER = "vk_title_filter"
         const val EXTRA_TITLE = "vk_screen_title"
         const val EXTRA_BOOSTY_URL = "vk_boosty_url"
-        private const val CACHE_TTL_MS = 6 * 60 * 60 * 1000L  // 6 hours
+        private const val CACHE_TTL_MS = 10 * 60 * 1000L  // 10 minutes
     }
 }

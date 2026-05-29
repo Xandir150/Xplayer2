@@ -594,6 +594,11 @@ object VideoStreamExtractor {
      *
      * Each list row is a flat array: [0]=ownerId, [1]=videoId, [2]=thumbnail, [3]=title,
      * [5]=duration. The envelope is payload[1][0]["all"] = {list, count, total} (windows-1251).
+     *
+     * Rows with no thumbnail are skipped: VK blanks the cover for removed/unavailable videos
+     * (copyright takedowns etc.), and `act=show` on exactly those rows returns "removed" — so a
+     * missing thumbnail is a reliable "this won't play" signal. This also drops generic
+     * placeholder posts that carry no real cover.
      */
     suspend fun listOwnerVideos(
         ownerId: String,
@@ -620,11 +625,14 @@ object VideoStreamExtractor {
             if (!seen.add(key)) continue   // de-dupe: VK repeats ids within the window
             val title = v.optString(3).trim()
             if (needle != null && !title.lowercase().contains(needle)) continue
+            // No thumbnail => removed/unavailable video (verified: act=show returns "removed"
+            // for exactly the thumbnail-less rows). Skip so the list only shows what will play.
+            val thumb = v.optString(2).takeIf { it.startsWith("http") } ?: continue
             out.add(
                 VkVideoItem(
                     url = "https://vkvideo.ru/video$key",
                     title = title.ifBlank { "video$key" },
-                    thumbnailUrl = v.optString(2).takeIf { it.startsWith("http") },
+                    thumbnailUrl = thumb,
                     duration = v.optString(5).takeIf { it.isNotBlank() },
                 )
             )
