@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tabs -->
+    <string name="tab_recent">Recientes</string>
+    <string name="tab_files">Archivos</string>
+    <string name="tab_network">Red</string>
+
+    <!-- Player menu -->
+    <string name="menu_audio">Pista de audio</string>
+    <string name="menu_subtitle">Subtítulos</string>
+    <string name="menu_stereo">Estéreo: alternar</string>
+    <string name="select_audio_track">Seleccionar pista de audio</string>
+    <string name="select_subtitle">Seleccionar subtítulo</string>
+    <string name="subtitle_off">Apagado</string>
+
+    <!-- Volume boost -->
+    <string name="volume_boost_off">Amplificación: apagada</string>
+    <string name="volume_boost_with_value">Amplificación: +%1$d dB</string>
+
+    <!-- Stereo modes -->
+    <string name="stereo_mode_normal">Modo estéreo: Normal</string>
+    <string name="stereo_mode_sbs">Modo estéreo: SBS</string>
+
+    <!-- Player controls overlay -->
+    <string name="player_back">Atrás</string>
+    <string name="player_shift">Ajuste</string>
+    <string name="player_rewind">Retroceder 10s</string>
+    <string name="player_play_pause">Reproducir/Pausar</string>
+    <string name="player_forward">Avanzar 10s</string>
+    <string name="player_stop_playback">Detener</string>
+
+    <!-- Remote control -->
+    <string name="remote_now_playing">Reproduciendo</string>
+    <string name="remote_3d_mode">Modo 3D</string>
+    <string name="remote_shift">Ajuste</string>
+    <string name="remote_lazy3d">Lazy 3D (seguimiento de cabeza)</string>
+    <string name="remote_audio_track">Pista de audio</string>
+    <string name="remote_stop_playback">Detener</string>
+
+    <!-- Glasses -->
+    <string name="glasses_mode">Modo gafas</string>
+    <string name="glasses_mode_title">Modo de pantalla de las gafas</string>
+    <string name="glasses_disabled_while_playing">Pausa la reproducción para cambiar el modo de las gafas</string>
+    <string name="glasses_needs_permission">Se requiere permiso USB para las gafas</string>
+    <string name="glasses_send_failed">Error al cambiar el modo de las gafas</string>
+    <string name="glasses_brand_unsupported">El cambio de modo requiere el SDK propietario de %1$s, no incluido. Use el menú físico de las gafas.</string>
+    <string name="glasses_not_connected">No se detectaron gafas XR en USB. Conecte las gafas (XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S) y conceda permiso USB.</string>
+
+    <!-- Lazy 3D -->
+    <string name="lazy3d_downloading">Descargando modelo Lazy 3D (~65 MB)…</string>
+    <string name="lazy3d_downloaded">Modelo Lazy 3D listo</string>
+    <string name="lazy3d_download_failed">Error al descargar el modelo Lazy 3D</string>
+
+    <!-- Network -->
+    <string name="network_enter_url">Pegue la URL (http, https, msf, content)</string>
+    <string name="network_open">Abrir</string>
+    <string name="network_add_share">Agregar recurso compartido</string>
+    <string name="network_smb_name">Nombre</string>
+    <string name="network_smb_uri">SMB URI (p. ej. smb://servidor/recurso)</string>
+    <string name="network_enter_url_error">Introduzca una URL primero</string>
+    <string name="network_url_invalid">URL no válida</string>
+    <string name="network_open_failed">No se pudo abrir: %1$s</string>
+    <string name="dlna_not_found">DLNA: ContentDirectory no encontrado</string>
+    <string name="dlna_browse_failed">Error DLNA browse: %1$s</string>
+
+    <!-- Common -->
+    <string name="common_add">Agregar</string>
+    <string name="common_cancel">Cancelar</string>
+    <string name="delete">Eliminar</string>
+    <string name="stop">Detener</string>
+
+    <!-- Errors / status -->
+    <string name="error_invalid_input">Verifique los datos</string>
+    <string name="loading_stream">Cargando video…</string>
+    <string name="stream_extraction_failed">Error al extraer el flujo de video</string>
+    <string name="file_unavailable">Archivo no disponible. Selecciónelo de nuevo.</string>
+    <string name="file_open_failed">No se pudo abrir el archivo: %1$s</string>
+
+    <!-- Playback notification -->
+    <string name="playback_channel_name">Reproducción</string>
+    <string name="playback_channel_description">Notificación de reproducción en pantalla externa</string>
+    <string name="playing_on_external_display">Reproduciendo en pantalla externa</string>
+
+    <!-- Files fragment -->
+    <string name="file_picker_open">Abrir video</string>
+
+    <!-- Recent fragment -->
+    <string name="recent_empty">Recientes: vacío</string>
+    <string name="source_type">Tipo de fuente</string>
+
+    <!-- Dialogs -->
+    <string name="dialog_audio_track_title">Pista de audio</string>
+
+    <!-- DLNA list items -->
+    <string name="dlna_up_subtitle">Arriba</string>
+    <string name="dlna_folder_subtitle">Carpeta</string>
+
+    <!-- Recent subtitle -->
+    <string name="recent_position_prefix">Posición: </string>
+</resources>

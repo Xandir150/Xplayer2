@@ -68,12 +68,12 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
         fun tryOpen(text: String?) {
             val raw = text?.trim()
             if (raw.isNullOrBlank()) {
-                Toast.makeText(requireContext(), "Введите ссылку", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), R.string.network_enter_url_error, Toast.LENGTH_SHORT).show()
                 return
             }
             val uri = normalizeToUri(raw)
             if (uri == null) {
-                Toast.makeText(requireContext(), "Некорректная ссылка", Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), R.string.network_url_invalid, Toast.LENGTH_SHORT).show()
                 return
             }
             val i = Intent(requireContext(), PlayerActivity::class.java)
@@ -284,7 +284,7 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
             if (control == null) {
                 Toast.makeText(
                     requireContext(),
-                    "DLNA: ContentDirectory not found",
+                    R.string.dlna_not_found,
                     Toast.LENGTH_SHORT
                 ).show()
                 return@launch
@@ -295,7 +295,7 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
             } catch (t: Throwable) {
                 Toast.makeText(
                     requireContext(),
-                    "DLNA browse failed: ${t.message}",
+                    getString(R.string.dlna_browse_failed, t.message),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -362,7 +362,7 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
             }
             DisplayUtils.startOnBestDisplay(requireActivity(), i)
         } catch (e: Exception) {
-            Toast.makeText(requireContext(), "Не удалось открыть: ${e.message}", Toast.LENGTH_SHORT)
+            Toast.makeText(requireContext(), getString(R.string.network_open_failed, e.message), Toast.LENGTH_SHORT)
                 .show()
         }
     }

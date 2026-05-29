@@ -92,7 +92,7 @@ class RecentAdapter(
         val item = getItem(position)
         holder.title.text = resolveNiceTitle(holder.itemView.context, item)
         holder.subtitle.text = buildString {
-            append("Позиция: ")
+            append(holder.subtitle.context.getString(R.string.recent_position_prefix))
             append(formatMs(item.lastPositionMs))
             if (item.durationMs > 0) {
                 append(" / ")
@@ -114,14 +114,14 @@ class RecentAdapter(
         // Frame-packing badge: show "OU=>SBS" for known 3D formats (3=SBS, 4=OU), hide otherwise
         if (item.framePacking == 3 || item.framePacking == 4) {
             holder.badge.visibility = View.VISIBLE
-            holder.badge.text = "OU=>SBS"
+            holder.badge.text = holder.badge.context.getString(R.string.remote_ou_to_sbs)
         } else {
             holder.badge.visibility = View.GONE
         }
 
         // SBS state badge: show when sbsEnabled is true
         holder.sbsState?.visibility = if (item.sbsEnabled == true) View.VISIBLE else View.GONE
-        holder.sbsState?.text = "OU=>SBS"
+        holder.sbsState?.text = holder.sbsState?.context?.getString(R.string.remote_ou_to_sbs)
     }
 
     private fun resolveNiceTitle(context: android.content.Context, entry: RecentEntry): String {

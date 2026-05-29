@@ -31,14 +31,14 @@
             android:textSize="18sp"
             android:maxLines="2"
             android:ellipsize="end"
-            android:text="Now Playing" />
+            android:text="@string/remote_now_playing" />
     </LinearLayout>
 
     <!-- Video mode buttons -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="3D Mode"
+        android:text="@string/remote_3d_mode"
         android:textColor="#888888"
         android:textSize="12sp"
         android:layout_marginBottom="8dp" />
@@ -57,7 +57,7 @@
             android:layout_weight="1"
             android:layout_height="56dp"
             android:layout_marginEnd="8dp"
-            android:text="OU→SBS"
+            android:text="@string/remote_ou_to_sbs"
             android:textAllCaps="false"
             android:textColor="@android:color/white"
             android:checkable="true" />
@@ -69,7 +69,7 @@
             android:layout_weight="1"
             android:layout_height="56dp"
             android:layout_marginEnd="8dp"
-            android:text="Auto"
+            android:text="@string/remote_auto"
             android:textAllCaps="false"
             android:textColor="@android:color/white" />
 
@@ -79,7 +79,7 @@
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="56dp"
-            android:text="Shift"
+            android:text="@string/remote_shift"
             android:textAllCaps="false"
             android:textColor="@android:color/white"
             android:checkable="true" />
@@ -101,7 +101,7 @@
             android:src="@android:drawable/ic_media_rew"
             android:tint="@android:color/white"
             android:scaleType="centerInside"
-            android:contentDescription="Rewind 10s" />
+            android:contentDescription="@string/player_rewind" />
 
         <ImageButton
             android:id="@+id/btnPlayPause"
@@ -113,7 +113,7 @@
             android:src="@android:drawable/ic_media_pause"
             android:tint="@android:color/white"
             android:scaleType="centerInside"
-            android:contentDescription="Play/Pause" />
+            android:contentDescription="@string/player_play_pause" />
 
         <ImageButton
             android:id="@+id/btnForward"
@@ -123,7 +123,7 @@
             android:src="@android:drawable/ic_media_ff"
             android:tint="@android:color/white"
             android:scaleType="centerInside"
-            android:contentDescription="Forward 10s" />
+            android:contentDescription="@string/player_forward" />
     </LinearLayout>
 
     <!-- Seek bar -->
@@ -172,7 +172,7 @@
         android:layout_width="match_parent"
         android:layout_height="56dp"
         android:layout_marginBottom="12dp"
-        android:text="Lazy 3D (head tracking)"
+        android:text="@string/remote_lazy3d"
         android:textAllCaps="false"
         android:textColor="@android:color/white"
         android:checkable="true"
@@ -184,7 +184,7 @@
         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:text="Audio Track"
+        android:text="@string/remote_audio_track"
         android:textAllCaps="false"
         android:textColor="@android:color/white"
         app:icon="@drawable/ear_sound_24px"
@@ -212,7 +212,7 @@
         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:text="Stop Playback"
+        android:text="@string/remote_stop_playback"
         android:textAllCaps="false"
         android:textColor="#FF5555"
         app:strokeColor="#FF5555" />

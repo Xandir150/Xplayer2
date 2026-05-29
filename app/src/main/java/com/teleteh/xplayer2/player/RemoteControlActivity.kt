@@ -59,6 +59,7 @@ class RemoteControlActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        currentInstance = this
         setContentView(R.layout.activity_remote_control)
 
         tvTitle = findViewById(R.id.tvTitle)
@@ -288,6 +289,18 @@ class RemoteControlActivity : AppCompatActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        if (currentInstance === this) currentInstance = null
+    }
+
+    companion object {
+        /** Live remote-control instance, so PlayerActivity can dismiss it when the goggles come
+         *  off and playback moves back to the phone screen. */
+        @Volatile
+        var currentInstance: RemoteControlActivity? = null
+    }
+
     // Back press handled by default - just finishes this activity without affecting PlayerActivity
 
     private fun updateTitle() {
@@ -393,13 +406,13 @@ class RemoteControlActivity : AppCompatActivity() {
         }
         
         androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Audio Track")
+            .setTitle(R.string.dialog_audio_track_title)
             .setSingleChoiceItems(labels, checkedItem) { dialog, which ->
                 val (_, trackIndex) = tracks[which]
                 player.selectAudioTrack(trackIndex)
                 dialog.dismiss()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.common_cancel, null)
             .show()
     }
 }

@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tabs -->
+    <string name="tab_recent">最近</string>
+    <string name="tab_files">文件</string>
+    <string name="tab_network">网络</string>
+
+    <!-- Player menu -->
+    <string name="menu_audio">音轨</string>
+    <string name="menu_subtitle">字幕</string>
+    <string name="menu_stereo">立体声：切换</string>
+    <string name="select_audio_track">选择音轨</string>
+    <string name="select_subtitle">选择字幕</string>
+    <string name="subtitle_off">关闭</string>
+
+    <!-- Volume boost -->
+    <string name="volume_boost_off">音量增强：关闭</string>
+    <string name="volume_boost_with_value">音量增强：+%1$d dB</string>
+
+    <!-- Stereo modes -->
+    <string name="stereo_mode_normal">立体声模式：普通</string>
+    <string name="stereo_mode_sbs">立体声模式：SBS</string>
+
+    <!-- Player controls overlay -->
+    <string name="player_back">返回</string>
+    <string name="player_shift">偏移</string>
+    <string name="player_rewind">后退10秒</string>
+    <string name="player_play_pause">播放/暂停</string>
+    <string name="player_forward">快进10秒</string>
+    <string name="player_stop_playback">停止播放</string>
+
+    <!-- Remote control -->
+    <string name="remote_now_playing">正在播放</string>
+    <string name="remote_3d_mode">3D模式</string>
+    <string name="remote_shift">偏移</string>
+    <string name="remote_lazy3d">Lazy 3D（头部跟踪）</string>
+    <string name="remote_audio_track">音轨</string>
+    <string name="remote_stop_playback">停止播放</string>
+
+    <!-- Glasses -->
+    <string name="glasses_mode">眼镜模式</string>
+    <string name="glasses_mode_title">眼镜显示模式</string>
+    <string name="glasses_disabled_while_playing">请暂停播放以更改眼镜模式</string>
+    <string name="glasses_needs_permission">眼镜需要USB权限</string>
+    <string name="glasses_send_failed">切换眼镜模式失败</string>
+    <string name="glasses_brand_unsupported">切换眼镜显示模式需要 %1$s 的闭源SDK，该SDK未包含在应用中。请使用眼镜的物理菜单更改模式。</string>
+    <string name="glasses_not_connected">未在USB上检测到支持的XR眼镜。请连接眼镜（XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S）并授予USB权限。</string>
+
+    <!-- Lazy 3D -->
+    <string name="lazy3d_downloading">正在下载Lazy 3D深度模型（约65 MB）…</string>
+    <string name="lazy3d_downloaded">Lazy 3D深度模型已就绪</string>
+    <string name="lazy3d_download_failed">下载Lazy 3D深度模型失败</string>
+
+    <!-- Network -->
+    <string name="network_enter_url">粘贴链接（http、https、msf、content）</string>
+    <string name="network_open">打开</string>
+    <string name="network_add_share">添加共享</string>
+    <string name="network_smb_name">名称</string>
+    <string name="network_smb_uri">SMB URI（例如 smb://服务器/共享）</string>
+    <string name="network_enter_url_error">请先输入链接</string>
+    <string name="network_url_invalid">链接无效</string>
+    <string name="network_open_failed">无法打开：%1$s</string>
+    <string name="dlna_not_found">DLNA：未找到ContentDirectory</string>
+    <string name="dlna_browse_failed">DLNA浏览失败：%1$s</string>
+
+    <!-- Common -->
+    <string name="common_add">添加</string>
+    <string name="common_cancel">取消</string>
+    <string name="delete">删除</string>
+    <string name="stop">停止</string>
+
+    <!-- Errors / status -->
+    <string name="error_invalid_input">请检查输入</string>
+    <string name="loading_stream">正在加载视频…</string>
+    <string name="stream_extraction_failed">提取视频流失败</string>
+    <string name="file_unavailable">文件不可用，请重新选择。</string>
+    <string name="file_open_failed">无法打开文件：%1$s</string>
+
+    <!-- Playback notification -->
+    <string name="playback_channel_name">播放</string>
+    <string name="playback_channel_description">外部显示器播放通知</string>
+    <string name="playing_on_external_display">正在外部显示器上播放</string>
+
+    <!-- Files fragment -->
+    <string name="file_picker_open">打开视频</string>
+
+    <!-- Recent fragment -->
+    <string name="recent_empty">最近：暂无内容</string>
+    <string name="source_type">来源类型</string>
+
+    <!-- Dialogs -->
+    <string name="dialog_audio_track_title">音轨</string>
+
+    <!-- DLNA list items -->
+    <string name="dlna_up_subtitle">返回上级</string>
+    <string name="dlna_folder_subtitle">文件夹</string>
+
+    <!-- Recent subtitle -->
+    <string name="recent_position_prefix">位置：</string>
+</resources>

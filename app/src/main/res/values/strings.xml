@@ -1,12 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">XPlayer2</string>
+
+    <!-- Tabs -->
+    <string name="tab_recent">Recent</string>
+    <string name="tab_files">Files</string>
+    <string name="tab_network">Network</string>
+
+    <!-- Player menu -->
     <string name="menu_audio">Audio track</string>
     <string name="menu_subtitle">Subtitles</string>
+    <string name="menu_stereo">Stereo: toggle</string>
+    <string name="menu_stereo_short">SBS</string>
+    <string name="menu_back">Back</string>
     <string name="select_audio_track">Select audio track</string>
     <string name="select_subtitle">Select subtitle</string>
     <string name="subtitle_off">Off</string>
+
+    <!-- Volume boost -->
     <string name="volume_boost_off">Boost: off</string>
     <string name="volume_boost_with_value">Boost: +%1$d dB</string>
+
+    <!-- Stereo modes -->
+    <string name="stereo_mode_normal">Stereo mode: Normal</string>
+    <string name="stereo_mode_sbs">Stereo mode: SBS</string>
+
+    <!-- Player controls overlay -->
+    <string name="player_back">Back</string>
+    <string name="player_ou_to_sbs">OU➤SBS</string>
+    <string name="player_auto">Auto</string>
+    <string name="player_shift">Shift</string>
+    <string name="player_rewind">Rewind 10s</string>
+    <string name="player_play_pause">Play/Pause</string>
+    <string name="player_forward">Forward 10s</string>
+    <string name="player_stop_playback">Stop Playback</string>
+
+    <!-- Remote control -->
+    <string name="remote_now_playing">Now Playing</string>
+    <string name="remote_3d_mode">3D Mode</string>
+    <string name="remote_ou_to_sbs">OU→SBS</string>
+    <string name="remote_auto">Auto</string>
+    <string name="remote_shift">Shift</string>
+    <string name="remote_lazy3d">Lazy 3D (head tracking)</string>
+    <string name="remote_audio_track">Audio Track</string>
+    <string name="remote_stop_playback">Stop Playback</string>
+
+    <!-- Glasses -->
     <string name="glasses_mode">Glasses mode</string>
     <string name="glasses_mode_title">Glasses display mode</string>
     <string name="glasses_mode_2d">2D %1$dHz</string>
@@ -16,27 +55,56 @@
     <string name="glasses_send_failed">Failed to switch glasses mode</string>
     <string name="glasses_brand_unsupported">Switching glasses display mode requires the closed-source %1$s SDK, which is not bundled. Please use the glasses\' physical menu to change mode for now.</string>
     <string name="glasses_not_connected">No supported XR glasses detected on USB. Plug the goggles in (XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S) and grant USB permission when prompted.</string>
+
+    <!-- Lazy 3D -->
     <string name="lazy3d_downloading">Downloading Lazy 3D depth model (~65 MB)…</string>
     <string name="lazy3d_downloaded">Lazy 3D depth model ready</string>
     <string name="lazy3d_download_failed">Failed to download Lazy 3D depth model</string>
-    <string name="menu_stereo">Stereo: toggle</string>
-    <string name="menu_stereo_short">SBS</string>
-    <string name="menu_back">Back</string>
-    <string name="stereo_mode_normal">Stereo mode: Normal</string>
-    <string name="stereo_mode_sbs">Stereo mode: SBS</string>
+
+    <!-- Network -->
+    <string name="network_enter_url">Paste URL (http, https, msf, content)</string>
+    <string name="network_open">Open</string>
+    <string name="network_add_share">Add share</string>
+    <string name="network_smb_name">Name</string>
+    <string name="network_smb_uri">SMB URI (e.g. smb://server/share)</string>
+    <string name="network_enter_url_error">Enter a URL first</string>
+    <string name="network_url_invalid">Invalid URL</string>
+    <string name="network_open_failed">Failed to open: %1$s</string>
+    <string name="dlna_not_found">DLNA: ContentDirectory not found</string>
+    <string name="dlna_browse_failed">DLNA browse failed: %1$s</string>
+
+    <!-- Common -->
+    <string name="common_add">Add</string>
+    <string name="common_cancel">Cancel</string>
     <string name="delete">Delete</string>
-    <string name="network_enter_url">Вставьте ссылку (http, https, msf, content)</string>
-    <string name="network_open">Открыть</string>
-    <string name="network_add_share">Добавить шару</string>
-    <string name="network_smb_name">Имя</string>
-    <string name="network_smb_uri">SMB URI (например smb://server/share)</string>
-    <string name="common_add">Добавить</string>
-    <string name="common_cancel">Отмена</string>
-    <string name="error_invalid_input">Проверьте данные</string>
-    <string name="loading_stream">Загрузка видео…</string>
-    <string name="stream_extraction_failed">Не удалось извлечь видео-поток</string>
-    <string name="playback_channel_name">Воспроизведение</string>
-    <string name="playback_channel_description">Уведомление о воспроизведении на внешнем дисплее</string>
-    <string name="playing_on_external_display">Воспроизведение на внешнем дисплее</string>
-    <string name="stop">Стоп</string>
+    <string name="stop">Stop</string>
+
+    <!-- Errors / status -->
+    <string name="error_invalid_input">Check your input</string>
+    <string name="loading_stream">Loading video…</string>
+    <string name="stream_extraction_failed">Failed to extract video stream</string>
+    <string name="file_unavailable">File unavailable. Please reselect it.</string>
+    <string name="file_open_failed">Failed to open file: %1$s</string>
+
+    <!-- Playback notification -->
+    <string name="playback_channel_name">Playback</string>
+    <string name="playback_channel_description">Playback notification for external display</string>
+    <string name="playing_on_external_display">Playing on external display</string>
+
+    <!-- Files fragment -->
+    <string name="file_picker_open">Open Video</string>
+
+    <!-- Recent fragment -->
+    <string name="recent_empty">Recent: empty</string>
+    <string name="source_type">Source type</string>
+
+    <!-- Dialogs -->
+    <string name="dialog_audio_track_title">Audio Track</string>
+
+    <!-- DLNA list items -->
+    <string name="dlna_up_subtitle">Up</string>
+    <string name="dlna_folder_subtitle">Folder</string>
+
+    <!-- Recent subtitle -->
+    <string name="recent_position_prefix">Position: </string>
 </resources>

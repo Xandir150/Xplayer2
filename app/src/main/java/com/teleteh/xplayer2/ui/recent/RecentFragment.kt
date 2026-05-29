@@ -39,7 +39,7 @@ class RecentFragment : Fragment(R.layout.fragment_recent) {
                 try {
                     ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 } catch (_: SecurityException) {
-                    android.widget.Toast.makeText(ctx, "Файл недоступен. Выберите его заново.", android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(ctx, R.string.file_unavailable, android.widget.Toast.LENGTH_LONG).show()
                     return@RecentAdapter
                 }
             }

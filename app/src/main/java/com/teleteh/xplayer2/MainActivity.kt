@@ -75,7 +75,7 @@ class MainActivity : AppCompatActivity() {
         val viewPager: ViewPager2 = binding.viewPager
         viewPager.adapter = MainPagerAdapter(this)
 
-        val tabTitles = listOf("Недавние", "Файлы", "Сеть")
+        val tabTitles = listOf(getString(R.string.tab_recent), getString(R.string.tab_files), getString(R.string.tab_network))
         TabLayoutMediator(binding.tabLayout, viewPager) { tab, position ->
             tab.text = tabTitles[position]
             tab.contentDescription = null
@@ -375,10 +375,9 @@ class MainActivity : AppCompatActivity() {
             GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_90_SBS to getString(R.string.glasses_mode_3d_sbs, 90),
         )
         val labels = items.map { it.second }.toTypedArray()
-        // Highlight the mode the glasses are actually in, not the last one we persisted.
-        // The controller resets this to the 2D default whenever the device (re)connects, so
-        // after unplug/replug the picker shows 2D — matching the hardware — instead of a
-        // stale 3D entry.
+        // Highlight the mode the user last chose. The controller persists it and re-asserts it
+        // on the glasses on every (re)connect, so the picker and the hardware stay in sync
+        // instead of snapping back to the 2D power-on default after unplug/replug.
         val current = glasses.lastMode()
         val checked = items.indexOfFirst { it.first == current }.coerceAtLeast(0)
         AlertDialog.Builder(this)

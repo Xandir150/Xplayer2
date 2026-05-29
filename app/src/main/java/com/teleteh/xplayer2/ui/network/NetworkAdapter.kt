@@ -131,7 +131,7 @@ class NetworkAdapter(
 
                 is NetworkItem.DlnaUp -> {
                     title.text = "…"
-                    sub.text = "Вверх"
+                    sub.text = sub.context.getString(R.string.dlna_up_subtitle)
                     iconBg.setImageResource(R.drawable.bg_circle_dlna)
                     icon.setImageResource(R.drawable.ic_folder_24)
                     deleteButton?.visibility = View.GONE
@@ -139,7 +139,7 @@ class NetworkAdapter(
 
                 is NetworkItem.DlnaContainer -> {
                     title.text = item.title
-                    sub.text = "Папка"
+                    sub.text = sub.context.getString(R.string.dlna_folder_subtitle)
                     iconBg.setImageResource(R.drawable.bg_circle_dlna)
                     icon.setImageResource(R.drawable.ic_folder_24)
                     deleteButton?.visibility = View.GONE

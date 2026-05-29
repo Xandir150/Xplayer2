@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tabs -->
+    <string name="tab_recent">Недавние</string>
+    <string name="tab_files">Файлы</string>
+    <string name="tab_network">Сеть</string>
+
+    <!-- Player menu -->
+    <string name="menu_audio">Аудиодорожка</string>
+    <string name="menu_subtitle">Субтитры</string>
+    <string name="menu_stereo">Стерео: переключить</string>
+    <string name="select_audio_track">Выбрать аудиодорожку</string>
+    <string name="select_subtitle">Выбрать субтитры</string>
+    <string name="subtitle_off">Выкл</string>
+
+    <!-- Volume boost -->
+    <string name="volume_boost_off">Усиление: выкл</string>
+    <string name="volume_boost_with_value">Усиление: +%1$d дБ</string>
+
+    <!-- Stereo modes -->
+    <string name="stereo_mode_normal">Режим: нормальный</string>
+    <string name="stereo_mode_sbs">Режим: SBS</string>
+
+    <!-- Player controls overlay -->
+    <string name="player_back">Назад</string>
+    <string name="player_shift">Сдвиг</string>
+    <string name="player_rewind">Назад 10с</string>
+    <string name="player_play_pause">Пауза/Воспроизведение</string>
+    <string name="player_forward">Вперёд 10с</string>
+    <string name="player_stop_playback">Остановить</string>
+
+    <!-- Remote control -->
+    <string name="remote_now_playing">Воспроизводится</string>
+    <string name="remote_3d_mode">3D режим</string>
+    <string name="remote_shift">Сдвиг</string>
+    <string name="remote_lazy3d">Lazy 3D (отслеживание головы)</string>
+    <string name="remote_audio_track">Аудиодорожка</string>
+    <string name="remote_stop_playback">Остановить</string>
+
+    <!-- Glasses -->
+    <string name="glasses_mode">Режим очков</string>
+    <string name="glasses_mode_title">Режим отображения очков</string>
+    <string name="glasses_disabled_while_playing">Поставьте на паузу для смены режима очков</string>
+    <string name="glasses_needs_permission">Требуется разрешение USB для очков</string>
+    <string name="glasses_send_failed">Не удалось переключить режим очков</string>
+    <string name="glasses_brand_unsupported">Смена режима очков требует проприетарного SDK %1$s, который не включён в поставку. Используйте физическое меню очков.</string>
+    <string name="glasses_not_connected">Поддерживаемые XR-очки не обнаружены. Подключите очки (XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S) и разрешите доступ USB.</string>
+
+    <!-- Lazy 3D -->
+    <string name="lazy3d_downloading">Загрузка модели Lazy 3D (~65 МБ)…</string>
+    <string name="lazy3d_downloaded">Модель Lazy 3D готова</string>
+    <string name="lazy3d_download_failed">Не удалось загрузить модель Lazy 3D</string>
+
+    <!-- Network -->
+    <string name="network_enter_url">Вставьте ссылку (http, https, msf, content)</string>
+    <string name="network_open">Открыть</string>
+    <string name="network_add_share">Добавить шару</string>
+    <string name="network_smb_name">Имя</string>
+    <string name="network_smb_uri">SMB URI (например smb://server/share)</string>
+    <string name="network_enter_url_error">Введите ссылку</string>
+    <string name="network_url_invalid">Некорректная ссылка</string>
+    <string name="network_open_failed">Не удалось открыть: %1$s</string>
+    <string name="dlna_not_found">DLNA: ContentDirectory не найден</string>
+    <string name="dlna_browse_failed">Ошибка DLNA browse: %1$s</string>
+
+    <!-- Common -->
+    <string name="common_add">Добавить</string>
+    <string name="common_cancel">Отмена</string>
+    <string name="delete">Удалить</string>
+    <string name="stop">Стоп</string>
+
+    <!-- Errors / status -->
+    <string name="error_invalid_input">Проверьте данные</string>
+    <string name="loading_stream">Загрузка видео…</string>
+    <string name="stream_extraction_failed">Не удалось извлечь видео-поток</string>
+    <string name="file_unavailable">Файл недоступен. Выберите его заново.</string>
+    <string name="file_open_failed">Не удалось открыть файл: %1$s</string>
+
+    <!-- Playback notification -->
+    <string name="playback_channel_name">Воспроизведение</string>
+    <string name="playback_channel_description">Уведомление о воспроизведении на внешнем дисплее</string>
+    <string name="playing_on_external_display">Воспроизведение на внешнем дисплее</string>
+
+    <!-- Files fragment -->
+    <string name="file_picker_open">Открыть видео</string>
+
+    <!-- Recent fragment -->
+    <string name="recent_empty">Недавние: пока пусто</string>
+    <string name="source_type">Тип источника</string>
+
+    <!-- Dialogs -->
+    <string name="dialog_audio_track_title">Аудиодорожка</string>
+
+    <!-- DLNA list items -->
+    <string name="dlna_up_subtitle">Вверх</string>
+    <string name="dlna_folder_subtitle">Папка</string>
+
+    <!-- Recent subtitle -->
+    <string name="recent_position_prefix">Позиция: </string>
+</resources>

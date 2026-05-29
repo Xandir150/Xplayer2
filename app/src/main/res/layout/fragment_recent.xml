@@ -16,7 +16,7 @@
         android:id="@+id/tvEmpty"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Недавние: пока пусто"
+        android:text="@string/recent_empty"
         android:layout_gravity="center" />
 
 </FrameLayout>

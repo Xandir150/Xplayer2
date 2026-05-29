@@ -43,7 +43,8 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.XPlayer2"
         android:usesCleartextTraffic="true"
-        android:largeHeap="true">
+        android:largeHeap="true"
+        android:localeConfig="@xml/locales_config">
         <activity
             android:name=".MainActivity"
             android:exported="true"

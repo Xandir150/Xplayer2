@@ -63,13 +63,13 @@ object DisplayUtils {
                 activity.startActivity(fallbackIntent)
                 android.widget.Toast.makeText(
                     activity,
-                    "Файл недоступен. Выберите его заново.",
+                    activity.getString(com.teleteh.xplayer2.R.string.file_unavailable),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
             } catch (e2: Exception) {
                 android.widget.Toast.makeText(
                     activity,
-                    "Не удалось открыть файл: ${e.message}",
+                    activity.getString(com.teleteh.xplayer2.R.string.file_open_failed, e.message),
                     android.widget.Toast.LENGTH_LONG
                 ).show()
             }
