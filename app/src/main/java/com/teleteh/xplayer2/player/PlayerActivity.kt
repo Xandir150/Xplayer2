@@ -1447,13 +1447,20 @@ class PlayerActivity : AppCompatActivity() {
     private fun applyRenderMode() {
         if (!sbsExplicitlyConfigured) {
             // Auto: derive the stereo mode from the detected source layout.
-            stereoMode = when (detectSourceLayout()) {
+            val layout = detectSourceLayout()
+            stereoMode = when (layout) {
                 SourceLayout.Sbs -> StereoMode.Sbs
                 SourceLayout.Ou -> StereoMode.Ou
                 // On the ultrawide goggle panel (3D/SBS display mode) an undetectable clip with no
                 // saved format is most likely SBS content — default to SBS. On the phone / 2D
                 // panel, keep plain 2D.
                 SourceLayout.Mono -> if (activeDisplayIsUltrawide()) StereoMode.Sbs else StereoMode.Off
+            }
+            // Lock in the goggle-panel SBS default as an explicit choice: otherwise it's re-derived
+            // every applyRenderMode, and when the panel goes away (stop/disconnect) it flips back to
+            // 2D and onStop's saveProgress overwrites the SBS we saved — so history would reopen 2D.
+            if (layout == SourceLayout.Mono && stereoMode == StereoMode.Sbs) {
+                sbsExplicitlyConfigured = true
             }
         }
         when (stereoMode) {
