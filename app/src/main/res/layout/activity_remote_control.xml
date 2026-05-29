@@ -206,15 +206,33 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
-    <!-- Stop button -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnStop"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+    <!-- Stop button — kept to 1/3 width and centred so it's hard to hit by accident (e.g. when a
+         system USB-connection prompt pops up over the bottom of the screen). -->
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:text="@string/remote_stop_playback"
-        android:textAllCaps="false"
-        android:textColor="#FF5555"
-        app:strokeColor="#FF5555" />
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnStop"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_weight="1"
+            android:text="@string/remote_stop_playback"
+            android:textAllCaps="false"
+            android:textColor="#FF5555"
+            app:strokeColor="#FF5555" />
+
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+    </LinearLayout>
 
 </LinearLayout>
