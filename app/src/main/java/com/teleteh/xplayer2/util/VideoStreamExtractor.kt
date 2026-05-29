@@ -483,7 +483,7 @@ object VideoStreamExtractor {
      * with stream URLs in opts.player.params[0] (hls_ondemand / urlNNNN).
      */
     private fun extractVkViaApi(videoFull: String): ExtractedStream? {
-        val json = postAlVideo(videoFull) ?: return null
+        val json = postAlVideo("act=show&video=$videoFull&al=1") ?: return null
         val payload = json.optJSONArray("payload")
         if (payload == null) {
             Log.w(TAG, "VK al_video: response has no payload array")
@@ -543,9 +543,9 @@ object VideoStreamExtractor {
         return null
     }
 
-    private fun postAlVideo(videoFull: String): JSONObject? {
+    private fun postAlVideo(body: String): JSONObject? {
         return try {
-            Log.d(TAG, "POST al_video.php for video=$videoFull")
+            Log.d(TAG, "POST al_video.php ($body)")
             val conn = (URL("https://vk.com/al_video.php").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = 15000
@@ -561,14 +561,14 @@ object VideoStreamExtractor {
                 setRequestProperty("Accept-Encoding", "identity")
                 instanceFollowRedirects = true
             }
-            conn.outputStream.use { it.write("act=show&video=$videoFull&al=1".toByteArray(Charsets.US_ASCII)) }
+            conn.outputStream.use { it.write(body.toByteArray(Charsets.US_ASCII)) }
             val code = conn.responseCode
             Log.d(TAG, "al_video.php HTTP $code")
             if (code !in 200..299) {
                 Log.w(TAG, "al_video.php returned HTTP $code")
                 return null
             }
-            // VK serves this JSON as windows-1251; decode directly so md_title stays correct.
+            // VK serves this JSON as windows-1251; decode directly so Cyrillic titles stay correct.
             val text = conn.inputStream.bufferedReader(charset("windows-1251")).use { it.readText() }
             val start = text.indexOf('{')
             JSONObject(if (start > 0) text.substring(start) else text)
@@ -576,6 +576,64 @@ object VideoStreamExtractor {
             Log.e(TAG, "al_video.php POST failed", e)
             null
         }
+    }
+
+    /** One video in a VK owner's library, as returned by the al_video.php video list. */
+    data class VkVideoItem(
+        val url: String,        // canonical vkvideo.ru URL — feeds straight back into [extract]
+        val title: String,
+        val thumbnailUrl: String?,
+        val duration: String?,
+    )
+
+    /**
+     * List an owner's (user/group) videos via al_video.php `load_videos_silent`, optionally
+     * keeping only titles containing [titleContains] (case-insensitive). Paginates through the
+     * whole library. [ownerId] is the numeric owner id (negative for groups, e.g. -225720479).
+     *
+     * Each list row is a flat array: [0]=ownerId, [1]=videoId, [2]=thumbnail, [3]=title,
+     * [5]=duration. The envelope is payload[1][0]["all"] = {list, count, total} (windows-1251).
+     */
+    suspend fun listOwnerVideos(
+        ownerId: String,
+        titleContains: String? = null,
+        maxItems: Int = 1000,
+    ): List<VkVideoItem> = withContext(Dispatchers.IO) {
+        val needle = titleContains?.lowercase()
+        val out = mutableListOf<VkVideoItem>()
+        var offset = 0
+        var total = Int.MAX_VALUE
+        var guard = 0
+        while (offset < total && out.size < maxItems && guard++ < 40) {
+            val json = postAlVideo("act=load_videos_silent&al=1&offset=$offset&oid=$ownerId&section=all")
+                ?: break
+            val inner = json.optJSONArray("payload")?.optJSONArray(1) ?: break
+            val all = inner.optJSONObject(0)?.optJSONObject("all") ?: break
+            total = all.optInt("total", out.size)
+            val list = all.optJSONArray("list") ?: break
+            val pageCount = all.optInt("count", list.length())
+            if (list.length() == 0) break
+            for (i in 0 until list.length()) {
+                val v = list.optJSONArray(i) ?: continue
+                val oid = v.optLong(0)
+                val vid = v.optLong(1)
+                if (oid == 0L || vid == 0L) continue
+                val title = v.optString(3).trim()
+                if (needle != null && !title.lowercase().contains(needle)) continue
+                out.add(
+                    VkVideoItem(
+                        url = "https://vkvideo.ru/video${oid}_$vid",
+                        title = title.ifBlank { "video${oid}_$vid" },
+                        thumbnailUrl = v.optString(2).takeIf { it.startsWith("http") },
+                        duration = v.optString(5).takeIf { it.isNotBlank() },
+                    )
+                )
+            }
+            offset += pageCount.coerceAtLeast(1)
+            if (pageCount == 0) break
+        }
+        Log.i(TAG, "listOwnerVideos(oid=$ownerId, filter=$titleContains) -> ${out.size} items")
+        out
     }
 
     private fun extractOkRuVideoId(uri: Uri): String? {

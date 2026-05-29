@@ -27,6 +27,7 @@ import com.teleteh.xplayer2.data.network.DlnaDiscovery
 import com.teleteh.xplayer2.data.network.NetworkItem
 import com.teleteh.xplayer2.data.network.SmbStorage
 import com.teleteh.xplayer2.player.PlayerActivity
+import com.teleteh.xplayer2.ui.VkClubActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import kotlinx.coroutines.launch
 
@@ -89,6 +90,25 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
             if (event.action == MotionEvent.ACTION_UP) {
                 v.requestFocus(); v.performClick(); true
             } else false
+        }
+
+        // "Hughey" — opens a VK group's 3D films. Hidden entirely on Spanish (product decision).
+        val btnHughey = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnHughey)
+        val lang = resources.configuration.locales.takeIf { it.size() > 0 }?.get(0)?.language
+        if (lang == "es") {
+            btnHughey.visibility = View.GONE
+        } else {
+            btnHughey.setOnClickListener {
+                startActivity(Intent(requireContext(), VkClubActivity::class.java).apply {
+                    putExtra(VkClubActivity.EXTRA_OWNER_ID, "-225720479")
+                    putExtra(VkClubActivity.EXTRA_TITLE_FILTER, "3D")
+                    putExtra(VkClubActivity.EXTRA_TITLE, "Hughey")
+                    putExtra(
+                        VkClubActivity.EXTRA_BOOSTY_URL,
+                        "https://boosty.to/hugheyvr/bundle/f36c08bd-634e-49e9-bb7a-e2948c30d668?isFromShowcasePreview=true"
+                    )
+                })
+            }
         }
 
         etUrl.setOnEditorActionListener { _, actionId, _ ->

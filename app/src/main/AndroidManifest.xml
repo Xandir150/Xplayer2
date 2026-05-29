@@ -331,7 +331,12 @@
             android:screenOrientation="portrait"
             android:launchMode="singleTop"
             android:theme="@style/Theme.XPlayer2" />
-        
+
+        <activity
+            android:name=".ui.VkClubActivity"
+            android:exported="false"
+            android:theme="@style/Theme.XPlayer2" />
+
         <service
             android:name=".player.PlaybackService"
             android:exported="false"

@@ -107,4 +107,9 @@
 
     <!-- Recent subtitle -->
     <string name="recent_position_prefix">Position: </string>
+
+    <!-- Hughey VK 3D-films shortcut (Network tab) -->
+    <string name="network_hughey">Hughey</string>
+    <string name="vk_club_empty">No videos found</string>
+    <string name="vk_club_boosty">Hughey on Boosty</string>
 </resources>
