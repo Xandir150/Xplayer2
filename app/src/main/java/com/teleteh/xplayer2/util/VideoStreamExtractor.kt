@@ -587,9 +587,10 @@ object VideoStreamExtractor {
     )
 
     /**
-     * List an owner's (user/group) videos via al_video.php `load_videos_silent`, optionally
-     * keeping only titles containing [titleContains] (case-insensitive). Paginates through the
-     * whole library. [ownerId] is the numeric owner id (negative for groups, e.g. -225720479).
+     * List an owner's (user/group) newest videos via al_video.php `load_videos_silent`,
+     * optionally keeping only titles containing [titleContains] (case-insensitive). Returns the
+     * single ~50-item window VK exposes unauthenticated. [ownerId] is the numeric owner id
+     * (negative for groups, e.g. -225720479).
      *
      * Each list row is a flat array: [0]=ownerId, [1]=videoId, [2]=thumbnail, [3]=title,
      * [5]=duration. The envelope is payload[1][0]["all"] = {list, count, total} (windows-1251).
@@ -597,42 +598,38 @@ object VideoStreamExtractor {
     suspend fun listOwnerVideos(
         ownerId: String,
         titleContains: String? = null,
-        maxItems: Int = 1000,
     ): List<VkVideoItem> = withContext(Dispatchers.IO) {
         val needle = titleContains?.lowercase()
+        // Unauthenticated al_video.php only exposes the newest ~50 videos for an owner: `offset`
+        // never pages past the first window, `count` is ignored, and there's no cursor — so we
+        // fetch the single available window and de-duplicate (the same ids can repeat in it).
+        val json = postAlVideo("act=load_videos_silent&al=1&offset=0&oid=$ownerId&section=all")
+            ?: return@withContext emptyList()
+        val all = json.optJSONArray("payload")?.optJSONArray(1)
+            ?.optJSONObject(0)?.optJSONObject("all")
+            ?: return@withContext emptyList()
+        val list = all.optJSONArray("list") ?: return@withContext emptyList()
+        val seen = HashSet<String>()
         val out = mutableListOf<VkVideoItem>()
-        var offset = 0
-        var total = Int.MAX_VALUE
-        var guard = 0
-        while (offset < total && out.size < maxItems && guard++ < 40) {
-            val json = postAlVideo("act=load_videos_silent&al=1&offset=$offset&oid=$ownerId&section=all")
-                ?: break
-            val inner = json.optJSONArray("payload")?.optJSONArray(1) ?: break
-            val all = inner.optJSONObject(0)?.optJSONObject("all") ?: break
-            total = all.optInt("total", out.size)
-            val list = all.optJSONArray("list") ?: break
-            val pageCount = all.optInt("count", list.length())
-            if (list.length() == 0) break
-            for (i in 0 until list.length()) {
-                val v = list.optJSONArray(i) ?: continue
-                val oid = v.optLong(0)
-                val vid = v.optLong(1)
-                if (oid == 0L || vid == 0L) continue
-                val title = v.optString(3).trim()
-                if (needle != null && !title.lowercase().contains(needle)) continue
-                out.add(
-                    VkVideoItem(
-                        url = "https://vkvideo.ru/video${oid}_$vid",
-                        title = title.ifBlank { "video${oid}_$vid" },
-                        thumbnailUrl = v.optString(2).takeIf { it.startsWith("http") },
-                        duration = v.optString(5).takeIf { it.isNotBlank() },
-                    )
+        for (i in 0 until list.length()) {
+            val v = list.optJSONArray(i) ?: continue
+            val oid = v.optLong(0)
+            val vid = v.optLong(1)
+            if (oid == 0L || vid == 0L) continue
+            val key = "${oid}_$vid"
+            if (!seen.add(key)) continue   // de-dupe: VK repeats ids within the window
+            val title = v.optString(3).trim()
+            if (needle != null && !title.lowercase().contains(needle)) continue
+            out.add(
+                VkVideoItem(
+                    url = "https://vkvideo.ru/video$key",
+                    title = title.ifBlank { "video$key" },
+                    thumbnailUrl = v.optString(2).takeIf { it.startsWith("http") },
+                    duration = v.optString(5).takeIf { it.isNotBlank() },
                 )
-            }
-            offset += pageCount.coerceAtLeast(1)
-            if (pageCount == 0) break
+            )
         }
-        Log.i(TAG, "listOwnerVideos(oid=$ownerId, filter=$titleContains) -> ${out.size} items")
+        Log.i(TAG, "listOwnerVideos(oid=$ownerId, filter=$titleContains) -> ${out.size} of ${all.optInt("total")}")
         out
     }
 
