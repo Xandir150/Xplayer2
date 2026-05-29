@@ -14,6 +14,8 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.addCallback
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.net.toUri
 import androidx.fragment.app.Fragment
@@ -44,11 +46,32 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
     private var currentDlnaDeviceLocation: String? = null
     private val dlnaBackStack = ArrayDeque<String>() // container IDs
     private val discoveredDevices = mutableListOf<NetworkItem.DlnaDevice>()
+    private lateinit var openDocLauncher: ActivityResultLauncher<Array<String>>
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Local-file picker (moved here from the old Files tab — Files and Network are now one
+        // "Sources" tab). Persists read permission so the file can be reopened from Recent.
+        openDocLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri ?: return@registerForActivityResult
+            val ctx = requireContext()
+            try {
+                ctx.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (_: SecurityException) { /* transient read permission still works */ }
+            val intent = Intent(ctx, PlayerActivity::class.java).apply {
+                data = uri
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            DisplayUtils.startOnBestDisplay(requireActivity(), intent)
+        }
+    }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
         smbStorage = SmbStorage(requireContext())
+        view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnOpenFile)
+            ?.setOnClickListener { openDocLauncher.launch(arrayOf("video/*")) }
 
         val etUrl: EditText = view.findViewById(R.id.etUrl)
         val btnOpen: Button = view.findViewById(R.id.btnOpenUrl)

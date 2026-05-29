@@ -4,6 +4,7 @@
     <string name="tab_recent">Recientes</string>
     <string name="tab_files">Archivos</string>
     <string name="tab_network">Red</string>
+    <string name="tab_sources">Fuentes</string>
 
     <!-- Player menu -->
     <string name="menu_audio">Pista de audio</string>

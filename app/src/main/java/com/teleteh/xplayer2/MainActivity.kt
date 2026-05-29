@@ -74,7 +74,7 @@ class MainActivity : AppCompatActivity() {
         val viewPager: ViewPager2 = binding.viewPager
         viewPager.adapter = MainPagerAdapter(this)
 
-        val tabTitles = listOf(getString(R.string.tab_recent), getString(R.string.tab_files), getString(R.string.tab_network))
+        val tabTitles = listOf(getString(R.string.tab_recent), getString(R.string.tab_sources))
         TabLayoutMediator(binding.tabLayout, viewPager) { tab, position ->
             tab.text = tabTitles[position]
             tab.contentDescription = null
@@ -170,7 +170,7 @@ class MainActivity : AppCompatActivity() {
     private fun shouldReturnToTabsOnUp(fragmentView: View): Boolean {
         val focused = currentFocus ?: return false
         // First-row controls on each fragment should return to tabs on UP
-        val firstRow = listOf(R.id.btnOpen, R.id.etUrl, R.id.btnOpenUrl)
+        val firstRow = listOf(R.id.etUrl, R.id.btnOpenUrl, R.id.btnOpenFile, R.id.btnHughey)
         if (firstRow.any { fragmentView.findViewById<View?>(it) === focused }) return true
         val recycler: RecyclerView? = fragmentView.findViewById<RecyclerView?>(R.id.rvRecent)
             ?: fragmentView.findViewById<RecyclerView?>(R.id.rvNetwork)
@@ -217,7 +217,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun focusFirstVisibleControl(fragmentView: View): Boolean {
-        listOf(R.id.btnOpen, R.id.etUrl, R.id.btnOpenUrl).forEach { id ->
+        listOf(R.id.etUrl, R.id.btnOpenUrl, R.id.btnOpenFile, R.id.btnHughey).forEach { id ->
             fragmentView.findViewById<View?>(id)?.takeIf { isActuallyFocusable(it) }?.let {
                 it.requestFocus(); return true
             }

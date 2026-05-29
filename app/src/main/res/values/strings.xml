@@ -6,6 +6,7 @@
     <string name="tab_recent">Recent</string>
     <string name="tab_files">Files</string>
     <string name="tab_network">Network</string>
+    <string name="tab_sources">Sources</string>
 
     <!-- Player menu -->
     <string name="menu_audio">Audio track</string>

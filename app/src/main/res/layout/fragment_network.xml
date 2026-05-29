@@ -36,19 +36,38 @@
                 android:focusableInTouchMode="true" />
         </LinearLayout>
 
-        <!-- "Hughey" 3D-films shortcut (hidden on Spanish in code). -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnHughey"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="wrap_content"
+        <!-- Source shortcuts: open a local file (system picker) + the Hughey 3D-films shortcut
+             (Hughey is hidden on Spanish in code). -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="@string/network_hughey"
-            android:textAllCaps="false"
-            android:focusable="true"
-            app:icon="@drawable/ic_source_vk"
-            app:iconGravity="textStart"
-            app:iconTint="@null" />
+            android:orientation="horizontal"
+            android:layout_marginTop="4dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnOpenFile"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:text="@string/file_picker_open"
+                android:textAllCaps="false"
+                android:focusable="true"
+                app:icon="@drawable/ic_folder_24px"
+                app:iconGravity="textStart" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnHughey"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/network_hughey"
+                android:textAllCaps="false"
+                android:focusable="true"
+                app:icon="@drawable/ic_source_vk"
+                app:iconGravity="textStart"
+                app:iconTint="@null" />
+        </LinearLayout>
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rvNetwork"

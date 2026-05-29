@@ -4,6 +4,7 @@
     <string name="tab_recent">Недавние</string>
     <string name="tab_files">Файлы</string>
     <string name="tab_network">Сеть</string>
+    <string name="tab_sources">Источники</string>
 
     <!-- Player menu -->
     <string name="menu_audio">Аудиодорожка</string>
