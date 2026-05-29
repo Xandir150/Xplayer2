@@ -960,6 +960,18 @@ class PlayerActivity : AppCompatActivity() {
         else getString(R.string.volume_boost_with_value, db)
     }
 
+    /** Current volume-boost button label, e.g. "Boost: off" / "Boost: +12 dB". */
+    fun getVolumeBoostLabel(): String = boostLabel(getVolumeBoostMb())
+
+    /** Cycle volume boost 0 -> +6 -> +12 -> +18 -> +24 dB -> 0; returns the new label. */
+    fun cycleVolumeBoost(): String {
+        val steps = intArrayOf(0, 600, 1200, 1800, 2400)
+        val cur = getVolumeBoostMb()
+        val next = steps.firstOrNull { it > cur } ?: 0
+        setVolumeBoostMb(next)
+        return boostLabel(next)
+    }
+
     private fun updatePlaybackService() {
         if (presentation != null) {
             startPlaybackService()
@@ -1071,13 +1083,9 @@ class PlayerActivity : AppCompatActivity() {
                     isAllCaps = false
                     alpha = 0.95f
                     setOnClickListener {
-                        // Cycle through 0, +6, +12, +18, +24 dB (millibels)
-                        val steps = intArrayOf(0, 600, 1200, 1800, 2400)
-                        val cur = getVolumeBoostMb()
-                        val next = steps.firstOrNull { it > cur } ?: 0
-                        setVolumeBoostMb(next)
-                        text = boostLabel(next)
-                        Toast.makeText(this@PlayerActivity, boostLabel(next), Toast.LENGTH_SHORT).show()
+                        val label = cycleVolumeBoost()
+                        text = label
+                        Toast.makeText(this@PlayerActivity, label, Toast.LENGTH_SHORT).show()
                     }
                 }
                 inner.addView(boostTv)

@@ -190,6 +190,17 @@
         app:icon="@drawable/ear_sound_24px"
         app:iconTint="@android:color/white" />
 
+    <!-- Volume boost — lifts quiet sources (low-mastered web video, goggle speakers). Persists. -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnVolumeBoost"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="12dp"
+        android:text="@string/volume_boost_off"
+        android:textAllCaps="false"
+        android:textColor="@android:color/white" />
+
     <View
         android:layout_width="match_parent"
         android:layout_height="0dp"

@@ -40,6 +40,7 @@ class RemoteControlActivity : AppCompatActivity() {
     private lateinit var btnShift: MaterialButton
     private lateinit var btnResizeMode: MaterialButton
     private lateinit var btnLazy3d: MaterialButton
+    private lateinit var btnVolumeBoost: MaterialButton
 
     private val handler = Handler(Looper.getMainLooper())
     private val updateRunnable = object : Runnable {
@@ -69,6 +70,7 @@ class RemoteControlActivity : AppCompatActivity() {
         btnShift = findViewById(R.id.btnShift)
         btnResizeMode = findViewById(R.id.btnResizeMode)
         btnLazy3d = findViewById(R.id.btnLazy3d)
+        btnVolumeBoost = findViewById(R.id.btnVolumeBoost)
 
         // Play/Pause
         btnPlayPause.setOnClickListener {
@@ -127,6 +129,13 @@ class RemoteControlActivity : AppCompatActivity() {
         // Audio track
         findViewById<MaterialButton>(R.id.btnAudio).setOnClickListener {
             showAudioTrackDialog()
+        }
+
+        // Volume boost — cycles Off/+6/+12/+18/+24 dB to lift quiet sources. Reachable
+        // here so it works while the picture is on the goggles and the phone is the remote.
+        btnVolumeBoost.setOnClickListener {
+            val player = PlayerActivity.currentInstance ?: return@setOnClickListener
+            btnVolumeBoost.text = player.cycleVolumeBoost()
         }
 
         // Stop button - finish both activities
@@ -331,6 +340,9 @@ class RemoteControlActivity : AppCompatActivity() {
 
         // Resize mode (Auto/16:9/...). Label only — no checked state.
         btnResizeMode.text = player.getResizeModeLabel()
+
+        // Volume boost label reflects the persisted value when the remote opens.
+        btnVolumeBoost.text = player.getVolumeBoostLabel()
 
         // Lazy 3D toggle: visible when (a) at least one runnable backend exists — IMU
         // parallax needs XREAL goggles, depth synthesis needs the bundled TFLite model —
