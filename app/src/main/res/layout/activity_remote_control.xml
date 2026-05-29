@@ -190,6 +190,20 @@
         app:icon="@drawable/ear_sound_24px"
         app:iconTint="@android:color/white" />
 
+    <!-- Subtitles button — subtitles default to off, so this is how the user turns them on
+         while the picture is on the goggles and the phone is the remote. -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnSubtitle"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="12dp"
+        android:text="@string/menu_subtitle"
+        android:textAllCaps="false"
+        android:textColor="@android:color/white"
+        app:icon="@drawable/ic_subtitle_24"
+        app:iconTint="@android:color/white" />
+
     <!-- Volume boost — lifts quiet sources (low-mastered web video, goggle speakers). Persists. -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnVolumeBoost"
@@ -200,6 +214,19 @@
         android:text="@string/volume_boost_off"
         android:textAllCaps="false"
         android:textColor="@android:color/white" />
+
+    <!-- Lazy 3D sensor debug readout (TEMPORARY tuning aid — remove once head-tracking is dialled in).
+         Hidden unless Lazy 3D is on; shows live IMU rates and the resulting parallax shift. -->
+    <TextView
+        android:id="@+id/tvLazyDebug"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:fontFamily="monospace"
+        android:textColor="#66FF99"
+        android:textSize="12sp"
+        android:lineSpacingExtra="2dp"
+        android:visibility="gone" />
 
     <View
         android:layout_width="match_parent"

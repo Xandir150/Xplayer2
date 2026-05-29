@@ -66,6 +66,14 @@ class GlassesController(private val appContext: Context) {
     @Volatile
     private var registered: Boolean = false
 
+    // How many UI surfaces currently want the glasses link (MainActivity + PlayerActivity each
+    // acquire one). The USB connection opens on the first acquire and is only released when the
+    // last one lets go — so it survives the MainActivity→PlayerActivity hand-off. Without this,
+    // MainActivity.onStop() used to tear the connection down the moment the player took over the
+    // glasses, leaving features that read from USB (e.g. the Lazy-3D head-tracking IMU) with no
+    // link for the entire playback session.
+    private var acquireCount: Int = 0
+
     private val permissionAction = "com.teleteh.xplayer2.USB_PERMISSION"
 
     private val receiver = object : BroadcastReceiver() {
@@ -105,6 +113,9 @@ class GlassesController(private val appContext: Context) {
 
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     fun register() {
+        // Ref-counted: a second acquirer just bumps the count; the receiver and USB connection
+        // are already up from the first.
+        acquireCount++
         if (registered) return
         val filter = IntentFilter().apply {
             addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
@@ -123,6 +134,9 @@ class GlassesController(private val appContext: Context) {
     }
 
     fun unregister() {
+        // Ref-counted: only the last release actually tears down the receiver + connection.
+        if (acquireCount > 0) acquireCount--
+        if (acquireCount > 0) return
         if (!registered) return
         try { appContext.unregisterReceiver(receiver) } catch (_: Exception) { }
         registered = false

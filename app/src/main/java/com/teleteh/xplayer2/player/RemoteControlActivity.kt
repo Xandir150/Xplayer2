@@ -14,6 +14,7 @@ import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.ImageButton
 import android.widget.SeekBar
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.toColorInt
@@ -41,6 +42,7 @@ class RemoteControlActivity : AppCompatActivity() {
     private lateinit var btnResizeMode: MaterialButton
     private lateinit var btnLazy3d: MaterialButton
     private lateinit var btnVolumeBoost: MaterialButton
+    private lateinit var tvLazyDebug: TextView
 
     private val handler = Handler(Looper.getMainLooper())
     private val updateRunnable = object : Runnable {
@@ -50,6 +52,26 @@ class RemoteControlActivity : AppCompatActivity() {
             // after extraction/metadata, so a one-shot title in onResume would stay "video-…".
             updateTitle()
             handler.postDelayed(this, 500)
+        }
+    }
+
+    // TEMPORARY: live IMU / parallax telemetry while tuning Lazy 3D head-tracking. Polls at
+    // ~8 Hz so head movement is visible in the numbers; hides itself when Lazy 3D is off.
+    // Remove this (and the tvLazyDebug view) once the head-tracking feel is dialled in.
+    private val lazyDebugRunnable = object : Runnable {
+        override fun run() {
+            val player = PlayerActivity.currentInstance
+            val line = player?.lazy3dDebugLine()
+            if (line != null) {
+                tvLazyDebug.visibility = View.VISIBLE
+                tvLazyDebug.text = line
+            } else {
+                tvLazyDebug.visibility = View.GONE
+            }
+            // Keep the Lazy 3D button label in sync so "starting…" clears to the normal label
+            // the moment IMU data starts flowing — feedback so the user doesn't re-tap.
+            if (player != null) applyLazy3dLabel(player)
+            handler.postDelayed(this, 120)
         }
     }
     
@@ -75,6 +97,7 @@ class RemoteControlActivity : AppCompatActivity() {
         btnResizeMode = findViewById(R.id.btnResizeMode)
         btnLazy3d = findViewById(R.id.btnLazy3d)
         btnVolumeBoost = findViewById(R.id.btnVolumeBoost)
+        tvLazyDebug = findViewById(R.id.tvLazyDebug)
 
         // Play/Pause
         btnPlayPause.setOnClickListener {
@@ -133,6 +156,12 @@ class RemoteControlActivity : AppCompatActivity() {
         // Audio track
         findViewById<MaterialButton>(R.id.btnAudio).setOnClickListener {
             showAudioTrackDialog()
+        }
+
+        // Subtitles — off by default, so this is the way to switch one on (and back off) while
+        // the picture is on the goggles and the phone is the remote.
+        findViewById<MaterialButton>(R.id.btnSubtitle).setOnClickListener {
+            showSubtitleTrackDialog()
         }
 
         // Volume boost — cycles Off/+6/+12/+18/+24 dB to lift quiet sources. Reachable
@@ -277,6 +306,7 @@ class RemoteControlActivity : AppCompatActivity() {
         updateButtons()
         updateProgress()
         handler.post(updateRunnable)
+        handler.post(lazyDebugRunnable)
         // Start dim timer
         scheduleDim()
     }
@@ -284,6 +314,7 @@ class RemoteControlActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         handler.removeCallbacks(updateRunnable)
+        handler.removeCallbacks(lazyDebugRunnable)
         cancelDim()
         dimAnimator?.cancel()
         // Reset brightness when leaving
@@ -379,6 +410,18 @@ class RemoteControlActivity : AppCompatActivity() {
         val lazy3d = player.isLazy3dEnabled()
         btnLazy3d.isChecked = lazy3d
         applyButtonStyle(btnLazy3d, lazy3d)
+        applyLazy3dLabel(player)
+    }
+
+    /**
+     * Show "starting…" on the Lazy 3D button until real sensor/depth data is flowing, and
+     * disable taps while spinning up so a slow start can't be interrupted or re-toggled.
+     * The Starting state is time-bounded in the player, so the button can't stay stuck disabled.
+     */
+    private fun applyLazy3dLabel(player: PlayerActivity) {
+        val starting = player.lazy3dStatus() == PlayerActivity.Lazy3dStatus.Starting
+        btnLazy3d.setText(if (starting) R.string.remote_lazy3d_starting else R.string.remote_lazy3d)
+        btnLazy3d.isEnabled = !starting
     }
 
     private fun applyButtonStyle(btn: MaterialButton, checked: Boolean) {
@@ -422,6 +465,36 @@ class RemoteControlActivity : AppCompatActivity() {
             .setSingleChoiceItems(labels, checkedItem) { dialog, which ->
                 val (_, trackIndex) = tracks[which]
                 player.selectAudioTrack(trackIndex)
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.common_cancel, null)
+            .show()
+    }
+
+    private fun showSubtitleTrackDialog() {
+        val player = PlayerActivity.currentInstance ?: return
+        val tracks = player.getSubtitleTracks()
+        // getSubtitleTracks() always returns at least "Off"; size <= 1 means the clip has no
+        // selectable subtitle tracks, so a chooser would only offer "Off" — say so instead.
+        if (tracks.size <= 1) {
+            Toast.makeText(this, R.string.subtitle_none, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val labels = tracks.map { it.first }.toTypedArray()
+        val selectedIndex = player.getSelectedSubtitleTrackIndex()
+
+        // Find which item in our list corresponds to the selected index (default to "Off").
+        var checkedItem = 0
+        tracks.forEachIndexed { i, (_, idx) ->
+            if (idx == selectedIndex) checkedItem = i
+        }
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.select_subtitle)
+            .setSingleChoiceItems(labels, checkedItem) { dialog, which ->
+                val (_, trackIndex) = tracks[which]
+                player.selectSubtitleTrack(trackIndex)
                 dialog.dismiss()
             }
             .setNegativeButton(R.string.common_cancel, null)

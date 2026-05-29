@@ -17,6 +17,7 @@
     <string name="select_audio_track">Select audio track</string>
     <string name="select_subtitle">Select subtitle</string>
     <string name="subtitle_off">Off</string>
+    <string name="subtitle_none">No subtitles available</string>
 
     <!-- Volume boost -->
     <string name="volume_boost_off">Boost volume: off</string>
@@ -43,6 +44,7 @@
     <string name="remote_auto">Auto</string>
     <string name="remote_shift">Shift</string>
     <string name="remote_lazy3d">Lazy 3D (head tracking)</string>
+    <string name="remote_lazy3d_starting">Lazy 3D — starting…</string>
     <string name="remote_audio_track">Audio Track</string>
     <string name="remote_stop_playback">Stop Playback</string>
 

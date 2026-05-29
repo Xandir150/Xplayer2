@@ -259,6 +259,10 @@ class OuToSbsGlView @JvmOverloads constructor(
         @Volatile private var resizeMode: Int = 0
         @Volatile private var videoAspectRatio: Float = 16f / 9f
         private val texMatrix = FloatArray(16)
+        // Current on-screen surface size, so each frame can re-assert the full viewport before
+        // the visible draw (the depth readback FBO render leaves the viewport at 256×256).
+        private var surfaceWidth: Int = 0
+        private var surfaceHeight: Int = 0
 
         // Fullscreen quad (two triangles)
         private val vertexData: FloatBuffer = floatBufferOf(
@@ -398,6 +402,12 @@ class OuToSbsGlView @JvmOverloads constructor(
             if (now - lastReadbackNanos < READBACK_INTERVAL_NANOS) return
             lastReadbackNanos = now
 
+            // Save the on-screen viewport: rendering into the readback FBO changes the (global)
+            // GL viewport to 256×256, and if we don't put it back the following on-screen draw
+            // squeezes the whole picture into a tiny square at the bottom-left.
+            val savedViewport = IntArray(4)
+            GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, savedViewport, 0)
+
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, readbackFbo)
             GLES20.glViewport(0, 0, READBACK_SIZE, READBACK_SIZE)
             // Re-use the main passthrough shader (uniform uScale=1, uOffset=0, uParallax=0)
@@ -431,6 +441,8 @@ class OuToSbsGlView @JvmOverloads constructor(
                 readbackPixels[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
             }
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+            // Restore the on-screen viewport clobbered by the FBO render above.
+            GLES20.glViewport(savedViewport[0], savedViewport[1], savedViewport[2], savedViewport[3])
 
             // Defensive copy so the worker can hold this snapshot while the next readback
             // overwrites our own internal `readbackPixels`.
@@ -481,6 +493,8 @@ class OuToSbsGlView @JvmOverloads constructor(
         }
 
         override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
+            surfaceWidth = width
+            surfaceHeight = height
             GLES20.glViewport(0, 0, width, height)
         }
 
@@ -498,6 +512,13 @@ class OuToSbsGlView @JvmOverloads constructor(
             if (lazy3d) {
                 consumePendingDepth()
                 maybeReadbackFrame()
+            }
+
+            // Always (re)assert the full on-screen viewport before the visible draw. The depth
+            // readback renders into a 256×256 FBO; any stale/sub-full viewport here would shrink
+            // the whole picture into a corner. Cheap insurance that makes that bug impossible.
+            if (surfaceWidth > 0 && surfaceHeight > 0) {
+                GLES20.glViewport(0, 0, surfaceWidth, surfaceHeight)
             }
 
             GLES20.glUseProgram(program)

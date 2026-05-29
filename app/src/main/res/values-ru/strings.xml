@@ -13,6 +13,7 @@
     <string name="select_audio_track">Выбрать аудиодорожку</string>
     <string name="select_subtitle">Выбрать субтитры</string>
     <string name="subtitle_off">Выкл</string>
+    <string name="subtitle_none">Субтитры недоступны</string>
 
     <!-- Volume boost -->
     <string name="volume_boost_off">Усиление: выкл</string>
@@ -35,6 +36,7 @@
     <string name="remote_3d_mode">3D режим</string>
     <string name="remote_shift">Сдвиг</string>
     <string name="remote_lazy3d">Lazy 3D (отслеживание головы)</string>
+    <string name="remote_lazy3d_starting">Lazy 3D — запуск…</string>
     <string name="remote_audio_track">Аудиодорожка</string>
     <string name="remote_stop_playback">Остановить</string>
 

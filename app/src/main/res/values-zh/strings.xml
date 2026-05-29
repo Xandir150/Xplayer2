@@ -13,6 +13,7 @@
     <string name="select_audio_track">选择音轨</string>
     <string name="select_subtitle">选择字幕</string>
     <string name="subtitle_off">关闭</string>
+    <string name="subtitle_none">无可用字幕</string>
 
     <!-- Volume boost -->
     <string name="volume_boost_off">音量增强：关闭</string>
@@ -35,6 +36,7 @@
     <string name="remote_3d_mode">3D模式</string>
     <string name="remote_shift">偏移</string>
     <string name="remote_lazy3d">Lazy 3D（头部跟踪）</string>
+    <string name="remote_lazy3d_starting">Lazy 3D — 启动中…</string>
     <string name="remote_audio_track">音轨</string>
     <string name="remote_stop_playback">停止播放</string>
 
