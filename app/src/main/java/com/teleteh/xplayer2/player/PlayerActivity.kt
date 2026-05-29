@@ -90,7 +90,13 @@ class PlayerActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_START_POSITION_MS = "start_position_ms"
         const val EXTRA_TITLE = "title"
-        
+
+        // Lazy-3D depth→stereo strength (max per-eye UV shift as a fraction of frame width).
+        // Single tuning knob: higher = more "pop" but a wider disocclusion smear at object
+        // edges; lower = gentler 3D with cleaner edges. iw3 default-ish is ~0.02; we run a bit
+        // softer for comfort on a synthesised (mono-depth) pair.
+        const val LAZY3D_DIVERGENCE = 0.013f
+
         // Current instance for remote control access
         var currentInstance: PlayerActivity? = null
             private set
@@ -233,7 +239,12 @@ class PlayerActivity : AppCompatActivity() {
         }
         
         setContentView(R.layout.activity_player)
-        
+
+        // Keep the device awake during a playback session so the external (glasses) DisplayPort
+        // output doesn't drop when the phone would otherwise time out and sleep. Phone-only
+        // playback benefits too. The remote dims the phone to black on top of this.
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
         // Handle system back via dispatcher to move app back to primary display
         onBackPressedDispatcher.addCallback(this) {
             navigateBackToPrimary()
@@ -1815,18 +1826,17 @@ class PlayerActivity : AppCompatActivity() {
     fun isLazy3dEnabled(): Boolean = lazy3dEnabled
 
     /**
-     * Live one-/two-line telemetry for the remote's temporary Lazy-3D debug overlay, or null
-     * when Lazy 3D is off (so the remote can hide the row). Shows whether IMU samples are
-     * actually flowing and how the head pose maps to the on-screen shift — used to verify
-     * head-tracking and tune axis/sign. Remove the overlay once tuning is done.
+     * Live telemetry for the remote's temporary Lazy-3D debug overlay, or null when Lazy 3D is
+     * off / nothing to report (so the remote hides the row). Head-tracking parallax is currently
+     * disabled, so this shows the depth-synthesis inference time; the IMU line only appears if
+     * parallax is re-enabled. Remove the overlay once tuning is done.
      */
     fun lazy3dDebugLine(): String? {
         if (!lazy3dEnabled) return null
-        val imu = if (imuReader != null) headPoseTracker.debugLine()
-        else "IMU: not started (no XREAL link)"
+        val imu = if (imuReader != null) headPoseTracker.debugLine() else null
         val est = depthEstimator
-        val depth = if (est?.isReady() == true) "  depth ${"%.0f".format(est.avgInferenceMs)}ms" else ""
-        return imu + depth
+        val depth = if (est?.isReady() == true) "depth ${"%.0f".format(est.avgInferenceMs)}ms" else null
+        return listOfNotNull(imu, depth).joinToString("  ").ifBlank { null }
     }
 
     /**
@@ -1891,10 +1901,11 @@ class PlayerActivity : AppCompatActivity() {
         lazy3dEnabled = enabled
         if (enabled) {
             lazy3dEnabledAtNanos = System.nanoTime()
-            // Bring up head-tracking parallax right away — it only needs the XREAL USB link,
-            // so it comes alive immediately, even before the (large) depth model exists. This
-            // is what makes "does head-tracking work?" testable without a 65 MB download first.
-            startLazy3dImu()
+            // Head-tracking parallax is disabled: it felt unnecessary on top of the depth-based
+            // 2D→3D, and the IMU reader thread + 60 Hz pose tick just add load. The whole IMU
+            // path (startLazy3dImu / startPoseTick / XrealImuReader / HeadPoseTracker) is kept
+            // intact — uncomment the next line to bring parallax back.
+            // startLazy3dImu()
 
             val mgr = DepthModelManager(applicationContext)
             if (mgr.isAvailable()) {
@@ -2029,7 +2040,7 @@ class PlayerActivity : AppCompatActivity() {
             val worker = DepthFrameWorker(estimator).also { it.start() }
             depthWorker = worker
             activeGlView()?.setLazy3dStereoEnabled(true)
-            activeGlView()?.setStereoParams(divergence = 0.020f, convergence = 0.5f)
+            activeGlView()?.setStereoParams(divergence = LAZY3D_DIVERGENCE, convergence = 0.5f)
             activeGlView()?.setOnFrameReadbackListener { pixels, w, h, ts ->
                 // Called on the GL thread when a fresh source snapshot is ready.
                 worker.submit(pixels, w, h, ts)
@@ -2107,7 +2118,7 @@ class PlayerActivity : AppCompatActivity() {
         val worker = depthWorker
         if (depthEstimator?.isReady() == true && worker != null) {
             v.setLazy3dStereoEnabled(true)
-            v.setStereoParams(divergence = 0.020f, convergence = 0.5f)
+            v.setStereoParams(divergence = LAZY3D_DIVERGENCE, convergence = 0.5f)
             v.setOnFrameReadbackListener { pixels, w, h, ts -> worker.submit(pixels, w, h, ts) }
         }
     }

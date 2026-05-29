@@ -86,6 +86,12 @@ class RemoteControlActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         currentInstance = this
         setContentView(R.layout.activity_remote_control)
+        // Keep the *device* awake for the whole session. The glasses are a DisplayPort output, so
+        // if the phone times out and sleeps, the goggles lose signal and playback dies. This stops
+        // the OS screen-timeout while the remote is up; the phone can still dim to black (below)
+        // and keep feeding the glasses. (Pressing the hardware power button still sleeps the whole
+        // device — that's an OS limitation we can't override.)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         tvTitle = findViewById(R.id.tvTitle)
         tvPosition = findViewById(R.id.tvPosition)
@@ -381,12 +387,17 @@ class RemoteControlActivity : AppCompatActivity() {
 
     private fun updateButtons() {
         val player = PlayerActivity.currentInstance ?: return
+        val lazy3d = player.isLazy3dEnabled()
 
-        // SBS button — 3-state (2D / OU→SBS / SBS); label reflects current mode.
+        // SBS button — 3-state (2D / OU→SBS / SBS); label reflects current mode. Disabled while
+        // Lazy 3D is on: Lazy 3D owns the stereo rendering, so switching the source stereo mode
+        // would only fight it (and Lazy 3D applies to plain-2D clips only). Dimmed to read inactive.
         val sbsEnabled = player.isStereoSbsEnabled()
         btnSbs.text = player.getStereoModeLabel()
         btnSbs.isChecked = sbsEnabled
         applyButtonStyle(btnSbs, sbsEnabled)
+        btnSbs.isEnabled = !lazy3d
+        btnSbs.alpha = if (lazy3d) 0.4f else 1f
 
         // Shift button — only shown in OU→SBS mode (vertical shift is meaningless otherwise).
         btnShift.visibility = if (player.isOuSbsMode()) View.VISIBLE else View.GONE
@@ -407,7 +418,6 @@ class RemoteControlActivity : AppCompatActivity() {
         val supported = player.isLazy3dSupported()
         val applicable = player.isLazy3dApplicable()
         btnLazy3d.visibility = if (supported && applicable) View.VISIBLE else View.GONE
-        val lazy3d = player.isLazy3dEnabled()
         btnLazy3d.isChecked = lazy3d
         applyButtonStyle(btnLazy3d, lazy3d)
         applyLazy3dLabel(player)

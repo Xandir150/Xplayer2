@@ -208,7 +208,7 @@ class OuToSbsGlView @JvmOverloads constructor(
         val lazy3dStereoEnabled = AtomicBoolean(false)
         @Volatile var parallaxX: Float = 0f
         @Volatile var parallaxY: Float = 0f
-        @Volatile var stereoDivergence: Float = 0.020f   // 2% of width — iw3 default-ish
+        @Volatile var stereoDivergence: Float = 0.013f   // fallback; PlayerActivity sets LAZY3D_DIVERGENCE
         @Volatile var stereoConvergence: Float = 0.5f
         @Volatile var frameReadbackListener: ((IntArray, Int, Int, Long) -> Unit)? = null
 
@@ -459,6 +459,16 @@ class OuToSbsGlView @JvmOverloads constructor(
             GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, viewport, 0)
             val eyeW = viewport[2] / 2
 
+            // Per-eye letterbox so the aspect-ratio control works under Lazy 3D too. The lazy3d
+            // quad spans 0..1 UV, so drawing into a smaller rect just scales the whole source +
+            // depth into it; the uncovered margin stays black from the per-frame clear. Auto
+            // (resizeMode 0) keeps filling the full half, as before.
+            val targetAspect = if (resizeMode == 0) 0f else getTargetAspectRatio(resizeMode, videoAspectRatio)
+            val leftRect = if (resizeMode == 0) FitRect(viewport[0], viewport[1], eyeW, viewport[3])
+                else calculateFitRect(viewport[0], viewport[1], eyeW, viewport[3], targetAspect)
+            val rightRect = if (resizeMode == 0) FitRect(viewport[0] + eyeW, viewport[1], eyeW, viewport[3])
+                else calculateFitRect(viewport[0] + eyeW, viewport[1], eyeW, viewport[3], targetAspect)
+
             GLES20.glUseProgram(lazy3dProgram)
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
@@ -479,11 +489,11 @@ class OuToSbsGlView @JvmOverloads constructor(
             GLES20.glVertexAttribPointer(l3dTexLoc, 2, GLES20.GL_FLOAT, false, 16, vertexData)
 
             // Left eye — sign -1 → samples to the right of the pixel (foreground floats left).
-            GLES20.glViewport(viewport[0], viewport[1], eyeW, viewport[3])
+            GLES20.glViewport(leftRect.x, leftRect.y, leftRect.width, leftRect.height)
             GLES20.glUniform1f(l3dEyeSignLoc, -1f)
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
             // Right eye — sign +1.
-            GLES20.glViewport(viewport[0] + eyeW, viewport[1], eyeW, viewport[3])
+            GLES20.glViewport(rightRect.x, rightRect.y, rightRect.width, rightRect.height)
             GLES20.glUniform1f(l3dEyeSignLoc, 1f)
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
             GLES20.glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
@@ -860,12 +870,18 @@ uniform float uEyeSign;    // -1 left, +1 right
 uniform vec2 uParallax;
 void main() {
   vec2 tcSrc = (uTexMatrix * vec4(vTexCoord, 0.0, 1.0)).xy;
-  // 3-tap horizontal dilation (max of self + left/right neighbours). Cheap and enough
-  // to hide most depth-boundary halos in moving content.
+  // Horizontal foreground dilation (max over neighbours): widens the nearer object's
+  // silhouette so it covers the disocclusion band the warp opens along edges — the main
+  // source of the "smear/halo at object borders". Span ±3 depth-texels ≈ the max disparity
+  // at the current divergence, so the foreground edge wins instead of stretched background.
   float dpx = 1.0 / 256.0;
   float d = texture2D(uDepth, vTexCoord).r;
   d = max(d, texture2D(uDepth, vTexCoord + vec2(dpx, 0.0)).r);
   d = max(d, texture2D(uDepth, vTexCoord - vec2(dpx, 0.0)).r);
+  d = max(d, texture2D(uDepth, vTexCoord + vec2(2.0 * dpx, 0.0)).r);
+  d = max(d, texture2D(uDepth, vTexCoord - vec2(2.0 * dpx, 0.0)).r);
+  d = max(d, texture2D(uDepth, vTexCoord + vec2(3.0 * dpx, 0.0)).r);
+  d = max(d, texture2D(uDepth, vTexCoord - vec2(3.0 * dpx, 0.0)).r);
   float disparity = (d - uConvergence) * uDivergence * uEyeSign;
   vec2 sampleUv = tcSrc + vec2(disparity, 0.0) + uParallax;
   gl_FragColor = texture2D(uSource, sampleUv);
