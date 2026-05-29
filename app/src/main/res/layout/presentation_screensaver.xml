@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Idle screensaver shown on the external (glasses) display while no film is playing — i.e.
+     while the user is in the main section. Replaces the default UI-mirroring with the retro
+     bouncing-DVD logo. Wrapped in SbsMirrorLayout so it's duplicated per-eye on the 3D panel. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:fitsSystemWindows="false">
+
+    <com.teleteh.xplayer2.ui.SbsMirrorLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <com.teleteh.xplayer2.ui.DvdScreensaverView
+                android:id="@+id/screensaverView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+        </FrameLayout>
+    </com.teleteh.xplayer2.ui.SbsMirrorLayout>
+
+</FrameLayout>

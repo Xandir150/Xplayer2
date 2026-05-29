@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -25,7 +26,9 @@ import com.teleteh.xplayer2.data.glasses.GlassesController
 import com.teleteh.xplayer2.data.glasses.GlassesProtocol
 import com.teleteh.xplayer2.databinding.ActivityMainBinding
 import com.teleteh.xplayer2.player.PlayerActivity
+import com.teleteh.xplayer2.player.ScreensaverPresentation
 import com.teleteh.xplayer2.ui.MainPagerAdapter
+import com.teleteh.xplayer2.ui.util.DisplayUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -46,6 +49,18 @@ class MainActivity : AppCompatActivity() {
         GlassesController(applicationContext).also { glassesControllerForPlayback = it }
     }
     private var glassesMenuItem: MenuItem? = null
+
+    // Idle screensaver on the external (glasses) display: while we're in the main section the
+    // goggles otherwise just mirror the phone UI, so we put up a retro bouncing-DVD logo instead.
+    // Shown while MainActivity is foreground with an external display; PlayerActivity takes the
+    // display over when a film starts.
+    private val displayManager: DisplayManager? by lazy { getSystemService(DisplayManager::class.java) }
+    private var screensaverPresentation: ScreensaverPresentation? = null
+    private val displayListener = object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) = reconcileScreensaver()
+        override fun onDisplayRemoved(displayId: Int) = reconcileScreensaver()
+        override fun onDisplayChanged(displayId: Int) = reconcileScreensaver()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -315,18 +330,49 @@ class MainActivity : AppCompatActivity() {
         super.onStart()
         glasses.setListener { _, _ -> updateGlassesMenu() }
         glasses.register()
+        // Show the idle screensaver on the glasses while we're the foreground (browsing) screen,
+        // and react to the goggles being plugged/unplugged.
+        displayManager?.registerDisplayListener(displayListener, null)
+        reconcileScreensaver()
     }
 
     override fun onStop() {
         super.onStop()
         glasses.setListener(null)
         glasses.unregister()
+        // Give the external display back (PlayerActivity will put video on it, or it returns to
+        // mirroring once nothing owns it).
+        displayManager?.unregisterDisplayListener(displayListener)
+        dismissScreensaver()
     }
 
     override fun onResume() {
         super.onResume()
         // PlayerActivity might have come and gone in the background; re-evaluate enabled state.
         updateGlassesMenu()
+    }
+
+    /**
+     * Put the bouncing-DVD screensaver up on the external (glasses) display if one is present,
+     * or take it down if the display went away. Idempotent — safe to call on every display event.
+     */
+    private fun reconcileScreensaver() {
+        val ext = DisplayUtils.findUltraWideExternalDisplay(this)
+        if (ext == null) { dismissScreensaver(); return }
+        if (screensaverPresentation?.display?.displayId == ext.displayId) return // already up there
+        dismissScreensaver()
+        try {
+            ScreensaverPresentation(this, ext) { glasses.headOrientationDegrees() }
+                .also { it.show(); screensaverPresentation = it }
+        } catch (t: Throwable) {
+            android.util.Log.w("MainActivity", "Screensaver presentation failed: ${t.message}")
+            dismissScreensaver()
+        }
+    }
+
+    private fun dismissScreensaver() {
+        try { screensaverPresentation?.dismiss() } catch (_: Throwable) {}
+        screensaverPresentation = null
     }
 
     private fun updateGlassesMenu() {

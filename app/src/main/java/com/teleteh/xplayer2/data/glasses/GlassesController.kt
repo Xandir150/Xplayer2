@@ -58,6 +58,11 @@ class GlassesController(private val appContext: Context) {
     private var device: UsbDevice? = null
     private var connection: UsbDeviceConnection? = null
     private var listener: Listener? = null
+    // IMU head-orientation telemetry: started on connect (XREAL only) for world-anchored visuals
+    // like the screensaver platform. The gyro stream is cheap, so we keep it running whenever the
+    // goggles are linked. Exposed via [headOrientationDegrees]; null when nothing is streaming.
+    private var imuReader: XrealImuReader? = null
+    private val headOrientation = HeadOrientationTracker()
     // The user's chosen display mode is sticky: seeded from persisted prefs, not the hardware.
     private var lastReportedMode: Int = savedMode()
     // Interfaces we successfully claimed — we only ever release what we actually took.
@@ -275,9 +280,11 @@ class GlassesController(private val appContext: Context) {
         notifyState()
         mainHandler.removeCallbacksAndMessages(null)
         mainHandler.postDelayed({ reapplySavedMode() }, MODE_PUSH_DELAY_MS)
+        startImuTelemetry()
     }
 
     private fun releaseConnection() {
+        stopImuTelemetry()
         mainHandler.removeCallbacksAndMessages(null)
         val c = connection
         if (c != null) {
@@ -289,6 +296,45 @@ class GlassesController(private val appContext: Context) {
         claimedInterfaces.clear()
         connection = null
         device = null
+    }
+
+    /**
+     * Start streaming IMU samples into [headOrientation] (XREAL only). The start command does
+     * blocking USB I/O, so it runs off the main thread. No-op if already running or not XREAL.
+     */
+    private fun startImuTelemetry() {
+        if (imuReader != null) return
+        if (currentBrand() != Brand.XREAL) return
+        val dev = device ?: return
+        val conn = connection ?: return
+        headOrientation.reset()
+        val reader = XrealImuReader(dev, conn)
+        imuReader = reader
+        Thread({
+            val ok = reader.start { gx, gy, gz, t -> headOrientation.accumulate(gx, gy, gz, t) }
+            if (ok) {
+                Log.i(TAG, "IMU telemetry streaming")
+            } else {
+                Log.w(TAG, "IMU telemetry failed to start")
+                if (imuReader === reader) imuReader = null
+            }
+        }, "GlassesImuStart").start()
+    }
+
+    private fun stopImuTelemetry() {
+        val r = imuReader ?: return
+        imuReader = null
+        Thread({ try { r.stop() } catch (_: Throwable) {} }, "GlassesImuStop").start()
+    }
+
+    /**
+     * Current head orientation as [yawDeg, pitchDeg, rollDeg], or null when no IMU telemetry is
+     * flowing (not XREAL / not started / no samples yet). World-anchored visuals (the screensaver
+     * platform) draw only when this is non-null.
+     */
+    fun headOrientationDegrees(): FloatArray? {
+        if (imuReader == null || !headOrientation.hasSamples()) return null
+        return floatArrayOf(headOrientation.yawDeg, headOrientation.pitchDeg, headOrientation.rollDeg)
     }
 
     private fun sendMcuCommand(msgId: Int, data: ByteArray): Boolean {
