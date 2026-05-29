@@ -12,6 +12,8 @@ Your XReal glasses are an amazing piece of hardware, but finding good 3D content
 
 - **True 3D Experience** — Full support for Side-by-Side (SBS) and Over-Under (OU) stereoscopic formats. The player automatically detects 3D metadata so you can just hit play.
 
+- **AI 2D→3D Conversion** — No 3D source? No problem. XPlayer2 uses on-device AI to estimate depth and convert ordinary 2D video into stereoscopic 3D on the fly — so even your regular movies come to life in the glasses, with no internet upload and no pre-processing.
+
 - **Play From Anywhere** — Local files, network streams, or internet links — it all works. Stream from your NAS, play downloaded movies, or paste a URL.
 
 - **Share & Play** — Found a video on VK, OK, or any other app? Just tap "Share" and select XPlayer2. No need to copy links manually.
