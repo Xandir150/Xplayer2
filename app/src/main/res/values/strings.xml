@@ -18,8 +18,8 @@
     <string name="subtitle_off">Off</string>
 
     <!-- Volume boost -->
-    <string name="volume_boost_off">Boost: off</string>
-    <string name="volume_boost_with_value">Boost: +%1$d dB</string>
+    <string name="volume_boost_off">Boost volume: off</string>
+    <string name="volume_boost_with_value">Boost volume: +%1$d dB</string>
 
     <!-- Stereo modes -->
     <string name="stereo_mode_normal">Stereo mode: Normal</string>

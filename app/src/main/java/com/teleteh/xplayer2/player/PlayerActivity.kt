@@ -919,8 +919,13 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
         val enhancer = loudnessEnhancer ?: run {
-            val sid = lastAudioSessionId
-            if (sid == C.AUDIO_SESSION_ID_UNSET || sid == 0) return
+            // Prefer the live player's current session; fall back to the last captured one. We must
+            // not rely solely on lastAudioSessionId — releasing the effect (e.g. after cycling the
+            // boost to off) used to clear it, leaving a later re-enable with no session to attach to.
+            val sid = (player?.audioSessionId?.takeIf { it != C.AUDIO_SESSION_ID_UNSET && it != 0 })
+                ?: lastAudioSessionId.takeIf { it != C.AUDIO_SESSION_ID_UNSET && it != 0 }
+                ?: return
+            lastAudioSessionId = sid
             try {
                 LoudnessEnhancer(sid).also { loudnessEnhancer = it }
             } catch (e: Exception) {
@@ -969,7 +974,8 @@ class PlayerActivity : AppCompatActivity() {
     private fun releaseLoudnessEnhancer() {
         try { loudnessEnhancer?.release() } catch (_: Exception) { }
         loudnessEnhancer = null
-        lastAudioSessionId = C.AUDIO_SESSION_ID_UNSET
+        // Keep lastAudioSessionId: the audio session is still valid during playback (e.g. when the
+        // user cycles the boost to off and back on), so we must be able to re-attach to it.
     }
 
     private fun boostLabel(mb: Int): String {
