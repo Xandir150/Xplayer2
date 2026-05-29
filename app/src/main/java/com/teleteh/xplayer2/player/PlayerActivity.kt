@@ -1450,7 +1450,10 @@ class PlayerActivity : AppCompatActivity() {
             stereoMode = when (detectSourceLayout()) {
                 SourceLayout.Sbs -> StereoMode.Sbs
                 SourceLayout.Ou -> StereoMode.Ou
-                SourceLayout.Mono -> StereoMode.Off
+                // On the ultrawide goggle panel (3D/SBS display mode) an undetectable clip with no
+                // saved format is most likely SBS content — default to SBS. On the phone / 2D
+                // panel, keep plain 2D.
+                SourceLayout.Mono -> if (activeDisplayIsUltrawide()) StereoMode.Sbs else StereoMode.Off
             }
         }
         when (stereoMode) {
@@ -1743,6 +1746,9 @@ class PlayerActivity : AppCompatActivity() {
 
     fun isStereoSbsEnabled(): Boolean = getStereoSbs()
 
+    /** True only in OU→SBS mode — the vertical Shift control is meaningful only there. */
+    fun isOuSbsMode(): Boolean = stereoMode == StereoMode.Ou
+
     /** Remote-control entry point: cycle 2D → OU→SBS → SBS. */
     fun toggleStereoSbs() = cycleStereoMode()
 
@@ -1772,7 +1778,9 @@ class PlayerActivity : AppCompatActivity() {
      * Real SBS sources and OU sources we're already converting to SBS are themselves stereo and
      * don't need head-tracking parallax on top.
      */
-    fun isLazy3dApplicable(): Boolean = detectSourceLayout() == SourceLayout.Mono
+    // Lazy 3D synthesises depth from a flat image, so only offer it while the clip is actually
+    // shown in plain 2D — not when it's already being split as OU→SBS or SBS.
+    fun isLazy3dApplicable(): Boolean = stereoMode == StereoMode.Off
 
     /**
      * Whether Lazy 3D has at least one runnable backend right now or could obtain one:

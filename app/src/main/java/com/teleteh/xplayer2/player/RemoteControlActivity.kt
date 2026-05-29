@@ -357,7 +357,8 @@ class RemoteControlActivity : AppCompatActivity() {
         btnSbs.isChecked = sbsEnabled
         applyButtonStyle(btnSbs, sbsEnabled)
 
-        // Shift button
+        // Shift button — only shown in OU→SBS mode (vertical shift is meaningless otherwise).
+        btnShift.visibility = if (player.isOuSbsMode()) View.VISIBLE else View.GONE
         val shiftEnabled = player.isShiftEnabled()
         btnShift.isChecked = shiftEnabled
         applyButtonStyle(btnShift, shiftEnabled)
