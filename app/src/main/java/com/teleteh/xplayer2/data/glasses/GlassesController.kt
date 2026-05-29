@@ -12,6 +12,8 @@ import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbInterface
 import android.hardware.usb.UsbManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.core.content.ContextCompat
 
@@ -50,11 +52,14 @@ class GlassesController(private val appContext: Context) {
 
     private val usbManager: UsbManager =
         appContext.getSystemService(Context.USB_SERVICE) as UsbManager
+    private val prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private var device: UsbDevice? = null
     private var connection: UsbDeviceConnection? = null
     private var listener: Listener? = null
-    private var lastReportedMode: Int = GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60
+    // The user's chosen display mode is sticky: seeded from persisted prefs, not the hardware.
+    private var lastReportedMode: Int = savedMode()
     // Interfaces we successfully claimed — we only ever release what we actually took.
     private val claimedInterfaces: MutableList<UsbInterface> = mutableListOf()
 
@@ -156,12 +161,26 @@ class GlassesController(private val appContext: Context) {
         val ok = sendMcuCommand(GlassesProtocol.MCU_MSG_W_DISP_MODE, byteArrayOf(mode.toByte()))
         if (ok) {
             lastReportedMode = mode
+            // Remember the choice so we can re-assert it on the next (re)connect.
+            prefs.edit().putInt(KEY_DISPLAY_MODE, mode).apply()
             notifyState()
         }
         return ok
     }
 
     fun lastMode(): Int = lastReportedMode
+
+    /** The display mode the user last selected (persisted), or the 2D default if none. */
+    private fun savedMode(): Int =
+        prefs.getInt(KEY_DISPLAY_MODE, GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60)
+
+    /**
+     * Re-send the persisted display mode to the connected glasses so the panel returns to the
+     * mode the user chose. Called automatically a beat after every (re)connect, and can be
+     * called when the external panel powers back on (proximity sensor) without a full USB
+     * re-enumeration. No-op if disconnected or the brand isn't remotely switchable.
+     */
+    fun reapplySavedMode(): Boolean = setDisplayMode(savedMode())
 
     /**
      * Hand the live USB connection + device to a feature that needs to read from a
@@ -232,17 +251,20 @@ class GlassesController(private val appContext: Context) {
         }
         device = dev
         connection = conn
-        // XREAL glasses always power up / re-attach in 2D mode regardless of what they were
-        // showing before they were unplugged. Reset our notion of the current mode to match
-        // the hardware so the mode picker doesn't keep highlighting a stale "3D SBS" entry
-        // after a reconnect. (We can't read the mode back reliably across all firmware, so we
-        // trust the known power-on default.)
-        lastReportedMode = GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60
-        Log.i(TAG, "Glasses connected: ${dev.deviceName}, ${claimedInterfaces.size} HID interface(s) claimed; mode reset to 2D default")
+        // The chosen display mode is sticky across reconnects: the picker remembers the user's
+        // choice rather than reading the hardware, and we actively push that mode to the glasses
+        // a beat after enumeration so they switch to it on their own. This covers both
+        // unplug/replug and the proximity sensor re-powering the panel when the goggles are put
+        // back on. (We can't read the mode back reliably across all firmware, hence push-not-poll.)
+        lastReportedMode = savedMode()
+        Log.i(TAG, "Glasses connected: ${dev.deviceName}, ${claimedInterfaces.size} HID interface(s) claimed; restoring saved mode 0x${lastReportedMode.toString(16)}")
         notifyState()
+        mainHandler.removeCallbacksAndMessages(null)
+        mainHandler.postDelayed({ reapplySavedMode() }, MODE_PUSH_DELAY_MS)
     }
 
     private fun releaseConnection() {
+        mainHandler.removeCallbacksAndMessages(null)
         val c = connection
         if (c != null) {
             for (intf in claimedInterfaces) {
@@ -318,6 +340,11 @@ class GlassesController(private val appContext: Context) {
 
     companion object {
         private const val TAG = "GlassesController"
+        private const val PREFS = "glasses_prefs"
+        private const val KEY_DISPLAY_MODE = "display_mode"
+        // Small delay after enumeration before pushing the saved mode — gives the MCU time to
+        // come up so the command isn't dropped on the floor right after attach.
+        private const val MODE_PUSH_DELAY_MS = 700L
 
         // VID/PID list mirrored from wheaney/XRLinuxDriver (covers every model that ships at the time
         // of writing). Brand identification is exposed via [currentBrand]; remote switching is only

@@ -111,17 +111,32 @@ class RecentAdapter(
         }
         holder.sourceIcon.setImageResource(iconRes)
         
-        // Frame-packing badge: show "OU=>SBS" for known 3D formats (3=SBS, 4=OU), hide otherwise
-        if (item.framePacking == 3 || item.framePacking == 4) {
-            holder.badge.visibility = View.VISIBLE
-            holder.badge.text = holder.badge.context.getString(R.string.remote_ou_to_sbs)
-        } else {
-            holder.badge.visibility = View.GONE
+        // Frame-packing format badge from the URI hint (3 = SBS, 4 = OU), hide otherwise.
+        when (item.framePacking) {
+            3 -> {
+                holder.badge.visibility = View.VISIBLE
+                holder.badge.text = holder.badge.context.getString(R.string.menu_stereo_short)
+            }
+            4 -> {
+                holder.badge.visibility = View.VISIBLE
+                holder.badge.text = holder.badge.context.getString(R.string.remote_ou_to_sbs)
+            }
+            else -> holder.badge.visibility = View.GONE
         }
 
-        // SBS state badge: show when sbsEnabled is true
-        holder.sbsState?.visibility = if (item.sbsEnabled == true) View.VISIBLE else View.GONE
-        holder.sbsState?.text = holder.sbsState?.context?.getString(R.string.remote_ou_to_sbs)
+        // Per-clip stereo-state badge straight from the saved effective mode (single source of
+        // truth): 2 = SBS, 1 = OU→SBS, anything else (2D / unknown) shows no badge.
+        val sbsLabelRes: Int? = when (item.stereoMode) {
+            2 -> R.string.menu_stereo_short   // SBS
+            1 -> R.string.remote_ou_to_sbs    // OU→SBS
+            else -> null
+        }
+        if (sbsLabelRes != null) {
+            holder.sbsState?.visibility = View.VISIBLE
+            holder.sbsState?.text = holder.sbsState?.context?.getString(sbsLabelRes)
+        } else {
+            holder.sbsState?.visibility = View.GONE
+        }
     }
 
     private fun resolveNiceTitle(context: android.content.Context, entry: RecentEntry): String {

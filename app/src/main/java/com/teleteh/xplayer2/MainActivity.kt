@@ -38,7 +38,6 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.core.content.edit
 
 class MainActivity : AppCompatActivity() {
 
@@ -393,23 +392,6 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton(R.string.common_cancel, null)
             .show()
-    }
-
-    private fun getStereoSbs(): Boolean {
-        val prefs = getSharedPreferences("player_prefs", MODE_PRIVATE)
-        return prefs.getBoolean("stereo_sbs", false)
-    }
-
-    private fun setStereoSbs(value: Boolean) {
-        val prefs = getSharedPreferences("player_prefs", MODE_PRIVATE)
-        prefs.edit().putBoolean("stereo_sbs", value).apply()
-    }
-
-    private fun toggleStereoMode() {
-        setStereoSbs(!getStereoSbs())
-        // Request redraw to apply SBS UI mirroring if visible
-        // Toolbar menu button state is updated immediately in onClick above
-        binding.root.invalidate()
     }
 
     /**

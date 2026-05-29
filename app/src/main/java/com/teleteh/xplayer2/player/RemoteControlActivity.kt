@@ -294,6 +294,14 @@ class RemoteControlActivity : AppCompatActivity() {
         if (currentInstance === this) currentInstance = null
     }
 
+    /** Refresh the control labels/states from the player. Called by PlayerActivity when the
+     *  render mode changes (e.g. stereo auto-detected after the remote already drew its buttons),
+     *  so the SBS button doesn't keep showing a stale "2D". */
+    fun syncControls() {
+        if (PlayerActivity.currentInstance == null) return
+        updateButtons()
+    }
+
     companion object {
         /** Live remote-control instance, so PlayerActivity can dismiss it when the goggles come
          *  off and playback moves back to the phone screen. */

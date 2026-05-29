@@ -8,7 +8,6 @@ import android.hardware.display.DisplayManager
 import android.os.Build
 import android.view.Display
 import android.content.pm.PackageManager
-import android.media.MediaRouter
 
 object DisplayUtils {
     private const val ULTRAWIDE_RATIO = 3.2f // ~32:10..32:9
@@ -83,36 +82,5 @@ object DisplayUtils {
         } else {
             activity.startActivity(intent)
         }
-    }
-
-    // --- MediaRouter helpers (similar to VLC approach) ---
-
-    fun getRoutePresentationDisplay(context: Context): Display? {
-        val mr = context.getSystemService(Context.MEDIA_ROUTER_SERVICE) as? MediaRouter ?: return null
-        val route = mr.getSelectedRoute(MediaRouter.ROUTE_TYPE_LIVE_VIDEO)
-        return route?.presentationDisplay
-    }
-
-    fun registerRouteCallback(context: Context, onChanged: () -> Unit): MediaRouter.SimpleCallback? {
-        val mr = context.getSystemService(Context.MEDIA_ROUTER_SERVICE) as? MediaRouter ?: return null
-        val cb = object : MediaRouter.SimpleCallback() {
-            override fun onRoutePresentationDisplayChanged(router: MediaRouter, info: MediaRouter.RouteInfo) {
-                onChanged()
-            }
-            override fun onRouteSelected(router: MediaRouter, type: Int, info: MediaRouter.RouteInfo) {
-                onChanged()
-            }
-            override fun onRouteUnselected(router: MediaRouter, type: Int, info: MediaRouter.RouteInfo) {
-                onChanged()
-            }
-        }
-        mr.addCallback(MediaRouter.ROUTE_TYPE_LIVE_VIDEO, cb)
-        return cb
-    }
-
-    fun unregisterRouteCallback(context: Context, callback: MediaRouter.SimpleCallback?) {
-        if (callback == null) return
-        val mr = context.getSystemService(Context.MEDIA_ROUTER_SERVICE) as? MediaRouter ?: return
-        mr.removeCallback(callback)
     }
 }

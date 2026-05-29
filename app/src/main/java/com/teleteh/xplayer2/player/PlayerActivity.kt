@@ -11,7 +11,8 @@ import android.graphics.Color
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.hardware.display.DisplayManager
-import android.media.MediaRouter
+import android.os.Handler
+import android.os.Looper
 import android.content.ComponentName
 import android.content.ServiceConnection
 import android.os.Build
@@ -112,7 +113,13 @@ class PlayerActivity : AppCompatActivity() {
     private var trackSelector: DefaultTrackSelector? = null
     private var presentation: ExternalPlayerPresentation? = null
     private var displayListener: DisplayManager.DisplayListener? = null
-    private var routeCallback: MediaRouter.SimpleCallback? = null
+    // Display id the Presentation is currently shown on (-1 = none). Used to tell apart "our
+    // external panel went away" from any other display event.
+    private var presentationDisplayId: Int = -1
+    // True when WE paused because the goggles' panel powered down (proximity sensor / external
+    // display removed) so we know to auto-resume when it comes back.
+    private var pausedByDisplayRemoval = false
+    private val uiHandler = Handler(Looper.getMainLooper())
     private var sourceUri: Uri? = null
     private var titleCenterView: TextView? = null
     private var currentResolvedTitle: String? = null
@@ -299,6 +306,9 @@ class PlayerActivity : AppCompatActivity() {
         playerView.setControllerVisibilityListener(controllerListener)
         hideSystemBars()
         updateSbsUi()
+
+        // React to the goggles' external panel powering on/off (proximity sensor).
+        registerDisplayListener()
 
         // Resolve and start playback from the launching intent.
         loadFromIntent(intent)
@@ -754,8 +764,12 @@ class PlayerActivity : AppCompatActivity() {
         if (player == null && sourceUri != null && !isExtractingStream) initializePlayer()
         // Try to show Presentation on external display
         tryShowExternalPresentation()
-        
         // If Presentation is active, launch RemoteControlActivity on phone
+        launchRemoteControlIfNeeded()
+    }
+
+    /** Bring up the phone-side remote once the picture is on the external panel. */
+    private fun launchRemoteControlIfNeeded() {
         if (presentation != null && !remoteControlLaunched) {
             remoteControlLaunched = true
             val intent = Intent(this, RemoteControlActivity::class.java)
@@ -792,12 +806,8 @@ class PlayerActivity : AppCompatActivity() {
             player = null
         }
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
-            val dm = getSystemService(DisplayManager::class.java)
-            displayListener?.let { dm?.unregisterDisplayListener(it) }
-            displayListener = null
-            // Unregister MediaRouter callback
-            DisplayUtils.unregisterRouteCallback(this, routeCallback)
-            routeCallback = null
+            // (displayListener is registered in onCreate and torn down in onDestroy so it keeps
+            // firing while playback continues on the external panel with the phone stopped.)
             // Dismiss Presentation if we're finishing (leaving playback), otherwise keep it during lock
             if (isFinishing) {
                 dismissPresentation()
@@ -883,6 +893,7 @@ class PlayerActivity : AppCompatActivity() {
         }
         saveProgress()
         if (lazy3dEnabled) stopLazy3d()
+        unregisterDisplayListener()
         releaseLoudnessEnhancer()
         player?.release()
         player = null
@@ -1202,6 +1213,7 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
         presentation = pres
+        presentationDisplayId = ext.displayId
         try {
             pres.show()
             android.util.Log.d("XPlayer2", "Presentation shown on display ${ext.displayId}")
@@ -1219,6 +1231,7 @@ class PlayerActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             android.util.Log.e("XPlayer2", "Failed to show Presentation", e)
             presentation = null
+            presentationDisplayId = -1
             // Restore local rendering
             glView?.visibility = View.VISIBLE
             glSurface?.let { player?.setVideoSurface(it) }
@@ -1230,6 +1243,7 @@ class PlayerActivity : AppCompatActivity() {
         if (presentation != null) {
             presentation?.dismiss()
             presentation = null
+            presentationDisplayId = -1
             presentationSurface = null
             // Restore local GL view
             glView?.visibility = View.VISIBLE
@@ -1239,6 +1253,83 @@ class PlayerActivity : AppCompatActivity() {
             if (lazy3dEnabled) reapplyLazy3dToActiveView()
             updatePlaybackService()
         }
+    }
+
+    // --- External-display (goggles) hot-plug handling ---
+    // The XREAL panel has a proximity sensor: taking the goggles off powers the panel down and
+    // its external display goes away; putting them on brings it back. Each transition fires a
+    // BURST of add/remove/change events (the panel re-enumerates, often with brand-new display
+    // ids), so reacting per-event is unreliable — a trailing "added" during removal churn would
+    // cancel a pending "gone" check. Instead we debounce a single reconcile that runs once the
+    // burst settles and inspects the *final* state. ([displayListener] was declared long ago but
+    // never actually registered — this wires it up.)
+    private fun registerDisplayListener() {
+        if (displayListener != null) return
+        val dm = getSystemService(DisplayManager::class.java) ?: return
+        val l = object : DisplayManager.DisplayListener {
+            override fun onDisplayAdded(displayId: Int) = scheduleExternalReconcile()
+            override fun onDisplayRemoved(displayId: Int) = scheduleExternalReconcile()
+            override fun onDisplayChanged(displayId: Int) {
+                if (displayId != Display.DEFAULT_DISPLAY) scheduleExternalReconcile()
+            }
+        }
+        dm.registerDisplayListener(l, uiHandler)
+        displayListener = l
+        android.util.Log.d("XPlayer2", "DisplayListener registered")
+    }
+
+    private fun unregisterDisplayListener() {
+        uiHandler.removeCallbacks(externalReconcile)
+        displayListener?.let { getSystemService(DisplayManager::class.java)?.unregisterDisplayListener(it) }
+        displayListener = null
+    }
+
+    private val externalReconcile = Runnable { reconcileExternalDisplay() }
+
+    // Coalesce the hot-plug burst: both add and remove reschedule the SAME check, so it never
+    // gets starved by a trailing event and fires once the dust settles.
+    private fun scheduleExternalReconcile() {
+        uiHandler.removeCallbacks(externalReconcile)
+        uiHandler.postDelayed(externalReconcile, 1200L)
+    }
+
+    private fun reconcileExternalDisplay() {
+        if (player == null) return
+        val dm = getSystemService(DisplayManager::class.java)
+        val ext = DisplayUtils.findUltraWideExternalDisplay(this)
+        val extAlive = ext != null &&
+            (dm?.getDisplay(ext.displayId)?.state ?: Display.STATE_ON) != Display.STATE_OFF
+        if (extAlive) {
+            val wasShowing = presentation != null
+            tryShowExternalPresentation()
+            if (presentation != null) {
+                if (!wasShowing) {
+                    // Panel just (re)appeared (goggles put on): re-assert the saved glasses mode —
+                    // it may have powered up in 2D — and bring the phone-side remote back.
+                    MainActivity.glassesControllerForPlayback?.reapplySavedMode()
+                }
+                launchRemoteControlIfNeeded()
+                if (pausedByDisplayRemoval) {
+                    pausedByDisplayRemoval = false
+                    player?.playWhenReady = true
+                    android.util.Log.i("XPlayer2", "External panel back -> resumed playback")
+                }
+            }
+        } else if (presentation != null) {
+            onExternalPanelLost()
+        }
+    }
+
+    // Goggles came off (proximity sensor cut the panel) or the external display was unplugged:
+    // pause and move the picture back to the phone, dropping the now-pointless remote so the
+    // player itself (paused) is what the user sees.
+    private fun onExternalPanelLost() {
+        android.util.Log.i("XPlayer2", "External panel gone -> pause + move player to phone")
+        pausedByDisplayRemoval = true
+        player?.playWhenReady = false
+        dismissPresentation()                            // restores local (phone) rendering
+        remoteControlLaunched = false                    // let it re-open when the goggles return
+        RemoteControlActivity.currentInstance?.finish()  // reveals this PlayerActivity on the phone
     }
 
     private fun saveProgress() {
@@ -1261,13 +1352,12 @@ class PlayerActivity : AppCompatActivity() {
             durationMs = duration,
             lastPlayedAt = System.currentTimeMillis(),
             framePacking = framePacking,
-            sbsEnabled = getStereoSbs(),
             sbsShiftEnabled = sbsShiftEnabled,
             sourceType = RecentEntry.detectSourceType(uri),
             resizeMode = resizeMode,
-            // Persist the stereo mode only when the user picked it manually (so auto-detected
-            // values don't pollute the next session); -1 means "let auto-detect decide".
-            stereoMode = if (sbsExplicitlyConfigured) stereoMode.toInt() else -1,
+            // Persist the effective stereo mode (auto-detected or manual) as the single source of
+            // truth — restored on reopen and used for the history badge. 0 = 2D, 1 = OU→SBS, 2 = SBS.
+            stereoMode = stereoMode.toInt(),
             volumeBoostMb = volumeBoostMb
         )
         RecentStore(this).upsert(entry)
@@ -1384,6 +1474,10 @@ class PlayerActivity : AppCompatActivity() {
         )
         applyRenderConfig()
         btnSbsRef?.let { applySbsButtonVisual(it) }
+        // The phone-side remote sets its labels once on resume — if the mode was auto-derived
+        // here afterwards (e.g. Full-SBS detected on the first frame), refresh it so its SBS
+        // button doesn't keep showing "2D" while the picture is correctly SBS.
+        RemoteControlActivity.currentInstance?.syncControls()
         applySbsShiftIfNeeded()
         applyVideoPipeline()
     }

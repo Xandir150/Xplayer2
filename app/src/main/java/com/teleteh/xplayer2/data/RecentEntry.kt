@@ -20,16 +20,13 @@ data class RecentEntry(
     val durationMs: Long,
     val lastPlayedAt: Long,
     val framePacking: Int? = null,
-    val sbsEnabled: Boolean? = null,
     val sbsShiftEnabled: Boolean? = null,
     val sourceType: SourceType? = null,
     // 0=Auto, 1=16:9, 2=4:3, 3=21:9, 4=32:9, 5=1:1, 6=2.39:1
     val resizeMode: Int = 0,
-    // Marks that the source video itself is already SBS-packed (so SBS mode samples left/right halves)
-    val sourceIsSbs: Boolean = false,
-    // Manually chosen stereo mode for this clip: -1 = auto-detect, 0 = 2D, 1 = OU→SBS, 2 = SBS.
-    // Persisted only when the user explicitly picked it, so a saved value overrides auto-detect
-    // on reopen (important for Full-SBS / Full-OU clips that look like 2D by resolution).
+    // Effective stereo mode last used for this clip (single source of truth for restore and the
+    // history badge): -1 = never played / unknown, 0 = 2D, 1 = OU→SBS, 2 = SBS. A saved 0..2 is
+    // honoured on reopen, overriding auto-detect (important for Full-SBS/OU clips that look 2D).
     val stereoMode: Int = -1,
     // Per-clip audio gain boost in millibels (0 = off, max 2400 = +24 dB). Per-clip because a
     // gain that rescues a quiet upload clips/distorts a normally-mastered one.
