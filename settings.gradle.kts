@@ -91,6 +91,14 @@ project(":media3-lib-effect").projectDir = media3("libraries/effect")
 include(":media3-lib-muxer")
 project(":media3-lib-muxer").projectDir = media3("libraries/muxer")
 
+// New in Media3 1.9+: exoplayer_dash (and others) reference :media3-lib-inspector in their tests,
+// so the project must be mapped even though the app doesn't depend on it directly.
+include(":media3-lib-inspector")
+project(":media3-lib-inspector").projectDir = media3("libraries/inspector")
+
+include(":media3-lib-inspector-frame")
+project(":media3-lib-inspector-frame").projectDir = media3("libraries/inspector_frame")
+
 include(":media3-lib-exoplayer-dash")
 project(":media3-lib-exoplayer-dash").projectDir = media3("libraries/exoplayer_dash")
 

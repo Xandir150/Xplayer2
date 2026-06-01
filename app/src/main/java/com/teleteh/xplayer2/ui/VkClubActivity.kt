@@ -16,8 +16,9 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import coil.dispose
-import coil.load
+import coil3.dispose
+import coil3.load
+import coil3.request.crossfade
 import com.google.android.material.appbar.MaterialToolbar
 import com.teleteh.xplayer2.R
 import com.teleteh.xplayer2.player.PlayerActivity

@@ -15,7 +15,6 @@ android {
         versionName = "1.0.7b3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        resourceConfigurations += listOf("en", "ru", "es", "zh")
     }
 
     signingConfigs {
@@ -44,8 +43,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    kotlinOptions {
-        jvmTarget = "11"
+    androidResources {
+        localeFilters += listOf("en", "ru", "es", "zh")
     }
     externalNativeBuild {
         cmake {
@@ -62,6 +61,12 @@ android {
             // on install so System.loadLibrary finds it on older boxes (e.g. Amlogic S905Y4 / v7a).
             useLegacyPackaging = true
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
     }
 }
 
@@ -83,8 +88,9 @@ dependencies {
     implementation(project(":media3-lib-ui"))
     // MediaSession for foreground playback service
     implementation(project(":media3-lib-session"))
-    // Image loading for device icons and thumbnails
+    // Image loading for device icons and thumbnails (Coil 3: network loading is a separate artifact)
     implementation(libs.coil)
+    implementation(libs.coil.network.okhttp)
     // Local Media3 FFmpeg decoder module
     implementation(project(":media3-lib-decoder-ffmpeg"))
     // TensorFlow Lite for the Lazy-3D depth estimator (Depth-Anything-V2-Small).
