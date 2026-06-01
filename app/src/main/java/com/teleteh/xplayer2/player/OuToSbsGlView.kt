@@ -37,6 +37,11 @@ class OuToSbsGlView @JvmOverloads constructor(
     private val renderer: OuToSbsRenderer
 
     init {
+        // Force an 8-bit-per-channel (RGBA8888) framebuffer. Without this the default
+        // GLSurfaceView chooser may pick RGB565 on some drivers, which bands smooth
+        // gradients (skies, shadows) and crushes 10-bit/HDR sources to 16-bit colour —
+        // the visible quality gap on the glasses/SBS path vs. the direct SurfaceView path.
+        setEGLConfigChooser(8, 8, 8, 8, 0, 0)
         setEGLContextClientVersion(2)
         renderer = OuToSbsRenderer()
         setRenderer(renderer)
