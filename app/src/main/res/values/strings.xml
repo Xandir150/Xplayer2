@@ -32,6 +32,7 @@
     <string name="player_ou_to_sbs">OU➤SBS</string>
     <string name="player_auto">Auto</string>
     <string name="player_shift">Shift</string>
+    <string name="player_lazy3d" translatable="false">2D➤L3D</string>
     <string name="player_rewind">Rewind 10s</string>
     <string name="player_play_pause">Play/Pause</string>
     <string name="player_forward">Forward 10s</string>

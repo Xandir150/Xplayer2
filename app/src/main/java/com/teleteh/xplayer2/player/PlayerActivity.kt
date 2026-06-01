@@ -129,6 +129,7 @@ class PlayerActivity : AppCompatActivity() {
     private var currentResolvedTitle: String? = null
     private var btnSbsRef: MaterialButton? = null
     private var btnShiftRef: MaterialButton? = null
+    private var btnLazy3dRef: MaterialButton? = null
     private var btnResizeModeRef: MaterialButton? = null
     // 0=Auto, 1=16:9, 2=4:3, 3=21:9, 4=32:9, 5=1:1, 6=2.39:1
     private var resizeMode: Int = 0
@@ -273,11 +274,13 @@ class PlayerActivity : AppCompatActivity() {
         val btnBack = overlay.findViewById<MaterialButton>(R.id.btnBack)
         val btnSbs = overlay.findViewById<MaterialButton>(R.id.btnSbs)
         val btnShift = overlay.findViewById<MaterialButton>(R.id.btnShift)
+        val btnLazy3d = overlay.findViewById<MaterialButton>(R.id.btnLazy3d)
         val btnResizeMode = overlay.findViewById<MaterialButton>(R.id.btnResizeMode)
         val btnAudio = overlay.findViewById<ImageButton>(R.id.btnAudio)
         val btnSubtitle = overlay.findViewById<ImageButton>(R.id.btnSubtitle)
         btnSbsRef = btnSbs
         btnShiftRef = btnShift
+        btnLazy3dRef = btnLazy3d
         btnResizeModeRef = btnResizeMode
         titleCenterView = overlay.findViewById(R.id.tvTitleCenter)
         // Audio menu containers
@@ -316,6 +319,14 @@ class PlayerActivity : AppCompatActivity() {
             applySbsShiftIfNeeded()
             // Persist per-item shift state
             saveProgress()
+        }
+        // Lazy 3D (2D→3D depth synthesis) toggle. Shares the Shift slot: this is shown only
+        // while the clip is plain 2D (where Shift is meaningless), and Shift takes the slot in
+        // OU→SBS. Visibility is driven by updateStereoControlButtons() on every mode change.
+        btnLazy3d.isCheckable = true
+        btnLazy3d.setOnClickListener {
+            setLazy3dEnabled(!isLazy3dEnabled())
+            updateStereoControlButtons()
         }
         btnAudio.setOnClickListener { showAudioMenu() }
         btnSubtitle.setOnClickListener { showSubtitleMenu() }
@@ -1537,6 +1548,8 @@ class PlayerActivity : AppCompatActivity() {
         )
         applyRenderConfig()
         btnSbsRef?.let { applySbsButtonVisual(it) }
+        // Swap the Shift / Lazy-3D slot to match the new stereo mode.
+        updateStereoControlButtons()
         // The phone-side remote sets its labels once on resume — if the mode was auto-derived
         // here afterwards (e.g. Full-SBS detected on the first frame), refresh it so its SBS
         // button doesn't keep showing "2D" while the picture is correctly SBS.
@@ -1749,16 +1762,41 @@ class PlayerActivity : AppCompatActivity() {
         }
         val active = stereoMode != StereoMode.Off
         btn.isChecked = active
-        if (!active) {
-            btn.backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
-            btn.setTextColor(Color.WHITE)
-            btn.strokeColor = ColorStateList.valueOf(Color.WHITE)
-            btn.strokeWidth = (2 * resources.displayMetrics.density).toInt()
-        } else {
+        applyToggleButtonVisual(btn, active)
+    }
+
+    /** Filled accent (on) vs outlined-white (off) — shared by the stereo and Lazy-3D toggles. */
+    private fun applyToggleButtonVisual(btn: MaterialButton, on: Boolean) {
+        if (on) {
             btn.backgroundTintList = ColorStateList.valueOf("#2196F3".toColorInt())
             btn.setTextColor(Color.WHITE)
             btn.strokeColor = ColorStateList.valueOf(Color.TRANSPARENT)
             btn.strokeWidth = 0
+        } else {
+            btn.backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+            btn.setTextColor(Color.WHITE)
+            btn.strokeColor = ColorStateList.valueOf(Color.WHITE)
+            btn.strokeWidth = (2 * resources.displayMetrics.density).toInt()
+        }
+    }
+
+    /**
+     * Drive the Shift / Lazy-3D slot in the player's own top bar by stereo mode:
+     *   - OU→SBS : Shift (vertical pad toward 16:9) — meaningful only here.
+     *   - 2D     : Lazy 3D (2D→3D depth synthesis) toggle — only applies to a flat clip.
+     *   - SBS    : neither (the source is already stereo).
+     * The phone remote has its own equivalent logic and is intentionally left untouched.
+     */
+    private fun updateStereoControlButtons() {
+        btnShiftRef?.visibility = if (isOuSbsMode()) View.VISIBLE else View.GONE
+        btnLazy3dRef?.let { btn ->
+            val show = isLazy3dApplicable() && isLazy3dSupported()
+            btn.visibility = if (show) View.VISIBLE else View.GONE
+            if (show) {
+                val on = isLazy3dEnabled()
+                btn.isChecked = on
+                applyToggleButtonVisual(btn, on)
+            }
         }
     }
 
