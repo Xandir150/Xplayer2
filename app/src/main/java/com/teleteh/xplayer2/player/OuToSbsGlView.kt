@@ -13,7 +13,9 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLConfig
+import javax.microedition.khronos.egl.EGLDisplay
 import javax.microedition.khronos.opengles.GL10
 
 /**
@@ -36,13 +38,45 @@ class OuToSbsGlView @JvmOverloads constructor(
 
     private val renderer: OuToSbsRenderer
 
+    /** Bits per colour channel of the chosen framebuffer: 10 (RGBA1010102) where supported, else 8. */
+    private var fbBitsPerChannel = 8
+
     init {
-        // Force an 8-bit-per-channel (RGBA8888) framebuffer. Without this the default
-        // GLSurfaceView chooser may pick RGB565 on some drivers, which bands smooth
-        // gradients (skies, shadows) and crushes 10-bit/HDR sources to 16-bit colour —
+        // Prefer a 10-bit framebuffer (RGBA1010102) so HDR/10-bit sources aren't truncated to
+        // 8 bits, falling back to RGBA8888. Without an explicit chooser some drivers default to
+        // RGB565 (heavy banding). Combined with an ES3 context (guaranteed highp fragment) and
+        // the shader dithering below, this removes the colour banding on smooth gradients —
         // the visible quality gap on the glasses/SBS path vs. the direct SurfaceView path.
-        setEGLConfigChooser(8, 8, 8, 8, 0, 0)
-        setEGLContextClientVersion(2)
+        setEGLConfigChooser(object : EGLConfigChooser {
+            override fun chooseConfig(egl: EGL10, display: EGLDisplay): EGLConfig {
+                val es3Bit = 0x40 // EGL_OPENGL_ES3_BIT_KHR
+                fun choose(r: Int, g: Int, b: Int, a: Int): EGLConfig? {
+                    val attrs = intArrayOf(
+                        EGL10.EGL_RED_SIZE, r, EGL10.EGL_GREEN_SIZE, g, EGL10.EGL_BLUE_SIZE, b,
+                        EGL10.EGL_ALPHA_SIZE, a,
+                        EGL10.EGL_RENDERABLE_TYPE, es3Bit,
+                        EGL10.EGL_SURFACE_TYPE, EGL10.EGL_WINDOW_BIT,
+                        EGL10.EGL_NONE
+                    )
+                    val n = IntArray(1)
+                    if (!egl.eglChooseConfig(display, attrs, null, 0, n) || n[0] <= 0) return null
+                    val cfgs = arrayOfNulls<EGLConfig>(n[0])
+                    egl.eglChooseConfig(display, attrs, cfgs, n[0], n)
+                    val v = IntArray(1)
+                    for (c in cfgs) {
+                        if (c == null) continue
+                        egl.eglGetConfigAttrib(display, c, EGL10.EGL_RED_SIZE, v)
+                        if (v[0] == r) return c // exact match (avoid an 8-bit config when asking for 10)
+                    }
+                    return cfgs[0]
+                }
+                choose(10, 10, 10, 2)?.let { fbBitsPerChannel = 10; return it }
+                fbBitsPerChannel = 8
+                return choose(8, 8, 8, 8)
+                    ?: throw IllegalStateException("No suitable RGBA8888 EGL config")
+            }
+        })
+        setEGLContextClientVersion(3)
         renderer = OuToSbsRenderer()
         setRenderer(renderer)
         // Render only when we receive a new video frame
@@ -299,6 +333,15 @@ class OuToSbsGlView @JvmOverloads constructor(
             l3dConvergenceLoc = GLES20.glGetUniformLocation(lazy3dProgram, "uConvergence")
             l3dEyeSignLoc = GLES20.glGetUniformLocation(lazy3dProgram, "uEyeSign")
             l3dParallaxLoc = GLES20.glGetUniformLocation(lazy3dProgram, "uParallax")
+
+            // Dither amplitude = one framebuffer LSB. Set once per program (uniform state persists).
+            val ditherAmp = if (fbBitsPerChannel >= 10) 1f / 1023f else 1f / 255f
+            android.util.Log.i("OuToSbsGlView", "GL framebuffer = $fbBitsPerChannel-bit/channel (dither LSB $ditherAmp)")
+            GLES20.glUseProgram(program)
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uDitherAmp"), ditherAmp)
+            GLES20.glUseProgram(lazy3dProgram)
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(lazy3dProgram, "uDitherAmp"), ditherAmp)
+            GLES20.glUseProgram(0)
 
             textureId = createOesTexture()
             surfaceTexture = SurfaceTexture(textureId).also {
@@ -820,7 +863,7 @@ void main() {
 
 private const val FRAG = """
 #extension GL_OES_EGL_image_external : require
-precision mediump float;
+precision highp float;
 varying vec2 vTexCoord;
 uniform samplerExternalOES uTexture;
 uniform mat4 uTexMatrix;
@@ -830,6 +873,19 @@ uniform vec2 uOffset;
 // Driven by HeadPoseTracker via OuToSbsGlView.setParallaxOffset(). Zero when the
 // feature is off, so this shader is identical to the original in that case.
 uniform vec2 uParallax;
+// One framebuffer LSB (1/255 at 8-bit, 1/1023 at 10-bit). Amplitude of the triangular-PDF
+// dither below, which breaks up the 8-bit colour banding on smooth gradients (skies, shadows).
+uniform float uDitherAmp;
+float h21(vec2 p) {
+  vec3 q = fract(vec3(p.xyx) * 0.1031);
+  q += dot(q, q.yzx + 33.33);
+  return fract((q.x + q.y) * q.z);
+}
+vec3 ditherTPDF(vec2 fc) {
+  vec3 a = vec3(h21(fc), h21(fc + 11.3), h21(fc + 23.7));
+  vec3 b = vec3(h21(fc + 5.1), h21(fc + 17.9), h21(fc + 31.5));
+  return a + b - 1.0; // triangular PDF in [-1, 1] per channel
+}
 void main() {
   // Apply SurfaceTexture transform first to account for decoder orientation,
   // then crop to top/bottom half in the transformed texture space
@@ -841,7 +897,8 @@ void main() {
   float overscan = 1.0 - clamp(pmag * 1.6, 0.0, 0.1);
   vec2 zoomed = (tc - 0.5) * overscan + 0.5;
   vec2 finalTc = zoomed * uScale + uOffset + uParallax * uScale;
-  gl_FragColor = texture2D(uTexture, finalTc);
+  vec3 col = texture2D(uTexture, finalTc).rgb;
+  gl_FragColor = vec4(col + ditherTPDF(gl_FragCoord.xy) * uDitherAmp, 1.0);
 }
 """
 
@@ -864,7 +921,7 @@ void main() {
  */
 private const val FRAG_LAZY3D = """
 #extension GL_OES_EGL_image_external : require
-precision mediump float;
+precision highp float;
 varying vec2 vTexCoord;
 uniform samplerExternalOES uSource;
 uniform sampler2D uDepth;
@@ -873,6 +930,17 @@ uniform float uDivergence;
 uniform float uConvergence;
 uniform float uEyeSign;    // -1 left, +1 right
 uniform vec2 uParallax;
+uniform float uDitherAmp;  // one framebuffer LSB; amplitude of the anti-banding dither
+float h21(vec2 p) {
+  vec3 q = fract(vec3(p.xyx) * 0.1031);
+  q += dot(q, q.yzx + 33.33);
+  return fract((q.x + q.y) * q.z);
+}
+vec3 ditherTPDF(vec2 fc) {
+  vec3 a = vec3(h21(fc), h21(fc + 11.3), h21(fc + 23.7));
+  vec3 b = vec3(h21(fc + 5.1), h21(fc + 17.9), h21(fc + 31.5));
+  return a + b - 1.0;
+}
 void main() {
   vec2 tcSrc = (uTexMatrix * vec4(vTexCoord, 0.0, 1.0)).xy;
   // Horizontal foreground dilation (max over neighbours): widens the nearer object's
@@ -889,7 +957,8 @@ void main() {
   d = max(d, texture2D(uDepth, vTexCoord - vec2(3.0 * dpx, 0.0)).r);
   float disparity = (d - uConvergence) * uDivergence * uEyeSign;
   vec2 sampleUv = tcSrc + vec2(disparity, 0.0) + uParallax;
-  gl_FragColor = texture2D(uSource, sampleUv);
+  vec3 col = texture2D(uSource, sampleUv).rgb;
+  gl_FragColor = vec4(col + ditherTPDF(gl_FragCoord.xy) * uDitherAmp, 1.0);
 }
 """
 
