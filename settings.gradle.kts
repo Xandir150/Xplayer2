@@ -41,9 +41,13 @@ fun media3(path: String) = File(media3Root, path)
 // sub-project gets configured. This only touches files inside the submodule working tree on the
 // build agent and is idempotent on subsequent runs.
 File(media3Root, "libraries").takeIf { it.isDirectory }?.listFiles { f -> f.isDirectory }?.forEach { libDir ->
-    val gradleFile = File(libDir, "build.gradle")
-    if (!gradleFile.exists()) return@forEach
-    if (!gradleFile.readText().contains("common_library_config")) return@forEach
+    // Stub for every Gradle library module (Groovy or KTS) that lacks the file. We deliberately do
+    // NOT gate on a marker string in build.gradle: Media3 1.10.1 stopped using the literal
+    // `common_library_config` in some modules (e.g. session, inspector), so the old heuristic
+    // skipped them and :app:assembleRelease failed on the missing proguard-rules.txt. An empty
+    // placeholder is harmless for any module that doesn't actually reference it.
+    val hasGradle = File(libDir, "build.gradle").exists() || File(libDir, "build.gradle.kts").exists()
+    if (!hasGradle) return@forEach
     val proguardFile = File(libDir, "proguard-rules.txt")
     if (!proguardFile.exists()) {
         proguardFile.writeText("# Placeholder consumer proguard rules generated at build configuration time.\n")
