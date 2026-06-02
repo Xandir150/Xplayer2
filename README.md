@@ -2,6 +2,8 @@
 
 <a href="https://play.google.com/store/apps/details?id=com.teleteh.xplayer2"><img alt="Get it on Google Play" src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" height="80"/></a>
 
+[![iOS version](https://img.shields.io/badge/iOS-XPlayer2-000000?logo=apple&logoColor=white)](https://github.com/Xandir150/XPlayer2-ios)
+
 [![Donate via Stripe](https://img.shields.io/badge/Donate-via%20Stripe-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/bJecMY3pO2NS0V8fmW24004)
 
 **Finally, a reason to use your XReal glasses!** XPlayer2 transforms your AR glasses into a personal 3D cinema. Watch stereoscopic 3D videos the way they were meant to be seen — immersive, comfortable, and without draining your battery.
