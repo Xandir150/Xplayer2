@@ -501,24 +501,25 @@ object VideoStreamExtractor {
         return extractVkPlayerParams(p, title)
     }
 
-    /** Pick the best playable stream from a VK player params[0] object. */
+    /** Pick the MAXIMUM-quality stream from a VK player params[0] object. */
     private fun extractVkPlayerParams(p: JSONObject, title: String?): ExtractedStream? {
-        // Adaptive HLS first: one URL carries every quality + audio track and plays via
-        // the media3 HLS module. (dash_ondemand is skipped on purpose — no DASH module.)
-        for (key in listOf("hls_ondemand", "hls")) {
-            val u = p.optString(key).takeIf { it.startsWith("http") }
-            if (u != null) {
-                Log.i(TAG, "VK HLS extracted (title=$title)")
-                return ExtractedStream(decodeUrl(u), title, "hls")
-            }
-        }
-        // Progressive MP4 fallback, highest resolution first.
+        // Highest progressive MP4 first — guarantees the max VK offers. Adaptive HLS often caps at
+        // 720p, while url1080/url1440/url2160 go higher, so prefer those when present.
         for (q in listOf("url2160", "url1440", "url1080", "url720", "url480", "url360", "url240")) {
             val u = p.optString(q).takeIf { it.startsWith("http") }
             if (u != null) {
                 val label = q.removePrefix("url") + "p"
                 Log.i(TAG, "VK MP4 $label extracted (title=$title)")
                 return ExtractedStream(decodeUrl(u), title, label)
+            }
+        }
+        // Adaptive HLS fallback (only if no progressive URL is present): one URL carries every
+        // quality + audio track and plays via the media3 HLS module.
+        for (key in listOf("hls_ondemand", "hls")) {
+            val u = p.optString(key).takeIf { it.startsWith("http") }
+            if (u != null) {
+                Log.i(TAG, "VK HLS extracted (title=$title)")
+                return ExtractedStream(decodeUrl(u), title, "hls")
             }
         }
         Log.w(TAG, "VK al_video: params[0] had no hls/url* fields")
