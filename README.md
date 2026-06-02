@@ -2,6 +2,8 @@
 
 <a href="https://play.google.com/store/apps/details?id=com.teleteh.xplayer2"><img alt="Get it on Google Play" src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" height="80"/></a>
 
+[![Donate via Stripe](https://img.shields.io/badge/Donate-via%20Stripe-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/bJecMY3pO2NS0V8fmW24004)
+
 **Finally, a reason to use your XReal glasses!** XPlayer2 transforms your AR glasses into a personal 3D cinema. Watch stereoscopic 3D videos the way they were meant to be seen — immersive, comfortable, and without draining your battery.
 
 ## Why XPlayer2?
@@ -29,6 +31,14 @@ Your XReal glasses are an amazing piece of hardware, but finding good 3D content
 1. **Local files** — Open the app and browse your device for video files
 2. **Network streams** — Paste any video URL directly into the app
 3. **Share from other apps** — In VK, OK, YouTube, or any browser, tap Share → XPlayer2
+
+## Support the project
+
+XPlayer2 is free. If it earns a place in your glasses, you can help fund its development:
+
+[![Donate via Stripe](https://img.shields.io/badge/Donate-via%20Stripe-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/bJecMY3pO2NS0V8fmW24004)
+
+Every contribution is voluntary and goes directly toward new features, device support, and maintenance. Thank you! ❤️
 
 ## License
 
