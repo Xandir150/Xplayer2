@@ -40,7 +40,6 @@ object VideoStreamExtractor {
      */
     suspend fun extract(uri: Uri): ExtractedStream? = withContext(Dispatchers.IO) {
         val host = uri.host?.lowercase() ?: return@withContext null
-        Log.d(TAG, "Attempting to extract stream from: $uri (host=$host)")
         try {
             val result = when {
                 host.contains("ok.ru") -> extractOkRu(uri)
@@ -69,7 +68,6 @@ object VideoStreamExtractor {
             Log.w(TAG, "Could not extract video ID from ok.ru URL: $uri")
             return@withContext null
         }
-        Log.d(TAG, "Extracting ok.ru video: $videoId")
 
         // Try mobile page first (often has simpler structure)
         var html = fetchPage("https://m.ok.ru/video/$videoId")
@@ -82,7 +80,6 @@ object VideoStreamExtractor {
             return@withContext null
         }
         
-        Log.d(TAG, "Fetched ok.ru page, length=${html.length}")
 
         // Method 1: Try to find data-options JSON in the page
         val optionsPattern = Pattern.compile("data-options=[\"']([^\"']+)[\"']", Pattern.DOTALL)
@@ -90,7 +87,6 @@ object VideoStreamExtractor {
         
         if (optionsMatcher.find()) {
             val optionsEncoded = optionsMatcher.group(1) ?: ""
-            Log.d(TAG, "Found data-options, length=${optionsEncoded.length}")
             val optionsJson = decodeHtmlEntities(optionsEncoded)
             
             try {
@@ -115,7 +111,6 @@ object VideoStreamExtractor {
         val vvDataMatcher = vvDataPattern.matcher(html)
         if (vvDataMatcher.find()) {
             val vvDataJson = vvDataMatcher.group(1) ?: ""
-            Log.d(TAG, "Found st.vv.data, length=${vvDataJson.length}")
             try {
                 val json = JSONObject(vvDataJson)
                 val videos = json.optJSONArray("videos")
@@ -136,7 +131,6 @@ object VideoStreamExtractor {
                 .replace("\\\"", "\"")
                 .replace("\\/", "/")
                 .replace("\\u0026", "&")
-            Log.d(TAG, "Found metadata JSON, length=${metadataJson.length}")
             try {
                 val json = JSONObject(metadataJson)
                 val videos = json.optJSONArray("videos")
@@ -195,7 +189,6 @@ object VideoStreamExtractor {
             while (matcher.find()) {
                 val url = decodeUrl(matcher.group(1) ?: continue)
                 if (isValidVideoUrl(url)) {
-                    Log.d(TAG, "Found HLS URL: $url")
                     return ExtractedStream(url, null, "hls")
                 }
             }
@@ -211,7 +204,6 @@ object VideoStreamExtractor {
             while (matcher.find()) {
                 val url = decodeUrl(matcher.group(1) ?: continue)
                 if (isValidVideoUrl(url) && !url.contains("preview") && !url.contains("thumb")) {
-                    Log.d(TAG, "Found MP4 URL: $url")
                     return ExtractedStream(url, null, "mp4")
                 }
             }
@@ -259,7 +251,6 @@ object VideoStreamExtractor {
             Log.w(TAG, "Could not extract video ID from VK URL: $uri")
             return@withContext null
         }
-        Log.d(TAG, "Extracting VK video: $videoId")
 
         // Parse owner_id and video_id from format: -225720479_456239202
         val parts = videoId.split("_")
@@ -278,16 +269,13 @@ object VideoStreamExtractor {
         // signed CDN URLs are IP-locked but not UA-locked, so ExoPlayer on the same device
         // plays them fine.
         extractVkViaApi("${ownerId}_$id")?.let { return@withContext it }
-        Log.d(TAG, "VK al_video.php yielded nothing, falling back to legacy HTML scraping")
 
         // Method 2 (Legacy fallback): embed player page HTML scraping.
         // The embed page used to contain HLS URLs directly in the HTML.
         val embedUrl = "https://vk.com/video_ext.php?oid=$ownerId&id=$id&hash=0"
-        Log.d(TAG, "Trying VK embed page: $embedUrl")
         val embedHtml = fetchPage(embedUrl)
         
         if (embedHtml != null) {
-            Log.d(TAG, "Fetched VK embed page, length=${embedHtml.length}")
             
             // Extract HLS URL - pattern: "hls":"https:\/\/..."
             val hlsPattern = Pattern.compile("\"hls\"\\s*:\\s*\"([^\"]+)\"")
@@ -329,7 +317,6 @@ object VideoStreamExtractor {
         for (pageUrl in urls) {
             html = fetchPage(pageUrl)
             if (html != null) {
-                Log.d(TAG, "Fetched VK page from $pageUrl, length=${html.length}")
                 break
             }
         }
@@ -382,18 +369,15 @@ object VideoStreamExtractor {
         val mdMatcher = mdTitlePattern.matcher(html)
         if (mdMatcher.find()) {
             val rawMdTitle = mdMatcher.group(1) ?: ""
-            Log.d(TAG, "md_title raw value: '$rawMdTitle' (length=${rawMdTitle.length})")
             if (rawMdTitle.isNotBlank()) {
                 // Try to fix encoding: windows-1251 read as ISO-8859-1
                 val fixedTitle = tryFixEncoding(rawMdTitle)
                 val decoded = decodeUnicodeEscapes(fixedTitle)
-                Log.d(TAG, "md_title fixed: '$fixedTitle', decoded: '$decoded'")
                 if (decoded.isNotBlank()) {
                     return decoded
                 }
             }
         } else {
-            Log.d(TAG, "md_title not found in HTML")
         }
         
         // Fallback patterns
@@ -413,7 +397,6 @@ object VideoStreamExtractor {
                     rawTitle == "Video embed" || rawTitle.length < 3) continue
                 
                 val decoded = decodeUnicodeEscapes(rawTitle)
-                Log.d(TAG, "Found title with pattern '$patternStr': '$decoded'")
                 if (decoded.isNotBlank() && decoded.length > 2) {
                     return decoded
                 }
@@ -430,7 +413,6 @@ object VideoStreamExtractor {
             // If text contains high-byte characters that look like windows-1251 read as latin1
             val bytes = text.toByteArray(Charsets.ISO_8859_1)
             val fixed = String(bytes, charset("windows-1251"))
-            Log.d(TAG, "Encoding fix: '$text' -> '$fixed'")
             fixed
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fix encoding", e)
@@ -545,7 +527,6 @@ object VideoStreamExtractor {
 
     private fun postAlVideo(body: String): JSONObject? {
         return try {
-            Log.d(TAG, "POST al_video.php ($body)")
             val conn = (URL("https://vk.com/al_video.php").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = 15000
@@ -563,7 +544,6 @@ object VideoStreamExtractor {
             }
             conn.outputStream.use { it.write(body.toByteArray(Charsets.US_ASCII)) }
             val code = conn.responseCode
-            Log.d(TAG, "al_video.php HTTP $code")
             if (code !in 200..299) {
                 Log.w(TAG, "al_video.php returned HTTP $code")
                 return null
@@ -668,7 +648,6 @@ object VideoStreamExtractor {
 
     private fun fetchPage(urlStr: String): String? {
         return try {
-            Log.d(TAG, "Fetching: $urlStr")
             val url = URL(urlStr)
             val conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
@@ -682,7 +661,6 @@ object VideoStreamExtractor {
                 instanceFollowRedirects = true
             }
             val code = conn.responseCode
-            Log.d(TAG, "HTTP $code for $urlStr")
             if (code in 200..299) {
                 // Determine charset from Content-Type header or default to UTF-8
                 val contentType = conn.contentType ?: ""
@@ -694,13 +672,11 @@ object VideoStreamExtractor {
                     }
                     else -> Charsets.UTF_8
                 }
-                Log.d(TAG, "Content-Type: $contentType, using charset: $charset")
                 conn.inputStream.bufferedReader(charset).use { it.readText() }
             } else if (code in 300..399) {
                 // Handle redirect manually if needed
                 val location = conn.getHeaderField("Location")
                 if (!location.isNullOrBlank()) {
-                    Log.d(TAG, "Redirect to: $location")
                     fetchPage(location)
                 } else {
                     null

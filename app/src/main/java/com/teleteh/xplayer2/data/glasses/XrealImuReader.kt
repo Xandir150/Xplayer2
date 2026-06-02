@@ -29,11 +29,14 @@ class XrealImuReader(
 
     fun interface Listener {
         /**
-         * Called on the reader thread with gyro angular velocity in degrees per second
-         * (x = pitch rate, y = yaw rate, z = roll rate from XREAL's frame) and the
-         * Android-side time-of-receipt nanos.
+         * Called on the reader thread with gyro angular velocity (deg/s; x=pitch, y=yaw, z=roll
+         * rate from XREAL's frame), linear acceleration (ax/ay/az in the packet's accel units),
+         * the raw IMU temperature word, and the Android-side time-of-receipt nanos.
          */
-        fun onSample(gxDegSec: Float, gyDegSec: Float, gzDegSec: Float, tNanos: Long)
+        fun onSample(
+            gxDegSec: Float, gyDegSec: Float, gzDegSec: Float,
+            ax: Float, ay: Float, az: Float, tempRaw: Float, tNanos: Long,
+        )
     }
 
     private val running = AtomicBoolean(false)
@@ -109,15 +112,21 @@ class XrealImuReader(
 
         val angM = le16(buffer, base + 12)
         val angD = le32(buffer, base + 14)
-        val gx = s24(buffer, base + 18)
-        val gy = s24(buffer, base + 21)
-        val gz = s24(buffer, base + 24)
+        val gxDegSec = scale(s24(buffer, base + 18), angM, angD)
+        val gyDegSec = scale(s24(buffer, base + 21), angM, angD)
+        val gzDegSec = scale(s24(buffer, base + 24), angM, angD)
 
-        val gxDegSec = scale(gx, angM, angD)
-        val gyDegSec = scale(gy, angM, angD)
-        val gzDegSec = scale(gz, angM, angD)
+        // Accelerometer block follows the gyro block: acc_m[2], acc_d[4], ax/ay/az [3 x s24].
+        val accM = le16(buffer, base + 27)
+        val accD = le32(buffer, base + 29)
+        val ax = scale(s24(buffer, base + 33), accM, accD)
+        val ay = scale(s24(buffer, base + 36), accM, accD)
+        val az = scale(s24(buffer, base + 39), accM, accD)
 
-        listener.onSample(gxDegSec, gyDegSec, gzDegSec, System.nanoTime())
+        // Raw IMU temperature word (signed); scaling is sensor-specific, so it's surfaced raw.
+        val tempRaw = s16(buffer, base + 2).toFloat()
+
+        listener.onSample(gxDegSec, gyDegSec, gzDegSec, ax, ay, az, tempRaw, System.nanoTime())
     }
 
     private fun findImuEndpoint(): Pair<android.hardware.usb.UsbInterface, UsbEndpoint>? {
@@ -193,6 +202,12 @@ class XrealImuReader(
     private fun le16(b: ByteArray, off: Int): Int {
         if (off < 0 || off + 1 >= b.size) return 0
         return (b[off].toInt() and 0xFF) or ((b[off + 1].toInt() and 0xFF) shl 8)
+    }
+
+    /** Signed 16-bit little-endian at the given offset. */
+    private fun s16(b: ByteArray, off: Int): Int {
+        val u = le16(b, off)
+        return if ((u and 0x8000) != 0) u or -0x10000 else u
     }
 
     private fun le32(b: ByteArray, off: Int): Long {

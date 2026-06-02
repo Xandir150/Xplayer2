@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">XPlayer2</string>
+    <string name="press_back_again_to_exit">Press Back again to exit</string>
 
     <!-- Tabs -->
     <string name="tab_recent">Recent</string>
@@ -117,6 +118,7 @@
 
     <!-- Hughey VK 3D-films shortcut (Network tab) -->
     <string name="network_hughey">Hughey</string>
+    <string name="network_hughey_added">Hughey source added</string>
     <string name="vk_club_empty">No videos found</string>
     <string name="vk_club_boosty">Hughey on Boosty</string>
     <string name="vk_club_search_hint">Search by title</string>

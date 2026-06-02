@@ -612,7 +612,6 @@ class PlayerActivity : AppCompatActivity() {
                     pres.setPlayer(exo)
                     // If Presentation surface is already ready, bind it now
                     presentationSurface?.let { surface ->
-                        android.util.Log.d("XPlayer2", "Binding existing Presentation surface to new player")
                         exo.setVideoSurface(surface)
                     }
                 }
@@ -1263,10 +1262,8 @@ class PlayerActivity : AppCompatActivity() {
         // Create Presentation and route video there
         val pres = ExternalPlayerPresentation(this, ext) { surface ->
             presentationSurface = surface
-            android.util.Log.d("XPlayer2", "Presentation surface callback: surface=$surface, player=${player != null}")
             if (surface != null) {
                 player?.let { exo ->
-                    android.util.Log.d("XPlayer2", "Presentation surface ready, binding to player")
                     exo.setVideoSurface(surface)
                 }
                 // Hide local GL view - video goes to Presentation only
@@ -1279,7 +1276,6 @@ class PlayerActivity : AppCompatActivity() {
         presentationDisplayId = ext.displayId
         try {
             pres.show()
-            android.util.Log.d("XPlayer2", "Presentation shown on display ${ext.displayId}")
             
             // Clear main surface - video will render on Presentation
             player?.clearVideoSurface()
@@ -1338,7 +1334,6 @@ class PlayerActivity : AppCompatActivity() {
         }
         dm.registerDisplayListener(l, uiHandler)
         displayListener = l
-        android.util.Log.d("XPlayer2", "DisplayListener registered")
     }
 
     private fun unregisterDisplayListener() {

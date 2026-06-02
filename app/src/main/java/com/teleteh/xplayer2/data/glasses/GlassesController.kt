@@ -58,11 +58,21 @@ class GlassesController(private val appContext: Context) {
     private var device: UsbDevice? = null
     private var connection: UsbDeviceConnection? = null
     private var listener: Listener? = null
-    // IMU head-orientation telemetry: started on connect (XREAL only) for world-anchored visuals
-    // like the screensaver platform. The gyro stream is cheap, so we keep it running whenever the
-    // goggles are linked. Exposed via [headOrientationDegrees]; null when nothing is streaming.
+    // IMU head-orientation telemetry (XREAL only), started on demand via [setImuStreaming] while the
+    // head-gesture menu is shown and stopped otherwise, so it doesn't drain power streaming the gyro
+    // continuously. Exposed via [headOrientationDegrees]/[latestImuDebug]; null when not streaming.
     private var imuReader: XrealImuReader? = null
     private val headOrientation = HeadOrientationTracker()
+    // Latest raw IMU sample for the glasses debug HUD, as volatile scalars — avoids allocating a
+    // FloatArray on every IMU packet (~1 kHz) which was churning the GC.
+    @Volatile private var imuGx = 0f
+    @Volatile private var imuGy = 0f
+    @Volatile private var imuGz = 0f
+    @Volatile private var imuAx = 0f
+    @Volatile private var imuAy = 0f
+    @Volatile private var imuAz = 0f
+    @Volatile private var imuTemp = 0f
+    @Volatile private var imuHasSample = false
     // VITURE glasses switch 2D/3D through their own SDK (ArManager), not our HID MCU. Created on
     // connect for a VITURE device (the SDK owns the USB link + permission); null otherwise.
     private var viture: VitureController? = null
@@ -281,7 +291,6 @@ class GlassesController(private val appContext: Context) {
         for (i in 0 until dev.interfaceCount) {
             val intf = dev.getInterface(i)
             if (intf.interfaceClass != UsbConstants.USB_CLASS_HID) {
-                Log.d(TAG, "Skipping non-HID interface $i (class=0x${intf.interfaceClass.toString(16)}) — leaving it to the kernel")
                 continue
             }
             // force=true is safe here: the only thing competing for an XREAL HID interface is
@@ -290,7 +299,6 @@ class GlassesController(private val appContext: Context) {
             val ok = conn.claimInterface(intf, true)
             if (ok) {
                 claimedInterfaces.add(intf)
-                Log.d(TAG, "Claimed HID interface $i (subclass=0x${intf.interfaceSubclass.toString(16)})")
             } else {
                 Log.w(TAG, "Failed to claim HID interface $i — MCU commands may not reach the glasses")
             }
@@ -307,7 +315,8 @@ class GlassesController(private val appContext: Context) {
         notifyState()
         mainHandler.removeCallbacksAndMessages(null)
         mainHandler.postDelayed({ reapplySavedMode() }, MODE_PUSH_DELAY_MS)
-        startImuTelemetry()
+        // IMU is started on demand (setImuStreaming) only while the head-gesture menu is shown,
+        // so it doesn't burn power streaming continuously while connected.
     }
 
     /**
@@ -374,10 +383,16 @@ class GlassesController(private val appContext: Context) {
         val dev = device ?: return
         val conn = connection ?: return
         headOrientation.reset()
+        imuHasSample = false
         val reader = XrealImuReader(dev, conn)
         imuReader = reader
         Thread({
-            val ok = reader.start { gx, gy, gz, t -> headOrientation.accumulate(gx, gy, gz, t) }
+            val ok = reader.start { gx, gy, gz, ax, ay, az, temp, t ->
+                headOrientation.accumulate(gx, gy, gz, t)
+                imuGx = gx; imuGy = gy; imuGz = gz
+                imuAx = ax; imuAy = ay; imuAz = az; imuTemp = temp
+                imuHasSample = true
+            }
             if (ok) {
                 Log.i(TAG, "IMU telemetry streaming")
             } else {
@@ -401,6 +416,18 @@ class GlassesController(private val appContext: Context) {
     fun headOrientationDegrees(): FloatArray? {
         if (imuReader == null || !headOrientation.hasSamples()) return null
         return floatArrayOf(headOrientation.yawDeg, headOrientation.pitchDeg, headOrientation.rollDeg)
+    }
+
+    /** Latest raw IMU sample [gx,gy,gz, ax,ay,az, tempRaw] for the debug HUD, or null. Allocates
+     *  only when polled (~20 Hz), not per IMU packet. */
+    fun latestImuDebug(): FloatArray? =
+        if (imuReader != null && imuHasSample)
+            floatArrayOf(imuGx, imuGy, imuGz, imuAx, imuAy, imuAz, imuTemp)
+        else null
+
+    /** Stream the IMU only while it's actually needed (head-gesture menu shown) to save power. */
+    fun setImuStreaming(enable: Boolean) {
+        if (enable) startImuTelemetry() else stopImuTelemetry()
     }
 
     private fun sendMcuCommand(msgId: Int, data: ByteArray): Boolean {

@@ -89,10 +89,41 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
         rv.adapter = adapter
         rv.descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
 
+        // "Hughey" — a VK group's 3D films. Shown by default only on Russian; on other locales it
+        // stays hidden until the user "adds" it by typing `hughey` into the URL field below — the
+        // choice is then persisted, like an added source.
+        val btnHughey = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnHughey)
+        val lang = resources.configuration.locales.takeIf { it.size() > 0 }?.get(0)?.language
+        val hugheyPrefs = requireContext().getSharedPreferences("hughey", Context.MODE_PRIVATE)
+        fun refreshHughey() {
+            btnHughey.visibility =
+                if (lang == "ru" || hugheyPrefs.getBoolean("unlocked", false)) View.VISIBLE else View.GONE
+        }
+        refreshHughey()
+        btnHughey.setOnClickListener {
+            startActivity(Intent(requireContext(), VkClubActivity::class.java).apply {
+                putExtra(VkClubActivity.EXTRA_OWNER_ID, "-225720479")
+                putExtra(VkClubActivity.EXTRA_TITLE_FILTER, "3D")
+                putExtra(VkClubActivity.EXTRA_TITLE, "Hughey")
+                putExtra(
+                    VkClubActivity.EXTRA_BOOSTY_URL,
+                    "https://boosty.to/hugheyvr/bundle/f36c08bd-634e-49e9-bb7a-e2948c30d668?isFromShowcasePreview=true"
+                )
+            })
+        }
+
         fun tryOpen(text: String?) {
             val raw = text?.trim()
             if (raw.isNullOrBlank()) {
                 Toast.makeText(requireContext(), R.string.network_enter_url_error, Toast.LENGTH_SHORT).show()
+                return
+            }
+            if (raw.equals("hughey", ignoreCase = true)) {
+                // Magic word: reveal + remember the Hughey shortcut instead of treating it as a URL.
+                hugheyPrefs.edit().putBoolean("unlocked", true).apply()
+                refreshHughey()
+                etUrl.setText("")
+                Toast.makeText(requireContext(), R.string.network_hughey_added, Toast.LENGTH_SHORT).show()
                 return
             }
             val uri = normalizeToUri(raw)
@@ -113,25 +144,6 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
             if (event.action == MotionEvent.ACTION_UP) {
                 v.requestFocus(); v.performClick(); true
             } else false
-        }
-
-        // "Hughey" — opens a VK group's 3D films. Hidden entirely on Spanish (product decision).
-        val btnHughey = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnHughey)
-        val lang = resources.configuration.locales.takeIf { it.size() > 0 }?.get(0)?.language
-        if (lang == "es") {
-            btnHughey.visibility = View.GONE
-        } else {
-            btnHughey.setOnClickListener {
-                startActivity(Intent(requireContext(), VkClubActivity::class.java).apply {
-                    putExtra(VkClubActivity.EXTRA_OWNER_ID, "-225720479")
-                    putExtra(VkClubActivity.EXTRA_TITLE_FILTER, "3D")
-                    putExtra(VkClubActivity.EXTRA_TITLE, "Hughey")
-                    putExtra(
-                        VkClubActivity.EXTRA_BOOSTY_URL,
-                        "https://boosty.to/hugheyvr/bundle/f36c08bd-634e-49e9-bb7a-e2948c30d668?isFromShowcasePreview=true"
-                    )
-                })
-            }
         }
 
         etUrl.setOnEditorActionListener { _, actionId, _ ->

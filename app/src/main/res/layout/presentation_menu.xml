@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Glasses-only menu shown on the external (glasses) display while the user is in the main
+     section. It reflects the phone's current list + focused item (the phone stays the single
+     source of truth). Wrapped in SbsMirrorLayout so it duplicates per-eye on the 3D (ultra-wide)
+     panel; on a normal external display SbsMirrorLayout passes through unchanged.
+     The top bar flashes the active head-gesture and shows glasses temp + phone battery. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:fitsSystemWindows="false">
+
+    <com.teleteh.xplayer2.ui.SbsMirrorLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:paddingHorizontal="48dp"
+            android:paddingVertical="28dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingBottom="16dp">
+
+                <TextView
+                    android:id="@+id/hudImu"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_gravity="center_vertical"
+                    android:fontFamily="monospace"
+                    android:textColor="#00E676"
+                    android:textSize="30sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/hudStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:fontFamily="monospace"
+                    android:textColor="#FFD740"
+                    android:textSize="20sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/menuTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingBottom="20dp"
+                android:textColor="#FFFFFF"
+                android:textSize="26sp"
+                android:textStyle="bold"
+                android:singleLine="true"
+                android:ellipsize="end" />
+
+            <ScrollView
+                android:id="@+id/menuScroll"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/menuList"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+            </ScrollView>
+        </LinearLayout>
+    </com.teleteh.xplayer2.ui.SbsMirrorLayout>
+</FrameLayout>

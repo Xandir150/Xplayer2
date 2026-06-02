@@ -26,7 +26,10 @@ import com.teleteh.xplayer2.data.glasses.GlassesController
 import com.teleteh.xplayer2.data.glasses.GlassesProtocol
 import com.teleteh.xplayer2.databinding.ActivityMainBinding
 import com.teleteh.xplayer2.player.PlayerActivity
-import com.teleteh.xplayer2.player.ScreensaverPresentation
+import com.teleteh.xplayer2.data.RecentEntry
+import com.teleteh.xplayer2.data.RecentStore
+import com.teleteh.xplayer2.data.SourceType
+import com.teleteh.xplayer2.player.MenuMirrorPresentation
 import com.teleteh.xplayer2.ui.MainPagerAdapter
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import kotlinx.coroutines.Dispatchers
@@ -50,16 +53,82 @@ class MainActivity : AppCompatActivity() {
     }
     private var glassesMenuItem: MenuItem? = null
 
-    // Idle screensaver on the external (glasses) display: while we're in the main section the
-    // goggles otherwise just mirror the phone UI, so we put up a retro bouncing-DVD logo instead.
-    // Shown while MainActivity is foreground with an external display; PlayerActivity takes the
-    // display over when a film starts.
+    // Glasses menu on the external (glasses) display: while we're in the main section the goggles
+    // would otherwise just mirror the phone UI (wrong per-eye on the ultra-wide 3D panel), so on an
+    // ultra-wide external display we put up our own menu that reflects the phone's focused item.
+    // Shown while MainActivity is foreground; PlayerActivity takes the display over when a film starts.
     private val displayManager: DisplayManager? by lazy { getSystemService(DisplayManager::class.java) }
-    private var screensaverPresentation: ScreensaverPresentation? = null
+    private var menuPresentation: MenuMirrorPresentation? = null
+    private var glassesRows: List<MenuMirrorPresentation.Row> = emptyList()
+    private var glassesTab = -1
     private val displayListener = object : DisplayManager.DisplayListener {
-        override fun onDisplayAdded(displayId: Int) = reconcileScreensaver()
-        override fun onDisplayRemoved(displayId: Int) = reconcileScreensaver()
-        override fun onDisplayChanged(displayId: Int) = reconcileScreensaver()
+        override fun onDisplayAdded(displayId: Int) = reconcileGlassesMenu()
+        override fun onDisplayRemoved(displayId: Int) = reconcileGlassesMenu()
+        override fun onDisplayChanged(displayId: Int) = reconcileGlassesMenu()
+    }
+    private val glassesFocusListener =
+        android.view.ViewTreeObserver.OnGlobalFocusChangeListener { _, _ -> pushGlassesMenu() }
+    private val glassesPageCallback = object : ViewPager2.OnPageChangeCallback() {
+        override fun onPageSelected(position: Int) = refreshGlassesMenu()
+    }
+    // Head-as-D-pad: a nod past the threshold fires one DPAD_UP/DOWN into the phone's focus engine,
+    // which moves the focused row (and the glasses highlight follows). Ratchets: re-arms near neutral.
+    // Head-as-D-pad from RAW gyro rates (deg/s) — drift-free, high thresholds ignore small moves.
+    // A real nod is "tilt + return" (you can't hold the head tilted), so the RETURN spike (opposite
+    // direction, right after a step) is suppressed for gestureReturnNs — only the intended direction
+    // steps. Same-direction repeats are allowed after gestureMinGapNs. Pitch (gx): down(+)->FOCUS_DOWN,
+    // up(-)->FOCUS_UP. Yaw (gz): left(+)->previous tab, right(-)->next tab.
+    private val nodRateDps = 70f
+    private val turnRateDps = 80f
+    private val rollRateDps = 80f
+    private val gestureMinGapNs = 250_000_000L   // debounce: ignore the rest of one spike
+    private val gestureReturnNs = 850_000_000L   // ignore the opposite "return to neutral" motion
+    private val gestureHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var pitchDir = 0
+    private var pitchFireNs = 0L
+    private var yawDir = 0
+    private var yawFireNs = 0L
+    private var rollDir = 0
+    private var rollFireNs = 0L
+    private val gestureTick = object : Runnable {
+        override fun run() {
+            if (menuPresentation == null) return
+            val imu = glasses.latestImuDebug()
+            if (imu != null && imu.size >= 3) {
+                val now = System.nanoTime()
+                val gx = imu[0] // pitch rate
+                val gz = imu[2] // yaw rate
+                val pdir = if (gx > nodRateDps) 1 else if (gx < -nodRateDps) -1 else 0
+                if (pdir != 0 && now - pitchFireNs > gestureMinGapNs &&
+                    !(pdir == -pitchDir && now - pitchFireNs < gestureReturnNs)
+                ) {
+                    stepFocus(if (pdir > 0) android.view.View.FOCUS_DOWN else android.view.View.FOCUS_UP)
+                    menuPresentation?.showGesture(if (pdir > 0) "▼" else "▲")
+                    pitchDir = pdir; pitchFireNs = now
+                }
+                val gy = imu[1] // roll rate
+                // Yaw (turn) -> paging, only when yaw dominates roll (a head tilt often adds yaw).
+                val ydir = if (gz > turnRateDps && kotlin.math.abs(gz) > kotlin.math.abs(gy)) 1
+                    else if (gz < -turnRateDps && kotlin.math.abs(gz) > kotlin.math.abs(gy)) -1 else 0
+                if (ydir != 0 && now - yawFireNs > gestureMinGapNs &&
+                    !(ydir == -yawDir && now - yawFireNs < gestureReturnNs)
+                ) {
+                    switchTab(if (ydir > 0) -1 else 1) // turn left -> previous tab, right -> next
+                    menuPresentation?.showGesture(if (ydir > 0) "◀ tab" else "tab ▶")
+                    yawDir = ydir; yawFireNs = now
+                }
+                // Roll (head tilt) -> OK / Back, only when roll dominates yaw (filters involuntary yaw).
+                val rdir = if (gy > rollRateDps && kotlin.math.abs(gy) > kotlin.math.abs(gz)) 1
+                    else if (gy < -rollRateDps && kotlin.math.abs(gy) > kotlin.math.abs(gz)) -1 else 0
+                if (rdir != 0 && now - rollFireNs > gestureMinGapNs &&
+                    !(rdir == -rollDir && now - rollFireNs < gestureReturnNs)
+                ) {
+                    if (rdir > 0) { selectFocused(); menuPresentation?.showGesture("OK ✔") } else goBack()
+                    rollDir = rdir; rollFireNs = now
+                }
+            }
+            gestureHandler.postDelayed(this, 50)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -97,6 +166,7 @@ class MainActivity : AppCompatActivity() {
 
         setupTvFocusNavigation()
         prefetchDepthModelIfNeeded()
+        registerDoubleBackToExit()
     }
 
     /**
@@ -330,10 +400,12 @@ class MainActivity : AppCompatActivity() {
         super.onStart()
         glasses.setListener { _, _ -> updateGlassesMenu() }
         glasses.register()
-        // Show the idle screensaver on the glasses while we're the foreground (browsing) screen,
-        // and react to the goggles being plugged/unplugged.
+        // Show our menu on the glasses while we're the foreground (browsing) screen, and react to
+        // the goggles being plugged/unplugged, tab switches, and focus moves (to keep it in sync).
         displayManager?.registerDisplayListener(displayListener, null)
-        reconcileScreensaver()
+        binding.root.viewTreeObserver.addOnGlobalFocusChangeListener(glassesFocusListener)
+        binding.viewPager.registerOnPageChangeCallback(glassesPageCallback)
+        reconcileGlassesMenu()
     }
 
     override fun onStop() {
@@ -343,36 +415,200 @@ class MainActivity : AppCompatActivity() {
         // Give the external display back (PlayerActivity will put video on it, or it returns to
         // mirroring once nothing owns it).
         displayManager?.unregisterDisplayListener(displayListener)
-        dismissScreensaver()
+        binding.root.viewTreeObserver.removeOnGlobalFocusChangeListener(glassesFocusListener)
+        binding.viewPager.unregisterOnPageChangeCallback(glassesPageCallback)
+        dismissGlassesMenu()
     }
 
     override fun onResume() {
         super.onResume()
         // PlayerActivity might have come and gone in the background; re-evaluate enabled state.
         updateGlassesMenu()
+        refreshGlassesMenu()
     }
 
     /**
-     * Put the bouncing-DVD screensaver up on the external (glasses) display if one is present,
-     * or take it down if the display went away. Idempotent — safe to call on every display event.
+     * Put our menu up on the external (glasses) display if an ultra-wide one is present, or take it
+     * down if the display went away. Idempotent — safe to call on every display event.
      */
-    private fun reconcileScreensaver() {
+    private fun reconcileGlassesMenu() {
         val ext = DisplayUtils.findUltraWideExternalDisplay(this)
-        if (ext == null) { dismissScreensaver(); return }
-        if (screensaverPresentation?.display?.displayId == ext.displayId) return // already up there
-        dismissScreensaver()
+        if (ext == null) { dismissGlassesMenu(); return }
+        if (menuPresentation?.display?.displayId == ext.displayId) { refreshGlassesMenu(); return }
+        dismissGlassesMenu()
         try {
-            ScreensaverPresentation(this, ext) { glasses.headOrientationDegrees() }
-                .also { it.show(); screensaverPresentation = it }
+            MenuMirrorPresentation(this, ext) { glasses.latestImuDebug() }
+                .also { it.show(); menuPresentation = it }
+            refreshGlassesMenu()
+            startGestureLoop()
         } catch (t: Throwable) {
-            android.util.Log.w("MainActivity", "Screensaver presentation failed: ${t.message}")
-            dismissScreensaver()
+            android.util.Log.w("MainActivity", "Menu presentation failed: ${t.message}")
+            dismissGlassesMenu()
         }
     }
 
-    private fun dismissScreensaver() {
-        try { screensaverPresentation?.dismiss() } catch (_: Throwable) {}
-        screensaverPresentation = null
+    private fun dismissGlassesMenu() {
+        stopGestureLoop()
+        try { menuPresentation?.dismiss() } catch (_: Throwable) {}
+        menuPresentation = null
+    }
+
+    /** Force a rebuild of the current tab's rows on the next push, then push + ensure a focused row. */
+    private fun refreshGlassesMenu() {
+        glassesTab = -1
+        pushGlassesMenu()
+        ensureGlassesRowFocused()
+    }
+
+    /** Reflect the phone's current tab + focused row onto the glasses menu (no-op if not shown). */
+    private fun pushGlassesMenu() {
+        val pres = menuPresentation ?: return
+        val tab = binding.viewPager.currentItem
+        val title = if (tab == 0) getString(R.string.tab_recent) else getString(R.string.tab_sources)
+        if (tab == 0) {
+            // Recent: rich data rows (icon + title + position + stereo chip), cached per tab.
+            if (tab != glassesTab) {
+                glassesTab = tab
+                glassesRows = RecentStore(this).getAll().map { e ->
+                    val st = e.sourceType ?: RecentEntry.detectSourceType(android.net.Uri.parse(e.uri))
+                    val icon = when (st) {
+                        SourceType.VK -> R.drawable.ic_source_vk
+                        SourceType.OK -> R.drawable.ic_source_ok
+                        SourceType.LOCAL -> R.drawable.ic_source_local
+                        SourceType.NETWORK -> R.drawable.ic_source_network
+                        else -> R.drawable.ic_source_unknown
+                    }
+                    val chip = when {
+                        e.stereoMode == 2 || e.framePacking == 3 -> getString(R.string.menu_stereo_short)
+                        e.stereoMode == 1 || e.framePacking == 4 -> getString(R.string.remote_ou_to_sbs)
+                        else -> null
+                    }
+                    val sub = getString(R.string.recent_position_prefix) + fmtMs(e.lastPositionMs) +
+                        if (e.durationMs > 0) " / " + fmtMs(e.durationMs) else ""
+                    MenuMirrorPresentation.Row(e.title, sub, icon, chip)
+                }
+            }
+            val rv = currentFragmentView()?.findViewById<RecyclerView?>(R.id.rvRecent)
+            var idx = rv?.focusedChild?.let { rv.getChildAdapterPosition(it) } ?: -1
+            if (idx < 0 && glassesRows.isNotEmpty()) idx = 0
+            pres.render(title, glassesRows, idx)
+        } else {
+            // Sources: reflect the tab's focusable items (Open File / URL / Hughey + DLNA/SMB list)
+            // by walking the live view tree, so it covers buttons + dynamically-discovered rows.
+            glassesTab = tab
+            val items = currentFragmentView()?.let { collectFocusableItems(it) } ?: emptyList()
+            glassesRows = items.map { MenuMirrorPresentation.Row(labelOf(it)) }
+            var idx = items.indexOfFirst { it.isFocused }
+            if (idx < 0 && glassesRows.isNotEmpty()) idx = 0
+            pres.render(title, glassesRows, idx)
+        }
+    }
+
+    /** Leaf focusable controls (buttons, list rows, text fields) under [root], in view-tree order. */
+    private fun collectFocusableItems(root: android.view.View): List<android.view.View> {
+        val out = ArrayList<android.view.View>()
+        fun walk(v: android.view.View) {
+            if (!v.isShown) return
+            if (v.isFocusable && (v.isClickable || v is android.widget.EditText)) { out.add(v); return }
+            if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i))
+        }
+        walk(root)
+        return out
+    }
+
+    /** A human label for a focusable control: its own text, else a child's text, else its description. */
+    private fun labelOf(v: android.view.View): String {
+        if (v is android.widget.TextView) v.text?.toString()?.takeIf { it.isNotBlank() }?.let { return it }
+        if (v is android.view.ViewGroup) firstTextIn(v)?.let { return it }
+        return v.contentDescription?.toString() ?: ""
+    }
+
+    private fun firstTextIn(group: android.view.ViewGroup): String? {
+        for (i in 0 until group.childCount) {
+            val c = group.getChildAt(i)
+            if (c is android.widget.TextView) c.text?.toString()?.takeIf { it.isNotBlank() }?.let { return it }
+            if (c is android.view.ViewGroup) firstTextIn(c)?.let { return it }
+        }
+        return null
+    }
+
+    /** Focus the first row on the phone when entering a section so head-D-pad has a starting point. */
+    private fun ensureGlassesRowFocused() {
+        if (menuPresentation == null) return
+        val rv = currentFragmentView()?.let {
+            it.findViewById<RecyclerView?>(R.id.rvRecent) ?: it.findViewById<RecyclerView?>(R.id.rvNetwork)
+        } ?: return
+        rv.post {
+            if (rv.focusedChild == null) {
+                (rv.findViewHolderForAdapterPosition(0)?.itemView ?: rv.getChildAt(0))?.requestFocus()
+            }
+        }
+    }
+
+    /**
+     * Move focus like a D-pad: focusSearch from the current focus, then requestFocus. This is what
+     * the hardware D-pad / keyboard does via ViewRootImpl — a hand-built Activity.dispatchKeyEvent
+     * reaches the focused view but does NOT run focus navigation, so it left focus unmoved.
+     */
+    private fun stepFocus(direction: Int) {
+        val cur = currentFocus ?: return
+        val next = cur.focusSearch(direction)
+        next?.requestFocus(direction)
+    }
+
+    /** Flip the ViewPager tab (head-turn "листание"). */
+    private fun switchTab(delta: Int) {
+        val vp = binding.viewPager
+        val n = vp.currentItem + delta
+        if (n in 0 until (vp.adapter?.itemCount ?: 0)) vp.currentItem = n
+    }
+
+    /** "OK" — activate the focused item, like a D-pad center click. */
+    private fun selectFocused() {
+        currentFocus?.performClick()
+    }
+
+    /** "Back / cancel" via the standard back dispatcher (routed through [registerDoubleBackToExit]). */
+    private fun goBack() {
+        onBackPressedDispatcher.onBackPressed()
+    }
+
+    private var lastBackAt = 0L
+
+    /** On the main screen a single Back — hardware button or head-tilt-left — doesn't exit: it warns,
+     *  and only a second Back within 2 s actually leaves the app. */
+    private fun registerDoubleBackToExit() {
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (now - lastBackAt in 1..2000) {
+                    finish()
+                } else {
+                    lastBackAt = now
+                    menuPresentation?.showGesture("↩×2 exit")
+                    android.widget.Toast.makeText(
+                        this@MainActivity, R.string.press_back_again_to_exit, android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        })
+    }
+
+    private fun startGestureLoop() {
+        gestureHandler.removeCallbacks(gestureTick)
+        pitchDir = 0; yawDir = 0; rollDir = 0; pitchFireNs = 0L; yawFireNs = 0L; rollFireNs = 0L
+        glasses.setImuStreaming(true)   // start the IMU only while the head-gesture menu is shown
+        gestureHandler.post(gestureTick)
+    }
+
+    private fun stopGestureLoop() {
+        gestureHandler.removeCallbacks(gestureTick)
+        glasses.setImuStreaming(false)  // stop the IMU when the menu goes away — no idle drain
+    }
+
+    private fun fmtMs(ms: Long): String {
+        val s = (ms / 1000).coerceAtLeast(0)
+        return "%d:%02d".format(s / 60, s % 60)
     }
 
     private fun updateGlassesMenu() {
