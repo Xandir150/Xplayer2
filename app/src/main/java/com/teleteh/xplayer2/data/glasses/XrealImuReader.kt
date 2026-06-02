@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   - run a reader thread that pulls 64-byte packets and decodes gyro X/Y/Z to deg/sec
  *   - call back into [Listener] on the reader thread
  *
- * No accelerometer / quaternion / fusion is implemented here — [HeadPoseTracker] does the
+ * No accelerometer / quaternion / fusion is implemented here — [HeadOrientationTracker] does the
  * integration over deltas. Stop the reader via [stop] before the underlying device or
  * connection is closed; the thread joins on stop.
  */

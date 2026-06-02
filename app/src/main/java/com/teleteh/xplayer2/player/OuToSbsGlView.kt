@@ -180,17 +180,6 @@ class OuToSbsGlView @JvmOverloads constructor(
     }
 
     /**
-     * Set a small parallax offset to apply to every sampled texel, in normalized
-     * texture units (positive X shifts the picture right on screen, positive Y shifts up).
-     * Drive this from [com.teleteh.xplayer2.data.glasses.HeadPoseTracker] to fake depth via
-     * head-tracking when the "Lazy 3D" feature is active. Pass 0/0 to disable.
-     */
-    fun setParallaxOffset(x: Float, y: Float) {
-        renderer.setParallaxOffset(x, y)
-        requestRender()
-    }
-
-    /**
      * Toggle the depth-based stereo synthesis path. When enabled and a depth map has been
      * pushed via [setDepthMap], the renderer draws the source twice (one per eye) with a
      * per-pixel UV shift derived from depth — synthesising a stereo pair from a flat
@@ -245,8 +234,6 @@ class OuToSbsGlView @JvmOverloads constructor(
         val swapEyes = AtomicBoolean(false)
         val duplicateMonoToSbs = AtomicBoolean(false)
         val lazy3dStereoEnabled = AtomicBoolean(false)
-        @Volatile var parallaxX: Float = 0f
-        @Volatile var parallaxY: Float = 0f
         @Volatile var stereoDivergence: Float = 0.013f   // fallback; PlayerActivity sets LAZY3D_DIVERGENCE
         @Volatile var stereoConvergence: Float = 0.5f
         @Volatile var frameReadbackListener: ((IntArray, Int, Int, Long) -> Unit)? = null
@@ -258,7 +245,6 @@ class OuToSbsGlView @JvmOverloads constructor(
         private var uTexMatrixLoc = 0
         private var uScaleLoc = 0
         private var uOffsetLoc = 0
-        private var uParallaxLoc = 0
 
         // --- Lazy 3D resources ---
         // Second shader program for stereo-from-depth (samples source + depth, shifts UV
@@ -272,7 +258,6 @@ class OuToSbsGlView @JvmOverloads constructor(
         private var l3dDivergenceLoc = 0
         private var l3dConvergenceLoc = 0
         private var l3dEyeSignLoc = 0
-        private var l3dParallaxLoc = 0
 
         // Single-channel depth texture (re-uploaded each new inference, default 256x256).
         private var depthTextureId: Int = 0
@@ -320,7 +305,6 @@ class OuToSbsGlView @JvmOverloads constructor(
             uTexMatrixLoc = GLES20.glGetUniformLocation(program, "uTexMatrix")
             uScaleLoc = GLES20.glGetUniformLocation(program, "uScale")
             uOffsetLoc = GLES20.glGetUniformLocation(program, "uOffset")
-            uParallaxLoc = GLES20.glGetUniformLocation(program, "uParallax")
 
             // Lazy 3D shader program — separate so the hot non-3D path is undisturbed.
             lazy3dProgram = buildProgram(VERT, FRAG_LAZY3D)
@@ -332,7 +316,6 @@ class OuToSbsGlView @JvmOverloads constructor(
             l3dDivergenceLoc = GLES20.glGetUniformLocation(lazy3dProgram, "uDivergence")
             l3dConvergenceLoc = GLES20.glGetUniformLocation(lazy3dProgram, "uConvergence")
             l3dEyeSignLoc = GLES20.glGetUniformLocation(lazy3dProgram, "uEyeSign")
-            l3dParallaxLoc = GLES20.glGetUniformLocation(lazy3dProgram, "uParallax")
 
             // Dither amplitude = one framebuffer LSB. Set once per program (uniform state persists).
             val ditherAmp = if (fbBitsPerChannel >= 10) 1f / 1023f else 1f / 255f
@@ -458,7 +441,7 @@ class OuToSbsGlView @JvmOverloads constructor(
 
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, readbackFbo)
             GLES20.glViewport(0, 0, READBACK_SIZE, READBACK_SIZE)
-            // Re-use the main passthrough shader (uniform uScale=1, uOffset=0, uParallax=0)
+            // Re-use the main passthrough shader (uniform uScale=1, uOffset=0)
             GLES20.glUseProgram(program)
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
@@ -466,7 +449,6 @@ class OuToSbsGlView @JvmOverloads constructor(
             GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, texMatrix, 0)
             GLES20.glUniform2f(uScaleLoc, 1f, 1f)
             GLES20.glUniform2f(uOffsetLoc, 0f, 0f)
-            GLES20.glUniform2f(uParallaxLoc, 0f, 0f)
             vertexData.position(0)
             GLES20.glEnableVertexAttribArray(aPosLoc)
             GLES20.glVertexAttribPointer(aPosLoc, 2, GLES20.GL_FLOAT, false, 16, vertexData)
@@ -527,7 +509,6 @@ class OuToSbsGlView @JvmOverloads constructor(
             GLES20.glUniformMatrix4fv(l3dTexMatrixLoc, 1, false, texMatrix, 0)
             GLES20.glUniform1f(l3dDivergenceLoc, stereoDivergence)
             GLES20.glUniform1f(l3dConvergenceLoc, stereoConvergence)
-            GLES20.glUniform2f(l3dParallaxLoc, parallaxX, parallaxY)
 
             vertexData.position(0)
             GLES20.glEnableVertexAttribArray(l3dPosLoc)
@@ -726,7 +707,6 @@ class OuToSbsGlView @JvmOverloads constructor(
             GLES20.glUniformMatrix4fv(uTexMatrixLoc, 1, false, texMatrix, 0)
             GLES20.glUniform2f(uScaleLoc, scaleX, scaleY)
             GLES20.glUniform2f(uOffsetLoc, offsetX, offsetY)
-            GLES20.glUniform2f(uParallaxLoc, parallaxX, parallaxY)
             vertexData.position(0)
             GLES20.glEnableVertexAttribArray(aPosLoc)
             GLES20.glVertexAttribPointer(aPosLoc, 2, GLES20.GL_FLOAT, false, 16, vertexData)
@@ -770,11 +750,6 @@ class OuToSbsGlView @JvmOverloads constructor(
 
         fun updateResizeMode(mode: Int) {
             resizeMode = mode
-        }
-
-        fun setParallaxOffset(x: Float, y: Float) {
-            parallaxX = x
-            parallaxY = y
         }
 
         fun updateVideoAspectRatio(width: Int, height: Int) {
@@ -869,10 +844,6 @@ uniform samplerExternalOES uTexture;
 uniform mat4 uTexMatrix;
 uniform vec2 uScale;
 uniform vec2 uOffset;
-// "Lazy 3D" parallax: small per-frame texel shift driven from the goggles' IMU.
-// Driven by HeadPoseTracker via OuToSbsGlView.setParallaxOffset(). Zero when the
-// feature is off, so this shader is identical to the original in that case.
-uniform vec2 uParallax;
 // One framebuffer LSB (1/255 at 8-bit, 1/1023 at 10-bit). Amplitude of the triangular-PDF
 // dither below, which breaks up the 8-bit colour banding on smooth gradients (skies, shadows).
 uniform float uDitherAmp;
@@ -890,13 +861,7 @@ void main() {
   // Apply SurfaceTexture transform first to account for decoder orientation,
   // then crop to top/bottom half in the transformed texture space
   vec2 tc = (uTexMatrix * vec4(vTexCoord, 0.0, 1.0)).xy;
-  // Apply just enough overscan zoom to cover the current parallax magnitude so the
-  // shifted picture stays edge-to-edge. When the IMU isn't active (uParallax == 0)
-  // the factor is exactly 1.0 — i.e. behaviour is identical to the original shader.
-  float pmag = length(uParallax);
-  float overscan = 1.0 - clamp(pmag * 1.6, 0.0, 0.1);
-  vec2 zoomed = (tc - 0.5) * overscan + 0.5;
-  vec2 finalTc = zoomed * uScale + uOffset + uParallax * uScale;
+  vec2 finalTc = tc * uScale + uOffset;
   vec3 col = texture2D(uTexture, finalTc).rgb;
   gl_FragColor = vec4(col + ditherTPDF(gl_FragCoord.xy) * uDitherAmp, 1.0);
 }
@@ -929,7 +894,6 @@ uniform mat4 uTexMatrix;
 uniform float uDivergence;
 uniform float uConvergence;
 uniform float uEyeSign;    // -1 left, +1 right
-uniform vec2 uParallax;
 uniform float uDitherAmp;  // one framebuffer LSB; amplitude of the anti-banding dither
 float h21(vec2 p) {
   vec3 q = fract(vec3(p.xyx) * 0.1031);
@@ -956,7 +920,7 @@ void main() {
   d = max(d, texture2D(uDepth, vTexCoord + vec2(3.0 * dpx, 0.0)).r);
   d = max(d, texture2D(uDepth, vTexCoord - vec2(3.0 * dpx, 0.0)).r);
   float disparity = (d - uConvergence) * uDivergence * uEyeSign;
-  vec2 sampleUv = tcSrc + vec2(disparity, 0.0) + uParallax;
+  vec2 sampleUv = tcSrc + vec2(disparity, 0.0);
   vec3 col = texture2D(uSource, sampleUv).rgb;
   gl_FragColor = vec4(col + ditherTPDF(gl_FragCoord.xy) * uDitherAmp, 1.0);
 }

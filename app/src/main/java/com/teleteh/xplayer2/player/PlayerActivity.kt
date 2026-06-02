@@ -75,8 +75,6 @@ import com.teleteh.xplayer2.data.depth.DepthEstimator
 import com.teleteh.xplayer2.data.depth.DepthFrameWorker
 import com.teleteh.xplayer2.data.depth.DepthModelManager
 import com.teleteh.xplayer2.data.glasses.GlassesController
-import com.teleteh.xplayer2.data.glasses.HeadPoseTracker
-import com.teleteh.xplayer2.data.glasses.XrealImuReader
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import com.teleteh.xplayer2.util.VideoStreamExtractor
 import androidx.lifecycle.lifecycleScope
@@ -140,25 +138,16 @@ class PlayerActivity : AppCompatActivity() {
     private var lastAudioSessionId: Int = C.AUDIO_SESSION_ID_UNSET
     private var volumeBoostMb: Int = 0
 
-    // "Lazy 3D" — combined feature with two independent pieces, both gated by the same
-    // toggle so the user just flips one switch:
-    //   1) Head-tracking parallax: IMU reader from XREAL goggles. Cheap, always works if
-    //      glasses are XREAL.
-    //   2) Depth-based stereo synthesis: TFLite depth estimation + GL backward-warp. Works
-    //      only if a depth model is installed in assets (see DepthEstimator); silently
-    //      falls back to parallax-only otherwise.
+    // "Lazy 3D" — depth-based 2D->3D: TFLite depth estimation + GL backward-warp, gated by a
+    // single toggle. Works on any device once the depth model is installed (see DepthEstimator).
     private var lazy3dEnabled: Boolean = false
-    private var imuReader: XrealImuReader? = null
-    private val headPoseTracker = HeadPoseTracker()
     private val poseUiHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private var pendingPoseTick: Runnable? = null
     private var depthEstimator: DepthEstimator? = null
     private var depthWorker: DepthFrameWorker? = null
     private var pendingDepthTick: Runnable? = null
     private var depthDownloadJob: kotlinx.coroutines.Job? = null
-    // Startup runs off the main thread (USB control transfers + GPU model load are slow), so
-    // these flag the in-flight phase and drive the remote's "starting…" indicator.
-    @Volatile private var imuStarting: Boolean = false
+    // Startup runs off the main thread (GPU model load is slow), so this flags the in-flight
+    // phase and drives the remote's "starting…" indicator.
     @Volatile private var depthStarting: Boolean = false
     // When Lazy 3D was last switched on (System.nanoTime). Used to time-bound the "Starting"
     // state so the remote's button can't stay disabled forever if startup stalls.
@@ -1871,23 +1860,20 @@ class PlayerActivity : AppCompatActivity() {
         saveProgress()
     }
 
-    // --- Lazy 3D (head-tracking parallax via XREAL IMU) ---
+    // --- Lazy 3D (depth-based 2D->3D synthesis) ---
 
     /** Whether the Lazy-3D toggle is currently on. */
     fun isLazy3dEnabled(): Boolean = lazy3dEnabled
 
     /**
      * Live telemetry for the remote's temporary Lazy-3D debug overlay, or null when Lazy 3D is
-     * off / nothing to report (so the remote hides the row). Head-tracking parallax is currently
-     * disabled, so this shows the depth-synthesis inference time; the IMU line only appears if
-     * parallax is re-enabled. Remove the overlay once tuning is done.
+     * off / nothing to report (so the remote hides the row). Shows the depth-synthesis inference
+     * time. Remove the overlay once tuning is done.
      */
     fun lazy3dDebugLine(): String? {
         if (!lazy3dEnabled) return null
-        val imu = if (imuReader != null) headPoseTracker.debugLine() else null
         val est = depthEstimator
-        val depth = if (est?.isReady() == true) "depth ${"%.0f".format(est.avgInferenceMs)}ms" else null
-        return listOfNotNull(imu, depth).joinToString("  ").ifBlank { null }
+        return if (est?.isReady() == true) "depth ${"%.0f".format(est.avgInferenceMs)}ms" else null
     }
 
     /**
@@ -1898,10 +1884,7 @@ class PlayerActivity : AppCompatActivity() {
      */
     fun lazy3dStatus(): Lazy3dStatus {
         if (!lazy3dEnabled) return Lazy3dStatus.Off
-        val expectImu = imuStarting || imuReader != null
-        val depthReady = depthEstimator?.isReady() == true
-        val dataFlowing = (expectImu && headPoseTracker.hasSamples()) || (!expectImu && depthReady)
-        if (dataFlowing) return Lazy3dStatus.Active
+        if (depthEstimator?.isReady() == true) return Lazy3dStatus.Active
         // Don't keep the remote's toggle locked forever if startup stalls — after a short grace
         // window report Active so the button becomes tappable again (debug line shows the truth).
         val elapsedMs = (System.nanoTime() - lazy3dEnabledAtNanos) / 1_000_000L
@@ -1911,27 +1894,24 @@ class PlayerActivity : AppCompatActivity() {
     /**
      * Whether the Lazy-3D toggle makes sense for the current clip — i.e. the source is plain 2D.
      * Real SBS sources and OU sources we're already converting to SBS are themselves stereo and
-     * don't need head-tracking parallax on top.
+     * don't need synthesised depth on top.
      */
     // Lazy 3D synthesises depth from a flat image, so only offer it while the clip is actually
     // shown in plain 2D — not when it's already being split as OU→SBS or SBS.
     fun isLazy3dApplicable(): Boolean = stereoMode == StereoMode.Off
 
     /**
-     * Whether Lazy 3D has at least one runnable backend right now or could obtain one:
-     *  - XREAL goggles attached (IMU parallax), OR
+     * Whether Lazy 3D can run now or could obtain what it needs:
      *  - depth model bundled in assets / already cached locally, OR
      *  - device has any network capability (model can be downloaded on first use).
      * Used by the RemoteControlActivity to decide whether to show the toggle at all —
      * we want it visible whenever there's a path to enabling it, even if it requires
-     * a one-time 24 MB download.
+     * a one-time download.
      */
     fun isLazy3dSupported(): Boolean {
-        val hasXreal = MainActivity.glassesControllerForPlayback?.currentBrand() ==
-            GlassesController.Brand.XREAL
         val hasDepthModel = DepthModelManager(applicationContext).isAvailable()
         val hasNetwork = isOnAnyNetwork()
-        return hasXreal || hasDepthModel || hasNetwork
+        return hasDepthModel || hasNetwork
     }
 
     private fun isOnAnyNetwork(): Boolean = try {
@@ -1941,30 +1921,21 @@ class PlayerActivity : AppCompatActivity() {
     } catch (_: Throwable) { false }
 
     /**
-     * Turn the Lazy-3D feature on or off. Starting it:
-     *   1. Spins up the IMU reader (head-tracking parallax) if XREAL goggles are present.
-     *   2. Downloads the depth-estimation TFLite model on first use (~65 MB; only the first
-     *      run on this device pays this cost), then starts depth-based stereo synthesis.
-     * Stopping releases both halves so the feature costs nothing when off.
+     * Turn the Lazy-3D feature on or off. Starting it downloads the depth-estimation TFLite model
+     * on first use (~65 MB; only the first run on this device pays this cost), then starts
+     * depth-based stereo synthesis. Stopping releases it so the feature costs nothing when off.
      */
     fun setLazy3dEnabled(enabled: Boolean) {
         if (enabled == lazy3dEnabled) return
         lazy3dEnabled = enabled
         if (enabled) {
             lazy3dEnabledAtNanos = System.nanoTime()
-            // Head-tracking parallax is disabled: it felt unnecessary on top of the depth-based
-            // 2D→3D, and the IMU reader thread + 60 Hz pose tick just add load. The whole IMU
-            // path (startLazy3dImu / startPoseTick / XrealImuReader / HeadPoseTracker) is kept
-            // intact — uncomment the next line to bring parallax back.
-            // startLazy3dImu()
-
             val mgr = DepthModelManager(applicationContext)
             if (mgr.isAvailable()) {
                 // Depth model already cached — start the synthesis half now too.
                 startLazy3dDepth()
             } else {
-                // Fetch the depth model in the background and light up depth synthesis once it
-                // lands. Head-tracking parallax keeps running meanwhile (parallax-only mode).
+                // Fetch the depth model in the background and light up depth synthesis once it lands.
                 Toast.makeText(this, R.string.lazy3d_downloading, Toast.LENGTH_SHORT).show()
                 depthDownloadJob?.cancel()
                 depthDownloadJob = lifecycleScope.launch {
@@ -1983,7 +1954,7 @@ class PlayerActivity : AppCompatActivity() {
                         Toast.makeText(this@PlayerActivity, R.string.lazy3d_downloaded, Toast.LENGTH_SHORT).show()
                         startLazy3dDepth()
                     } else {
-                        // Download failed — the IMU parallax half (if any) stays on. Nothing else to do.
+                        // Download failed — nothing else to do.
                         Toast.makeText(this@PlayerActivity, R.string.lazy3d_download_failed, Toast.LENGTH_LONG).show()
                     }
                 }
@@ -1999,11 +1970,10 @@ class PlayerActivity : AppCompatActivity() {
                 } catch (_: Throwable) { }
             }
 
-            // If nothing is starting and nothing is in flight (no XREAL link and no depth model
-            // / download), there's nothing to enable — drop the toggle back off. Startup is now
-            // async, so check the in-flight flags rather than the not-yet-assigned reader/estimator.
-            if (!imuStarting && imuReader == null &&
-                !depthStarting && depthEstimator == null && depthDownloadJob == null) {
+            // If nothing is starting and nothing is in flight (no depth model / download), there's
+            // nothing to enable — drop the toggle back off. Startup is async, so check the in-flight
+            // flags rather than the not-yet-assigned estimator.
+            if (!depthStarting && depthEstimator == null && depthDownloadJob == null) {
                 android.util.Log.w("XPlayer2", "Lazy 3D: nothing to enable, disabling toggle")
                 lazy3dEnabled = false
             }
@@ -2015,59 +1985,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * Part A — head-tracking parallax via the XREAL IMU. Needs only the goggles' USB link.
-     * The actual start() does blocking USB control transfers (up to ~1 s per HID interface),
-     * so it runs off the main thread to keep the toggle responsive; the parallax tick is wired
-     * up on the main thread once the stream is live. No-op if already running/starting or no XREAL.
-     */
-    private fun startLazy3dImu() {
-        if (imuReader != null || imuStarting) return
-        val deviceConnection = MainActivity.glassesControllerForPlayback?.connectionForFeature()
-        if (deviceConnection == null) {
-            android.util.Log.i("XPlayer2", "Lazy 3D: no XREAL connection — parallax disabled, depth only")
-            return
-        }
-        val (dev, conn) = deviceConnection
-        headPoseTracker.reset()
-        val reader = XrealImuReader(dev, conn)
-        imuStarting = true
-        lifecycleScope.launch {
-            val started = withContext(Dispatchers.IO) {
-                reader.start { gx, gy, gz, t -> headPoseTracker.accumulate(gx, gy, gz, t) }
-            }
-            imuStarting = false
-            // The user may have toggled Lazy 3D back off while we were spinning up — if so,
-            // stop the reader we just started (off-thread) and bail without wiring the tick.
-            if (!lazy3dEnabled) {
-                withContext(Dispatchers.IO) { reader.stop() }
-                return@launch
-            }
-            if (started) {
-                imuReader = reader
-                startPoseTick()
-                android.util.Log.i("XPlayer2", "Lazy 3D: IMU parallax started")
-            } else {
-                android.util.Log.w("XPlayer2", "Lazy 3D: IMU reader failed to start (parallax disabled)")
-            }
-        }
-    }
-
-    /** Drive the head-pose parallax offset into the active GL view at ~60 Hz. */
-    private fun startPoseTick() {
-        pendingPoseTick?.let { poseUiHandler.removeCallbacks(it) }
-        val tick = object : Runnable {
-            override fun run() {
-                val (x, y) = headPoseTracker.snapshot()
-                activeGlView()?.setParallaxOffset(x, y)
-                if (lazy3dEnabled && imuReader != null) poseUiHandler.postDelayed(this, 16)
-            }
-        }
-        pendingPoseTick = tick
-        poseUiHandler.post(tick)
-    }
-
-    /**
-     * Part B — depth-based stereo synthesis (works with any goggles, but needs the TFLite
+     * Depth-based stereo synthesis — works with any goggles, but needs the TFLite
      * depth model installed). Called once the model is present. No-op if already running.
      */
     private fun startLazy3dDepth() {
@@ -2126,33 +2044,26 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun stopLazy3d() {
-        imuStarting = false
         depthStarting = false
         // --- Immediate, main-thread visual teardown so the picture restores at once. ---
-        // We're on the main thread, and the ticks run on the same thread, so removeCallbacks
-        // guarantees no tick is mid-flight or will fire again — no stale parallax can linger.
-        pendingPoseTick?.let { poseUiHandler.removeCallbacks(it) }
-        pendingPoseTick = null
+        // We're on the main thread, and the tick runs on the same thread, so removeCallbacks
+        // guarantees no tick is mid-flight or will fire again.
         pendingDepthTick?.let { poseUiHandler.removeCallbacks(it) }
         pendingDepthTick = null
-        val reader = imuReader; imuReader = null
         val worker = depthWorker; depthWorker = null
         val estimator = depthEstimator; depthEstimator = null
-        // Clear lazy3d state on every possible render target (incl. the active one) so neither
-        // the parallax shift nor the depth split lingers after a display switch or toggle-off.
+        // Clear lazy3d state on every possible render target (incl. the active one) so the depth
+        // split doesn't linger after a display switch or toggle-off.
         for (v in listOfNotNull(glView, presentation?.renderView, activeGlView())) {
             v.setOnFrameReadbackListener(null)
             v.setLazy3dStereoEnabled(false)
-            v.setParallaxOffset(0f, 0f)
         }
-        headPoseTracker.reset()
-        android.util.Log.i("XPlayer2", "Lazy 3D disabled (both halves released)")
-        // --- Slow hardware teardown off the main thread (USB stop command can block ~1 s per
-        // HID interface, plus thread joins). A detached thread, not lifecycleScope, so it still
-        // completes when stopLazy3d() is called from onDestroy (where the scope is cancelled). ---
-        if (reader != null || worker != null || estimator != null) {
+        android.util.Log.i("XPlayer2", "Lazy 3D disabled")
+        // --- Slow hardware teardown off the main thread (thread joins + GPU release). A detached
+        // thread, not lifecycleScope, so it still completes when stopLazy3d() is called from
+        // onDestroy (where the scope is cancelled). ---
+        if (worker != null || estimator != null) {
             Thread({
-                try { reader?.stop() } catch (_: Throwable) {}
                 try { worker?.stop() } catch (_: Throwable) {}
                 try { estimator?.close() } catch (_: Throwable) {}
             }, "Lazy3dTeardown").start()

@@ -1,7 +1,6 @@
 package com.teleteh.xplayer2.ui
 
 import android.content.Context
-import android.graphics.Camera
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -37,16 +36,21 @@ class DvdScreensaverView @JvmOverloads constructor(
 
     /**
      * Supplies the current head orientation as [yawDeg, pitchDeg, rollDeg], or null when there's
-     * no IMU telemetry. When non-null, a world-anchored grid platform is drawn that counter-rotates
-     * to try to stay put as the head moves; when null, nothing extra is drawn (just the bouncer).
+     * no IMU telemetry. When non-null, the violet head-pointer dot is drawn; when null, nothing
+     * extra is drawn (just the bouncer).
      */
     var orientationProvider: (() -> FloatArray?)? = null
 
-    private val camera = Camera()
-    private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        color = 0x6600E5FF.toInt() // translucent cyan
+    // Violet head-pointer dot driven by the goggles' IMU. Moves WITH the head (turn right -> dot
+    // right, nod down -> dot down). Flip a sign below if an axis reads inverted on the glasses;
+    // cursorRangeDeg maps the head angle to ~the view edge.
+    private val cursorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = 0xFFE040FB.toInt() // violet
     }
+    private var cursorYawSign = 1f     // set -1f if turning head right moves the dot left
+    private var cursorPitchSign = 1f   // set -1f if nodding down moves the dot up
+    private val cursorRangeDeg = 25f
 
     private val ovalPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val dvdPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -110,7 +114,6 @@ class DvdScreensaverView @JvmOverloads constructor(
         logoH = logoW * 0.40f      // flatter / more squished ellipse
         dvdPaint.textSize = logoH * 0.58f
         subPaint.textSize = logoH * 0.26f
-        gridPaint.strokeWidth = (w * 0.0022f).coerceAtLeast(1.5f)
         // Start centred with a gentle diagonal drift (~9 s to cross the width).
         x = (w - logoW) / 2f
         y = (h - logoH) / 2f
@@ -141,45 +144,28 @@ class DvdScreensaverView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas) // opaque black background
         if (logoW <= 0f) return
-        // World-anchored grid platform, drawn only when head telemetry is available.
-        orientationProvider?.invoke()?.let { o -> drawPlatform(canvas, o[0], o[1], o[2]) }
+        // Head-pointer dot, drawn only when head telemetry exists.
+        val orient = orientationProvider?.invoke()
         canvas.drawOval(RectF(x, y, x + logoW, y + logoH), ovalPaint)
         val cx = x + logoW / 2f
         val dvdBaseline = (y + logoH * 0.44f) - (dvdPaint.ascent() + dvdPaint.descent()) / 2f
         canvas.drawText("DVD", cx, dvdBaseline, dvdPaint)
         val subBaseline = (y + logoH * 0.74f) - (subPaint.ascent() + subPaint.descent()) / 2f
         canvas.drawText("XPlayer2", cx, subBaseline, subPaint)
+        orient?.let { o -> drawCursor(canvas, o[0], o[1]) } // pointer dot on top
     }
 
     /**
-     * Draw a wireframe grid "floor" centred in the view, given a floor-like base tilt and then
-     * counter-rotated by the head orientation so it tries to stay put in space as the head turns
-     * (turn head right → grid rotates left, etc.). Pure 2D/Camera trick, not real 6-DoF.
+     * Head-pointer dot: maps yaw -> X and pitch -> Y so the dot follows where the head points.
+     * This is the axis-verification step before wiring real gestures — the grid above stays
+     * world-anchored, this dot moves with the head. Drawn only when telemetry is present.
      */
-    private fun drawPlatform(canvas: Canvas, yaw: Float, pitch: Float, roll: Float) {
-        val cx = width / 2f
-        val cy = height / 2f
-        val half = width * 0.22f
-        canvas.save()
-        canvas.translate(cx, cy)
-        camera.save()
-        // Counter-rotate a FRONTAL grid by the inverse of the head pose so it tries to stay fixed
-        // in space, with no baked-in floor tilt (that made yaw read as a sideways tilt). Clean
-        // mapping: pitch (nod) → tilt around horizontal, yaw (turn) → swing around vertical,
-        // roll (head side-tilt) → spin in-plane.
-        camera.rotateX(-pitch.coerceIn(-70f, 70f))
-        camera.rotateY(-yaw.coerceIn(-70f, 70f))
-        camera.rotateZ(-roll.coerceIn(-70f, 70f))
-        camera.applyToCanvas(canvas)
-        camera.restore()
-        val n = 8
-        val step = half * 2f / n
-        for (i in 0..n) {
-            val d = -half + i * step
-            canvas.drawLine(-half, d, half, d, gridPaint)
-            canvas.drawLine(d, -half, d, half, gridPaint)
-        }
-        canvas.restore()
+    private fun drawCursor(canvas: Canvas, yaw: Float, pitch: Float) {
+        val nx = (cursorYawSign * yaw / cursorRangeDeg).coerceIn(-1f, 1f)
+        val ny = (cursorPitchSign * pitch / cursorRangeDeg).coerceIn(-1f, 1f)
+        val px = width / 2f + nx * (width * 0.45f)
+        val py = height / 2f + ny * (height * 0.45f)
+        canvas.drawCircle(px, py, (width * 0.012f).coerceAtLeast(6f), cursorPaint)
     }
 
     override fun onDetachedFromWindow() {

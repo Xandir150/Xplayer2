@@ -2,13 +2,12 @@ package com.teleteh.xplayer2.data.glasses
 
 /**
  * Integrates the XREAL gyro stream into an absolute-ish head orientation (yaw / pitch / roll in
- * degrees) for world-anchored visuals — e.g. the screensaver platform that tries to stay put as
- * the user turns their head.
+ * degrees) — e.g. for the screensaver's head-pointer cursor that moves as the user turns their head.
  *
- * Unlike [HeadPoseTracker] (which leaks back to centre, for a parallax nudge), this *keeps* the
- * integrated angle so a "fixed" object stays fixed. Pure gyro integration drifts slowly over time
- * (there's no magnetometer to anchor yaw); a continuously-tracked zero-rate bias keeps the resting
- * drift small. Good enough for a fun visual, not a real 6-DoF pose.
+ * This *keeps* the integrated angle (rather than leaking back to centre) so the mapping is stable.
+ * Pure gyro integration drifts slowly over time (there's no magnetometer to anchor yaw); a
+ * continuously-tracked zero-rate bias keeps the resting drift small. Good enough for a fun visual,
+ * not a real 6-DoF pose.
  *
  * Axes (verified on-device): gx = pitch rate, gy = roll rate, gz = yaw rate.
  *
