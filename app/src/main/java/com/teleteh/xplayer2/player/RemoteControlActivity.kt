@@ -44,6 +44,7 @@ class RemoteControlActivity : AppCompatActivity() {
     private lateinit var btnResizeMode: MaterialButton
     private lateinit var btnLazy3d: MaterialButton
     private lateinit var btnVolumeBoost: MaterialButton
+    private lateinit var btnQuality: MaterialButton
     private lateinit var tvLazyDebug: TextView
     private var lastLazyStarting: Boolean? = null
 
@@ -106,6 +107,7 @@ class RemoteControlActivity : AppCompatActivity() {
         btnResizeMode = findViewById(R.id.btnResizeMode)
         btnLazy3d = findViewById(R.id.btnLazy3d)
         btnVolumeBoost = findViewById(R.id.btnVolumeBoost)
+        btnQuality = findViewById(R.id.btnQuality)
         tvLazyDebug = findViewById(R.id.tvLazyDebug)
 
         // Play/Pause
@@ -160,6 +162,12 @@ class RemoteControlActivity : AppCompatActivity() {
             val player = PlayerActivity.currentInstance ?: return@setOnClickListener
             player.setLazy3dEnabled(!player.isLazy3dEnabled())
             updateButtons()
+        }
+
+        // Stream quality — only relevant for multi-quality sources (VK/OK.ru). The button is
+        // hidden in updateButtons() when the source exposes a single quality.
+        btnQuality.setOnClickListener {
+            showQualityDialog()
         }
 
         // Audio track
@@ -451,6 +459,19 @@ class RemoteControlActivity : AppCompatActivity() {
         btnLazy3d.isChecked = lazy3d
         applyButtonStyle(btnLazy3d, lazy3d)
         applyLazy3dLabel(player)
+
+        // Quality picker — only for sources with ≥2 qualities. Label shows the current quality.
+        if (player.hasMultipleQualities()) {
+            btnQuality.visibility = View.VISIBLE
+            val current = player.getQualityVariants().getOrNull(player.getSelectedQualityIndex())
+            btnQuality.text = if (current != null) {
+                getString(R.string.quality) + ": " + current
+            } else {
+                getString(R.string.quality)
+            }
+        } else {
+            btnQuality.visibility = View.GONE
+        }
     }
 
     /**
@@ -500,6 +521,22 @@ class RemoteControlActivity : AppCompatActivity() {
         else String.format("%d:%02d", m, s)
     }
     
+    private fun showQualityDialog() {
+        val player = PlayerActivity.currentInstance ?: return
+        val labels = player.getQualityVariants()
+        if (labels.size <= 1) return
+        val checkedItem = player.getSelectedQualityIndex().coerceIn(0, labels.size - 1)
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.quality)
+            .setSingleChoiceItems(labels.toTypedArray(), checkedItem) { dialog, which ->
+                player.selectQuality(which)
+                updateButtons()
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.common_cancel, null)
+            .show()
+    }
+
     private fun showAudioTrackDialog() {
         val player = PlayerActivity.currentInstance ?: return
         val tracks = player.getAudioTracks()

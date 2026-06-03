@@ -12,6 +12,7 @@
     <string name="menu_stereo">立体声：切换</string>
     <string name="select_audio_track">选择音轨</string>
     <string name="select_subtitle">选择字幕</string>
+    <string name="quality">画质</string>
     <string name="subtitle_off">关闭</string>
     <string name="subtitle_none">无可用字幕</string>
 

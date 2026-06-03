@@ -178,6 +178,21 @@
         android:checkable="true"
         android:visibility="gone" />
 
+    <!-- Stream quality picker — shown only for sources that expose ≥2 qualities (VK/OK.ru).
+         Visibility is driven from RemoteControlActivity.updateButtons(). -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnQuality"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginBottom="12dp"
+        android:text="@string/quality"
+        android:textAllCaps="false"
+        android:textColor="@android:color/white"
+        app:icon="@drawable/ic_quality_24"
+        app:iconTint="@android:color/white"
+        android:visibility="gone" />
+
     <!-- Audio track button -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnAudio"

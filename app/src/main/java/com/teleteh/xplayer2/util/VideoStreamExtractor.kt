@@ -18,10 +18,23 @@ object VideoStreamExtractor {
 
     private const val TAG = "VideoStreamExtractor"
 
+    /**
+     * One selectable quality of a stream. [label] is human-readable ("1080p", "Auto", "HD"),
+     * [url] is the direct playable URL for that quality.
+     */
+    data class StreamVariant(
+        val label: String,
+        val url: String
+    )
+
     data class ExtractedStream(
         val url: String,
         val title: String? = null,
-        val quality: String? = null
+        val quality: String? = null,
+        // All selectable qualities, highest first. The primary [url] above always matches the
+        // first/highest one. Empty when the source exposes only a single playable URL (the
+        // quality picker is hidden unless this has ≥2 entries).
+        val variants: List<StreamVariant> = emptyList()
     )
 
     /**
@@ -150,31 +163,53 @@ object VideoStreamExtractor {
         null
     }
     
+    // ok.ru quality names ordered highest → lowest, with a friendly pixel-height label for the UI.
+    private val OKRU_QUALITY_ORDER = listOf(
+        "full" to "1080p",
+        "ultra" to "1440p",
+        "quad" to "2160p",
+        "hd" to "720p",
+        "sd" to "480p",
+        "low" to "360p",
+        "lowest" to "240p",
+        "mobile" to "144p",
+    )
+
     private fun extractBestVideoFromArray(videos: JSONArray?, title: String?): ExtractedStream? {
         if (videos == null || videos.length() == 0) return null
-        
-        // Quality priority (highest first)
-        val qualityOrder = listOf("full", "ultra", "quad", "hd", "sd", "low", "lowest", "mobile")
-        var bestUrl: String? = null
-        var bestQuality: String? = null
-        var bestPriority = Int.MAX_VALUE
-        
+
+        // Quality priority (highest first). ok.ru's own "full/ultra/quad" naming is non-obvious,
+        // so 2160p/1440p comes before "full" (1080p) in the ranking even though "full" sounds top.
+        val rank = listOf("quad", "ultra", "full", "hd", "sd", "low", "lowest", "mobile")
+        val labelOf = OKRU_QUALITY_ORDER.toMap()
+
+        // Collect every distinct (rank, label, url) so we can both pick the best and offer a list.
+        data class Cand(val priority: Int, val label: String, val url: String)
+        val cands = mutableListOf<Cand>()
         for (i in 0 until videos.length()) {
             val video = videos.optJSONObject(i) ?: continue
             val url = video.optString("url").takeIf { it.isNotBlank() } ?: continue
             val name = video.optString("name").lowercase()
-            
-            val priority = qualityOrder.indexOf(name).takeIf { it >= 0 } ?: (qualityOrder.size + i)
-            if (priority < bestPriority) {
-                bestPriority = priority
-                bestUrl = url
-                bestQuality = name
-            }
+            val priority = rank.indexOf(name).takeIf { it >= 0 } ?: (rank.size + i)
+            val label = labelOf[name] ?: name.ifBlank { "${i + 1}" }
+            cands.add(Cand(priority, label, url))
         }
-        
-        return bestUrl?.let { 
-            ExtractedStream(it, title?.takeIf { t -> t.isNotBlank() }, bestQuality) 
+        if (cands.isEmpty()) return null
+
+        cands.sortBy { it.priority }
+        // De-duplicate by label, keeping the first (highest-priority) URL for each.
+        val variants = mutableListOf<StreamVariant>()
+        val seenLabels = HashSet<String>()
+        for (c in cands) {
+            if (seenLabels.add(c.label)) variants.add(StreamVariant(c.label, c.url))
         }
+        val primary = variants.first()
+        return ExtractedStream(
+            primary.url,
+            title?.takeIf { t -> t.isNotBlank() },
+            primary.label,
+            variants
+        )
     }
     
     private fun extractVideoUrlsFromHtml(html: String): ExtractedStream? {
@@ -300,11 +335,12 @@ object VideoStreamExtractor {
                 videos[quality] = decodeUrl(url)
             }
             if (videos.isNotEmpty()) {
-                val bestQuality = videos.keys.maxOrNull()!!
-                val bestUrl = videos[bestQuality]!!
+                val variants = videos.entries.sortedByDescending { it.key }
+                    .map { StreamVariant("${it.key}p", it.value) }
+                val best = variants.first()
                 val title = extractTitleFromHtml(embedHtml)
-                Log.i(TAG, "Extracted VK MP4 from embed: quality=${bestQuality}p, title=$title")
-                return@withContext ExtractedStream(bestUrl, title, "${bestQuality}p")
+                Log.i(TAG, "Extracted VK MP4 from embed: ${variants.size} qualities, best=${best.label}, title=$title")
+                return@withContext ExtractedStream(best.url, title, best.label, variants)
             }
         }
 
@@ -345,10 +381,11 @@ object VideoStreamExtractor {
                 }
             }
             if (videos.isNotEmpty()) {
-                val bestQuality = videos.keys.maxOrNull()!!
-                val bestUrl = videos[bestQuality]!!
-                Log.i(TAG, "Found VK MP4 in page: quality=${bestQuality}p")
-                return@withContext ExtractedStream(bestUrl, null, "${bestQuality}p")
+                val variants = videos.entries.sortedByDescending { it.key }
+                    .map { StreamVariant("${it.key}p", it.value) }
+                val best = variants.first()
+                Log.i(TAG, "Found VK MP4 in page: ${variants.size} qualities, best=${best.label}")
+                return@withContext ExtractedStream(best.url, null, best.label, variants)
             }
             
             // Fallback - search for any video URLs
@@ -501,25 +538,36 @@ object VideoStreamExtractor {
         return extractVkPlayerParams(p, title)
     }
 
-    /** Pick the MAXIMUM-quality stream from a VK player params[0] object. */
+    /**
+     * Build the full quality list from a VK player params[0] object, highest first.
+     *
+     * Every present progressive MP4 (url2160 … url240) becomes a selectable variant labelled by
+     * its height ("2160p" … "240p"); the highest stays the primary [ExtractedStream.url] so the
+     * default behaviour (always open the max VK offers) is unchanged. Adaptive HLS often caps at
+     * 720p, so the progressive URLs are preferred and listed first. If there is no progressive URL
+     * at all, the adaptive HLS stream is exposed as a single "Auto" variant.
+     */
     private fun extractVkPlayerParams(p: JSONObject, title: String?): ExtractedStream? {
-        // Highest progressive MP4 first — guarantees the max VK offers. Adaptive HLS often caps at
-        // 720p, while url1080/url1440/url2160 go higher, so prefer those when present.
+        val variants = mutableListOf<StreamVariant>()
+        // Highest progressive MP4 first — guarantees the max VK offers.
         for (q in listOf("url2160", "url1440", "url1080", "url720", "url480", "url360", "url240")) {
-            val u = p.optString(q).takeIf { it.startsWith("http") }
-            if (u != null) {
-                val label = q.removePrefix("url") + "p"
-                Log.i(TAG, "VK MP4 $label extracted (title=$title)")
-                return ExtractedStream(decodeUrl(u), title, label)
-            }
+            val u = p.optString(q).takeIf { it.startsWith("http") } ?: continue
+            val label = q.removePrefix("url") + "p"
+            variants.add(StreamVariant(label, decodeUrl(u)))
+        }
+        if (variants.isNotEmpty()) {
+            val primary = variants.first()
+            Log.i(TAG, "VK MP4 extracted: ${variants.size} qualities, best=${primary.label} (title=$title)")
+            return ExtractedStream(primary.url, title, primary.label, variants)
         }
         // Adaptive HLS fallback (only if no progressive URL is present): one URL carries every
-        // quality + audio track and plays via the media3 HLS module.
+        // quality + audio track and plays via the media3 HLS module. Exposed as a single "Auto".
         for (key in listOf("hls_ondemand", "hls")) {
             val u = p.optString(key).takeIf { it.startsWith("http") }
             if (u != null) {
                 Log.i(TAG, "VK HLS extracted (title=$title)")
-                return ExtractedStream(decodeUrl(u), title, "hls")
+                val url = decodeUrl(u)
+                return ExtractedStream(url, title, "hls", listOf(StreamVariant("Auto", url)))
             }
         }
         Log.w(TAG, "VK al_video: params[0] had no hls/url* fields")

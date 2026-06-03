@@ -217,6 +217,13 @@ class PlayerActivity : AppCompatActivity() {
     // Flag to prevent premature player initialization during stream extraction
     private var isExtractingStream: Boolean = false
 
+    // Selectable stream qualities for the current source (VK/OK.ru), highest first. Empty for
+    // local files / single-URL streams — the quality picker is hidden unless this has ≥2 entries.
+    // The default selection is index 0 (the highest), which is what already plays.
+    private var streamVariants: List<VideoStreamExtractor.StreamVariant> = emptyList()
+    private var selectedVariantIndex: Int = 0
+    private var btnQualityRef: ImageButton? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         currentInstance = this
@@ -267,10 +274,12 @@ class PlayerActivity : AppCompatActivity() {
         val btnResizeMode = overlay.findViewById<MaterialButton>(R.id.btnResizeMode)
         val btnAudio = overlay.findViewById<ImageButton>(R.id.btnAudio)
         val btnSubtitle = overlay.findViewById<ImageButton>(R.id.btnSubtitle)
+        val btnQuality = overlay.findViewById<ImageButton>(R.id.btnQuality)
         btnSbsRef = btnSbs
         btnShiftRef = btnShift
         btnLazy3dRef = btnLazy3d
         btnResizeModeRef = btnResizeMode
+        btnQualityRef = btnQuality
         titleCenterView = overlay.findViewById(R.id.tvTitleCenter)
         // Audio menu containers
         audioMenuRoot = overlay.findViewById(R.id.audioMenuRoot)
@@ -319,6 +328,8 @@ class PlayerActivity : AppCompatActivity() {
         }
         btnAudio.setOnClickListener { showAudioMenu() }
         btnSubtitle.setOnClickListener { showSubtitleMenu() }
+        btnQuality.setOnClickListener { showQualityMenu() }
+        updateQualityButtonVisibility()
         // Configure controllers with same behavior
         val timeoutMs = 3000
         playerView.controllerShowTimeoutMs = timeoutMs
@@ -359,6 +370,8 @@ class PlayerActivity : AppCompatActivity() {
         player = null
         trackSelector = null
         resolvedStreamUri = null
+        streamVariants = emptyList()
+        selectedVariantIndex = 0
         currentResolvedTitle = null
         detectedSourceStereoMode = null
         sbsExplicitlyConfigured = false
@@ -407,11 +420,18 @@ class PlayerActivity : AppCompatActivity() {
                         android.util.Log.i("XPlayer2", "Stream extracted successfully: ${extracted.url}")
                         resolvedStreamUri = Uri.parse(extracted.url)
                         extractedTitle = extracted.title
+                        // Primary URL is always the highest variant; default selection = index 0.
+                        streamVariants = extracted.variants
+                        selectedVariantIndex = 0
                         if (!extracted.title.isNullOrBlank()) {
                             currentResolvedTitle = extracted.title
                         }
                         initializePlayer()
                         updateCenterTitle()
+                        updateQualityButtonVisibility()
+                        // The remote may already be up (glasses connected) — refresh its controls
+                        // so the quality button appears once variants are known.
+                        RemoteControlActivity.currentInstance?.syncControls()
                     } else {
                         android.util.Log.w("XPlayer2", "Stream extraction failed for: $uri")
                         Toast.makeText(this@PlayerActivity, R.string.stream_extraction_failed, Toast.LENGTH_LONG).show()
@@ -1219,6 +1239,118 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun hideAudioMenu() = hideTrackMenu()
+
+    // --- Stream quality picker (VK / OK.ru multi-quality sources) ---
+
+    /** Show/hide the player overlay's quality button based on how many qualities the source has. */
+    private fun updateQualityButtonVisibility() {
+        btnQualityRef?.visibility = if (streamVariants.size > 1) View.VISIBLE else View.GONE
+    }
+
+    /**
+     * Quality chooser, rendered into the same SBS-aware container the audio/subtitle menu uses so
+     * it sits correctly per-eye when the picture is split. Lists every variant (highest first),
+     * marks the active one, and switches the ExoPlayer source on tap. Shown only when there are
+     * ≥2 qualities.
+     */
+    private fun showQualityMenu() {
+        if (streamVariants.size <= 1) return
+        val root = audioMenuRoot ?: return
+        val center = audioMenuCenter ?: return
+        val left = audioMenuLeft ?: return
+        val right = audioMenuRight ?: return
+        center.removeAllViews()
+        left.removeAllViews()
+        right.removeAllViews()
+        val sbs = getStereoSbs()
+        var firstFocusable: View? = null
+        fun dp(value: Int): Int =
+            TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, value.toFloat(), resources.displayMetrics
+            ).toInt()
+        fun addItemsTo(container: LinearLayout) {
+            container.removeAllViews()
+            val title = TextView(this).apply {
+                text = getString(R.string.quality)
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                setTextColor(Color.WHITE)
+                textSize = 16f
+                typeface = Typeface.DEFAULT_BOLD
+            }
+            val scroll = ScrollView(this).apply {
+                val h = (audioMenuRoot?.height ?: 0)
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    if (h > 0) (h * 0.6f).toInt() else ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            }
+            val inner = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            inner.addView(title)
+            streamVariants.forEachIndexed { index, variant ->
+                val isSelected = index == selectedVariantIndex
+                val tv = TextView(this).apply {
+                    text = variant.label
+                    setPadding(dp(16), dp(10), dp(16), dp(10))
+                    setTextColor(Color.WHITE)
+                    textSize = 14f
+                    isAllCaps = false
+                    if (isSelected) {
+                        setTypeface(typeface, Typeface.BOLD)
+                        background = android.graphics.drawable.GradientDrawable().apply {
+                            cornerRadius = dp(6).toFloat()
+                            setColor("#2196F3".toColorInt())
+                        }
+                    }
+                    alpha = if (isSelected) 1.0f else 0.85f
+                    setOnClickListener {
+                        selectQuality(index)
+                        hideTrackMenu()
+                    }
+                }
+                com.teleteh.xplayer2.ui.util.TvFocus.makeFocusableItem(tv)
+                if (firstFocusable == null) firstFocusable = tv
+                inner.addView(tv)
+            }
+            scroll.addView(inner)
+            container.addView(scroll)
+        }
+        if (sbs) {
+            center.visibility = View.GONE
+            left.visibility = View.GONE
+            right.visibility = View.VISIBLE
+            addItemsTo(right)
+        } else {
+            center.visibility = View.VISIBLE
+            left.visibility = View.GONE
+            right.visibility = View.GONE
+            addItemsTo(center)
+        }
+        root.visibility = View.VISIBLE
+        firstFocusable?.let { fv -> root.post { fv.requestFocus() } }
+    }
+
+    /**
+     * Switch the ExoPlayer source to the chosen quality variant, preserving playback position and
+     * play/pause state. The stereo (OU/SBS) and resize state live in the activity / OuToSbsGlView
+     * and are NOT tied to the media item, so they survive this swap untouched. No-op if the index
+     * is out of range or already selected.
+     */
+    private fun switchQuality(index: Int) {
+        val variant = streamVariants.getOrNull(index) ?: return
+        if (index == selectedVariantIndex) return
+        val exo = player ?: return
+        val url = variant.url
+        selectedVariantIndex = index
+        resolvedStreamUri = Uri.parse(url)
+        val pos = exo.currentPosition
+        val wasPlaying = exo.playWhenReady
+        exo.setMediaItem(MediaItem.fromUri(url))
+        exo.prepare()
+        exo.seekTo(pos)
+        exo.playWhenReady = wasPlaying
+        android.util.Log.i("XPlayer2", "Quality switched to ${variant.label} @${pos}ms (playing=$wasPlaying)")
+        Toast.makeText(this, variant.label, Toast.LENGTH_SHORT).show()
+    }
 
     private fun applyTrackSelection(item: TrackMenuItem, trackType: Int) {
         val selector = trackSelector ?: return
@@ -2198,6 +2330,23 @@ class PlayerActivity : AppCompatActivity() {
         }
         item?.let { applyTrackSelection(it, C.TRACK_TYPE_TEXT) }
     }
+
+    // --- Stream quality (remote control API) ---
+
+    /** Quality labels for the current source, highest first. Empty / single-entry => no picker. */
+    fun getQualityVariants(): List<String> = streamVariants.map { it.label }
+
+    /** Index of the currently playing quality (0 = highest). */
+    fun getSelectedQualityIndex(): Int = selectedVariantIndex
+
+    /** Whether a quality picker should be offered (source exposes ≥2 qualities). */
+    fun hasMultipleQualities(): Boolean = streamVariants.size > 1
+
+    /**
+     * Remote-control entry point: switch to the quality at [index], preserving position and the
+     * stereo/resize state. Routed to the same in-process player the goggles render from.
+     */
+    fun selectQuality(index: Int) = switchQuality(index)
 
     fun finishAndClose() {
         dismissPresentation()

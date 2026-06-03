@@ -83,6 +83,20 @@
             android:checkable="true"
             android:visibility="gone" />
 
+        <!-- Stream quality picker — shown only for sources that expose ≥2 qualities (VK/OK.ru).
+             Visibility is driven from PlayerActivity. -->
+        <ImageButton
+            android:id="@+id/btnQuality"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="8dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/quality"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_quality_24"
+            android:tint="@android:color/white"
+            android:visibility="gone" />
+
         <ImageButton
             android:id="@+id/btnAudio"
             android:layout_width="36dp"

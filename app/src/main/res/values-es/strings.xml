@@ -12,6 +12,7 @@
     <string name="menu_stereo">Estéreo: alternar</string>
     <string name="select_audio_track">Seleccionar pista de audio</string>
     <string name="select_subtitle">Seleccionar subtítulo</string>
+    <string name="quality">Calidad</string>
     <string name="subtitle_off">Apagado</string>
     <string name="subtitle_none">No hay subtítulos disponibles</string>
 
