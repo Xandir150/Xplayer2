@@ -1,6 +1,17 @@
 # Building XPlayer2
 
-Standard build: `./gradlew :app:assembleRelease` (or open in Android Studio). CI does the same — see
+## Flavors: `play` (Google Play, 16 KB) vs `full` (GitHub, VITURE)
+
+Two product flavors (dimension `distribution`):
+
+- **`play`** — ships WITHOUT the VITURE One SDK, so it is fully **16 KB page-size compliant** → for **Google Play**.
+  - AAB to upload: `./gradlew :app:bundlePlayRelease`
+- **`full`** — includes VITURE 2D/3D switching (its prebuilt `libsdk.so` is 4 KB-aligned, so this build is *not* 16 KB-compliant) → for **GitHub / sideload**.
+  - APK: `./gradlew :app:assembleFullRelease` — this is what CI builds and attaches to the GitHub release.
+
+`VitureController` is the real SDK wrapper in `src/full/` and a no-op stub in `src/play/`; the VITURE
+`.aar` (`app/libs/*.aar`) is a `fullImplementation` dependency, so the `play` flavor never pulls in
+`libsdk.so`. In Android Studio pick the variant (`playRelease`, `fullDebug`, …). CI workflow:
 `.github/workflows/android-release.yml`.
 
 ## FFmpeg audio decoders (AC-3 / E-AC-3 / DTS / TrueHD / …)

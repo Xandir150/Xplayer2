@@ -39,6 +39,17 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
     }
+
+    // VITURE's prebuilt libsdk.so is 4 KB-aligned and is the ONLY thing blocking Google Play's
+    // 16 KB page-size requirement (our code, ffmpeg and TFLite are already 16 KB-aligned). Split it
+    // by flavor: `play` ships WITHOUT VITURE → fully 16 KB-compliant, for Google Play; `full`
+    // includes VITURE 2D/3D → for GitHub/sideload.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("play") { dimension = "distribution" }   // no VITURE  -> 16 KB compliant (Google Play)
+        create("full") { dimension = "distribution" }   // + VITURE One SDK (libsdk.so) (GitHub)
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -105,7 +116,9 @@ dependencies {
     // VITURE One SDK (ArManager) for VITURE glasses 2D/3D switching. The .aar is NOT committed
     // (no redistribution): the release workflow downloads it into app/libs, and devs fetch it
     // locally. The fileTree include is empty-safe if the .aar is absent (build still succeeds).
-    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
+    // VITURE One SDK: ONLY in the `full` flavor (its libsdk.so is 4 KB-aligned). The `play` flavor
+    // omits it for 16 KB compliance and uses the no-op VitureController in src/play.
+    "fullImplementation"(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
