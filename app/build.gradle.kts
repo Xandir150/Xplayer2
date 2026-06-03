@@ -6,6 +6,9 @@ plugins {
 android {
     namespace = "com.teleteh.xplayer2"
     compileSdk = 36
+    // Pinned so the FFmpeg static libs (built by scripts/setup_media3_ffmpeg.sh) and the JNI wrapper
+    // (built by AGP) use the same NDK, in both local and CI builds. r28+ also 16 KB-aligns by default.
+    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.teleteh.xplayer2"

@@ -114,6 +114,28 @@ else
   echo "Symlink already exists: ${JNI_DIR}/ffmpeg"
 fi
 
+# 3.5) Ensure the decoder_ffmpeg module has the flags we depend on. These used to live as
+#      uncommitted local edits to the media3 submodule, so a clean checkout (CI) silently produced a
+#      NON-functional FFmpeg → AC-3 / E-AC-3 / DTS played as "no audio". Apply them idempotently here
+#      so local and CI builds are identical:
+#        - build_ffmpeg.sh: --disable-iconv  (host libiconv must not leak into the Android build)
+#        - CMakeLists.txt:  16 KB ELF alignment (Play requirement) + allow libc-resolved undefined
+#          symbols (FFmpeg 6.0 references stderr/stdout, which are inline on recent bionic)
+BUILD_FFMPEG_SH="${JNI_DIR}/build_ffmpeg.sh"
+CMAKELISTS="${JNI_DIR}/CMakeLists.txt"
+if ! grep -q -- "--disable-iconv" "${BUILD_FFMPEG_SH}"; then
+  perl -pi -e 's{--disable-doc}{--disable-doc\n    --disable-iconv}' "${BUILD_FFMPEG_SH}"
+  echo "Patched build_ffmpeg.sh: --disable-iconv"
+fi
+if ! grep -q "max-page-size=16384" "${CMAKELISTS}"; then
+  printf '\n# 16 KB ELF alignment (Google Play 16 KB page-size requirement)\ntarget_link_options(ffmpegJNI PRIVATE "-Wl,-z,max-page-size=16384")\n' >> "${CMAKELISTS}"
+  echo "Patched CMakeLists.txt: -Wl,-z,max-page-size=16384"
+fi
+if ! grep -q "allow-shlib-undefined" "${CMAKELISTS}"; then
+  printf '\n# Allow unresolved libc symbols (e.g. stderr) to bind at runtime (FFmpeg 6.0 + recent NDK)\ntarget_link_options(ffmpegJNI PRIVATE "-Wl,--allow-shlib-undefined")\n' >> "${CMAKELISTS}"
+  echo "Patched CMakeLists.txt: -Wl,--allow-shlib-undefined"
+fi
+
 # 4) Build FFmpeg via Media3 script
 pushd "${JNI_DIR}" >/dev/null
   echo "Building FFmpeg via build_ffmpeg.sh..."
