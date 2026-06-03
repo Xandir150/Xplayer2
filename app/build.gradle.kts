@@ -11,8 +11,15 @@ android {
         applicationId = "com.teleteh.xplayer2"
         minSdk = 29
         targetSdk = 36
-        versionCode = 13
+        versionCode = 14
         versionName = "1.0.7"
+
+        ndk {
+            // Real targets (phones, XReal glasses, the XREAL Beam box) are all ARM. x86/x86_64 are
+            // emulator-only AND TFLite's x86_64 .so isn't 16 KB-aligned (fails Play's 16 KB check),
+            // so ship ARM only — 16 KB-compliant and smaller.
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
