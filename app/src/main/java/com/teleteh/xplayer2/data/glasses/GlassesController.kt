@@ -131,8 +131,23 @@ class GlassesController(private val appContext: Context) {
         notifyState()
     }
 
+    // XREAL host devices (Beam / Beam Pro) ARE the glasses' host: the glasses are the device's own
+    // display, and the host's own services + the temple button drive their display mode. We must NOT
+    // claim the glasses' HID interfaces or send MCU mode commands there — doing so hijacks control
+    // from the host and breaks the picture (mode conflict, one-eye, black). On such hosts the
+    // controller stays passive and the app runs as a plain player; the host handles the glasses + 3D.
+    // (A phone is never branded XREAL, so the normal phone + USB-glasses path is unaffected.)
+    private val hostDrivesGlasses: Boolean =
+        Build.MANUFACTURER.equals("XREAL", ignoreCase = true) ||
+            Build.BRAND.equals("XREAL", ignoreCase = true)
+
     @SuppressLint("UnspecifiedRegisterReceiverFlag")
     fun register() {
+        if (hostDrivesGlasses) {
+            Log.i(TAG, "XREAL host (${Build.MANUFACTURER}/${Build.MODEL}) drives the glasses itself — controller stays passive (no HID claim / mode push)")
+            notifyState()
+            return
+        }
         // Ref-counted: a second acquirer just bumps the count; the receiver and USB connection
         // are already up from the first.
         acquireCount++
