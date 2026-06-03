@@ -31,17 +31,6 @@ jobs:
       - name: Accept licenses
         run: yes | sdkmanager --licenses
 
-      - name: Install NDK
-        run: |
-          yes | sdkmanager "ndk;28.2.13676358" >/dev/null
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
-
-      - name: Build FFmpeg audio decoders (AC-3 / E-AC-3 / DTS / TrueHD / …)
-        # The market/Play build links these (built locally via this script); CI previously did NOT,
-        # so GitHub-release APKs played AC-3/DTS files as "no audio". Build them here so the
-        # GitHub APK matches the Play build. Adds a few minutes (4 ABIs).
-        run: bash scripts/setup_media3_ffmpeg.sh --host linux-x86_64 --abi 21
-
       - name: Download and extract VITURE SDK
         # The VITURE One SDK .aar is fetched at build time (not committed — no redistribution)
         # and dropped into app/libs, where the fileTree dependency picks it up.

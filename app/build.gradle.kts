@@ -6,9 +6,6 @@ plugins {
 android {
     namespace = "com.teleteh.xplayer2"
     compileSdk = 36
-    // Pinned so the FFmpeg static libs (built by scripts/setup_media3_ffmpeg.sh) and the JNI wrapper
-    // (built by AGP) use the same NDK, in both local and CI builds. r28+ also 16 KB-aligns by default.
-    ndkVersion = "28.2.13676358"
 
     defaultConfig {
         applicationId = "com.teleteh.xplayer2"
@@ -63,6 +60,10 @@ android {
             // VITURE SDK ships libsdk.so (arm64-v8a + armeabi-v7a). Legacy packaging extracts it
             // on install so System.loadLibrary finds it on older boxes (e.g. Amlogic S905Y4 / v7a).
             useLegacyPackaging = true
+            // libffmpegJNI.so ships prebuilt in src/main/jniLibs (audio: AC-3/E-AC-3/DTS/…; see
+            // BUILDING.md). If a local rebuild also produces one (via the optional jni/ffmpeg
+            // symlink), pickFirst keeps the duplicate from failing packaging.
+            pickFirsts += "**/libffmpegJNI.so"
         }
     }
 }
