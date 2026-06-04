@@ -4,10 +4,10 @@
     <LinearLayout
         android:id="@+id/controlsTopBar"
         android:layout_width="match_parent"
-        android:layout_height="48dp"
+        android:layout_height="58dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:background="#66000000"
+        android:background="@drawable/scrim_top"
         android:paddingStart="8dp"
         android:paddingEnd="8dp">
 

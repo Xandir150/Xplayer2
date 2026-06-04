@@ -1241,7 +1241,7 @@ class PlayerActivity : AppCompatActivity() {
                         // current audio track / subtitle wasn't readable there (main-screen menu).
                         background = android.graphics.drawable.GradientDrawable().apply {
                             cornerRadius = dp(6).toFloat()
-                            setColor("#2196F3".toColorInt())
+                            setColor(themeColor(androidx.appcompat.R.attr.colorPrimary))
                         }
                     }
                     alpha = if (isSelected) 1.0f else 0.85f
@@ -1340,7 +1340,7 @@ class PlayerActivity : AppCompatActivity() {
                         setTypeface(typeface, Typeface.BOLD)
                         background = android.graphics.drawable.GradientDrawable().apply {
                             cornerRadius = dp(6).toFloat()
-                            setColor("#2196F3".toColorInt())
+                            setColor(themeColor(androidx.appcompat.R.attr.colorPrimary))
                         }
                     }
                     alpha = if (isSelected) 1.0f else 0.85f
@@ -1929,10 +1929,16 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /** Filled accent (on) vs outlined-white (off) — shared by the stereo and Lazy-3D toggles. */
+    private fun themeColor(attr: Int): Int {
+        val tv = android.util.TypedValue()
+        theme.resolveAttribute(attr, tv, true)
+        return tv.data
+    }
+
     private fun applyToggleButtonVisual(btn: MaterialButton, on: Boolean) {
         if (on) {
-            btn.backgroundTintList = ColorStateList.valueOf("#2196F3".toColorInt())
-            btn.setTextColor(Color.WHITE)
+            btn.backgroundTintList = ColorStateList.valueOf(themeColor(androidx.appcompat.R.attr.colorPrimary))
+            btn.setTextColor(themeColor(com.google.android.material.R.attr.colorOnPrimary))
             btn.strokeColor = ColorStateList.valueOf(Color.TRANSPARENT)
             btn.strokeWidth = 0
         } else {

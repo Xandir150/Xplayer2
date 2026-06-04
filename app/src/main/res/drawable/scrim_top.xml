@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Top gradient scrim: solid-ish at the top, fading to transparent — keeps the overlay controls
+     readable over any video frame without a hard flat bar. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#B3000000"
+        android:endColor="#00000000" />
+</shape>
