@@ -1,5 +1,5 @@
 • Yandex Disk: pega un enlace público de carpeta o archivo para explorar y reproducir, con selección de calidad.
-• La app ya aparece en el menú «Compartir» del sistema; pega enlaces directamente desde el portapapeles.
-• Mando y lista de Recientes rediseñados con colores Material You; desliza o mantén pulsado para borrar.
-• El reproductor funciona con mandos de TV/multimedia y D-pad; salto de ±10 s; un botón: 2D / Lazy 3D / OU→SBS / SBS.
-• Corregido un fallo de Lazy 3D en algunos dispositivos, con mensajes más claros.
+• La app aparece en «Compartir»; pega enlaces desde el portapapeles.
+• Mando y Recientes rediseñados con colores Material You; desliza o mantén pulsado para borrar.
+• Reproductor con mandos de TV/multimedia y D-pad; salto de ±10 s; un botón: 2D / Lazy 3D / OU→SBS / SBS.
+• Corregido un fallo de Lazy 3D en algunos dispositivos.
