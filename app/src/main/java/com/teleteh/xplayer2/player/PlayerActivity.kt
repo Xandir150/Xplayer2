@@ -2175,8 +2175,9 @@ class PlayerActivity : AppCompatActivity() {
             depthStarting = false
             if (!lazy3dEnabled || !estimator.isReady()) {
                 withContext(Dispatchers.IO) { estimator.close() }
-                if (!estimator.isReady()) {
-                    android.util.Log.w("XPlayer2", "Lazy 3D: depth model not loaded — parallax-only mode")
+                if (lazy3dEnabled && !estimator.isReady()) {
+                    android.util.Log.w("XPlayer2", "Lazy 3D: depth model not loaded on this device")
+                    Toast.makeText(this@PlayerActivity, R.string.lazy3d_unsupported, Toast.LENGTH_LONG).show()
                 }
                 return@launch
             }
@@ -2190,7 +2191,11 @@ class PlayerActivity : AppCompatActivity() {
                 worker.submit(pixels, w, h, ts)
             }
             startDepthTick(worker, estimator)
-            android.util.Log.i("XPlayer2", "Lazy 3D: depth synthesis started (avg inference will appear in logs)")
+            android.util.Log.i("XPlayer2", "Lazy 3D: depth synthesis started on ${estimator.backend} (avg inference will appear in logs)")
+            // No GPU/NNAPI here → depth runs on CPU; warn that it may be heavy on this device.
+            if (estimator.backend?.startsWith("CPU") == true) {
+                Toast.makeText(this@PlayerActivity, R.string.lazy3d_slow_cpu, Toast.LENGTH_LONG).show()
+            }
           } catch (e: Throwable) {
             // Any failure spinning up depth (OOM on low-RAM devices, an unexpected delegate error)
             // must not crash the app — disable Lazy 3D and restore the normal picture/toggle state.
@@ -2200,6 +2205,8 @@ class PlayerActivity : AppCompatActivity() {
             stopLazy3d()
             btnSbsRef?.let { applySbsButtonVisual(it) }
             RemoteControlActivity.currentInstance?.syncControls()
+            val msg = if (e is OutOfMemoryError) R.string.lazy3d_low_memory else R.string.lazy3d_failed
+            Toast.makeText(this@PlayerActivity, msg, Toast.LENGTH_LONG).show()
           }
         }
     }

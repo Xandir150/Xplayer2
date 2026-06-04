@@ -47,6 +47,10 @@ class DepthEstimator(
     @Volatile var avgInferenceMs: Float = 0f
         private set
 
+    /** Which TFLite backend the interpreter loaded on ("GPU" / "NNAPI" / "CPU x4"), or null. */
+    @Volatile var backend: String? = null
+        private set
+
     /** True once a TFLite [Interpreter] is ready to accept frames. */
     fun isReady(): Boolean = interpreter != null
 
@@ -87,6 +91,7 @@ class DepthEstimator(
             val options = Interpreter.Options()
             val label = configure(options)
             interpreter = Interpreter(buffer, options)
+            backend = label
             Log.i(TAG, "Lazy 3D: depth model loaded on $label (inputSize=${inputSize}x$inputSize)")
             true
         } catch (e: Throwable) {
