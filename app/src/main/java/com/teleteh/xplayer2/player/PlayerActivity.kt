@@ -338,6 +338,10 @@ class PlayerActivity : AppCompatActivity() {
         // Mirror overlay visibility to controller visibility only
         val controllerListener = ControllerVisibilityListener { visibility ->
             overlay.visibility = if (visibility == View.VISIBLE) View.VISIBLE else View.GONE
+            if (visibility == View.VISIBLE) {
+                // Hide ExoPlayer's default settings gear — track/speed live on our own overlay buttons.
+                playerView.findViewById<View?>(androidx.media3.ui.R.id.exo_settings)?.visibility = View.GONE
+            }
         }
         playerView.setControllerVisibilityListener(controllerListener)
         hideSystemBars()
@@ -550,6 +554,13 @@ class PlayerActivity : AppCompatActivity() {
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_SPACE -> {
                 togglePlayPause(); true
             }
+            // Media-remote / TV-remote transport keys (work alongside the MediaSession).
+            KeyEvent.KEYCODE_MEDIA_PLAY -> { player?.play(); true }
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> { player?.pause(); true }
+            KeyEvent.KEYCODE_MEDIA_STOP -> { finishAndClose(); true }
+            KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> { seekRelative(-10000L); true }
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_MEDIA_NEXT -> { seekRelative(10000L); true }
+            KeyEvent.KEYCODE_CAPTIONS -> { showSubtitleMenu(); true }
             else -> super.onKeyDown(keyCode, event)
         }
     }
@@ -573,6 +584,10 @@ class PlayerActivity : AppCompatActivity() {
         val isLocalUri = uri.scheme?.lowercase() in setOf("file", "content")
         val playerBuilder = ExoPlayer.Builder(this, renderersFactory)
             .setTrackSelector(selector)
+            // ±10 s so the MediaSession (remote / lock-screen) and the default controller's rewind/
+            // fast-forward match our own ±10 s seek.
+            .setSeekBackIncrementMs(10_000L)
+            .setSeekForwardIncrementMs(10_000L)
         if (isLocalUri) {
             // Local reads are essentially free; the default 50-second buffer just inflates
             // RAM use and disk activity. Drop it down to a few seconds for better battery.
