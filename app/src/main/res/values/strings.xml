@@ -123,4 +123,10 @@
     <string name="vk_club_empty">No videos found</string>
     <string name="vk_club_boosty">Hughey on Boosty</string>
     <string name="vk_club_search_hint">Search by title</string>
+
+    <!-- Yandex Disk public-link browser -->
+    <string name="yadisk_title">Yandex Disk</string>
+    <string name="yadisk_empty">No videos here</string>
+    <string name="yadisk_error">Couldn\'t open this Yandex Disk link</string>
+    <string name="yadisk_folder">Folder</string>
 </resources>

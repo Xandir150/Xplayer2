@@ -311,6 +311,23 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/uri-list" />
             </intent-filter>
+            <!-- Share an actual media file (Gallery / Files / Photos use SEND + video|audio/*
+                 with EXTRA_STREAM; loadFromIntent already reads EXTRA_STREAM). -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
             <!-- Allow file:// scheme in addition to content:// -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -340,6 +357,10 @@
 
         <activity
             android:name=".ui.VkClubActivity"
+            android:exported="false"
+            android:theme="@style/Theme.XPlayer2" />
+        <activity
+            android:name=".ui.YaDiskActivity"
             android:exported="false"
             android:theme="@style/Theme.XPlayer2" />
 

@@ -1,0 +1,23 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Yandex Disk: white flying saucer on the brand blue rounded square -->
+    <path
+        android:fillColor="#1A6DFF"
+        android:pathData="M11,6h26c2.76,0 5,2.24 5,5v26c0,2.76 -2.24,5 -5,5H11c-2.76,0 -5,-2.24 -5,-5V11C6,8.24 8.24,6 11,6z"/>
+    <!-- saucer dome -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M24,13.5c-3.45,0 -6.25,2.55 -6.25,5.7c0,0.5 0.07,0.98 0.2,1.45h12.1c0.13,-0.47 0.2,-0.95 0.2,-1.45C30.25,16.05 27.45,13.5 24,13.5z"/>
+    <!-- saucer disc -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M11.5,23.2c0,-1.27 5.6,-2.3 12.5,-2.3s12.5,1.03 12.5,2.3c0,1.27 -5.6,2.3 -12.5,2.3S11.5,24.47 11.5,23.2z"/>
+    <!-- landing lights -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.6"
+        android:pathData="M18.5,27.5l-1.6,3.4 1.4,0.6 1.6,-3.4z M24,28l0,3.8 1.5,0 0,-3.8z M29.5,27.5l1.6,3.4 -1.4,0.6 -1.6,-3.4z"/>
+</vector>

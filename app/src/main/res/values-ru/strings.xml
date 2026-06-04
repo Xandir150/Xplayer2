@@ -101,4 +101,10 @@
 
     <!-- Recent subtitle -->
     <string name="recent_position_prefix">Позиция: </string>
+
+    <!-- Yandex Disk public-link browser -->
+    <string name="yadisk_title">Яндекс Диск</string>
+    <string name="yadisk_empty">Здесь нет видео</string>
+    <string name="yadisk_error">Не удалось открыть ссылку Яндекс Диска</string>
+    <string name="yadisk_folder">Папка</string>
 </resources>

@@ -30,7 +30,9 @@ import com.teleteh.xplayer2.data.network.NetworkItem
 import com.teleteh.xplayer2.data.network.SmbStorage
 import com.teleteh.xplayer2.player.PlayerActivity
 import com.teleteh.xplayer2.ui.VkClubActivity
+import com.teleteh.xplayer2.ui.YaDiskActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
+import com.teleteh.xplayer2.util.YaDiskApi
 import kotlinx.coroutines.launch
 
 class NetworkFragment : Fragment(R.layout.fragment_network) {
@@ -126,6 +128,15 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
                 Toast.makeText(requireContext(), R.string.network_hughey_added, Toast.LENGTH_SHORT).show()
                 return
             }
+            // Yandex Disk public link (folder or single file) → open the disk browser: it lists a
+            // folder's videos, or plays a single-file link directly. Max-quality original playback.
+            if (YaDiskApi.isYaDiskUrl(runCatching { Uri.parse(raw) }.getOrNull())) {
+                startActivity(Intent(requireContext(), YaDiskActivity::class.java).apply {
+                    putExtra(YaDiskActivity.EXTRA_PUBLIC_KEY, raw)
+                })
+                etUrl.setText("")
+                return
+            }
             val uri = normalizeToUri(raw)
             if (uri == null) {
                 Toast.makeText(requireContext(), R.string.network_url_invalid, Toast.LENGTH_SHORT).show()
@@ -152,13 +163,32 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
                 true
             } else false
         }
+        fun clipboardUrl(): String? {
+            val cm = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager ?: return null
+            val t = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)
+                ?.coerceToText(requireContext())?.toString()?.trim()
+            return t?.takeIf {
+                it.startsWith("http://", true) || it.startsWith("https://", true) || it.startsWith("magnet:", true)
+            }
+        }
         etUrl.isFocusable = true
         etUrl.isFocusableInTouchMode = true
-        etUrl.isLongClickable = false
+        etUrl.isLongClickable = true   // restore the paste context menu (was off → paste was blocked)
         etUrl.setOnTouchListener { v, event ->
             if (event.action == MotionEvent.ACTION_UP) {
-                v.requestFocus(); v.performClick(); true
+                v.requestFocus()
+                // Consuming the touch ourselves stops the IME auto-showing on some devices — pop it.
+                (requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager)
+                    ?.showSoftInput(v, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                v.performClick(); true
             } else false
+        }
+        // Auto-paste a clipboard URL into the empty field on focus — covers the "can't paste / no
+        // keyboard" case some devices hit; the user can still edit or clear it.
+        etUrl.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus && etUrl.text.isNullOrEmpty()) {
+                clipboardUrl()?.let { etUrl.setText(it); etUrl.setSelection(it.length) }
+            }
         }
 
         fab.setOnClickListener { showAddSmbDialog() }

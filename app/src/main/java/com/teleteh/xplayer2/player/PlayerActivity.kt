@@ -75,8 +75,10 @@ import com.teleteh.xplayer2.data.depth.DepthEstimator
 import com.teleteh.xplayer2.data.depth.DepthFrameWorker
 import com.teleteh.xplayer2.data.depth.DepthModelManager
 import com.teleteh.xplayer2.data.glasses.GlassesController
+import com.teleteh.xplayer2.ui.YaDiskActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import com.teleteh.xplayer2.util.VideoStreamExtractor
+import com.teleteh.xplayer2.util.YaDiskApi
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -407,6 +409,16 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         val uri = sourceUri!!
+        // A Yandex Disk public link opened/shared straight into the player can't be played as-is
+        // (a folder has no single file; a single-file link needs its download href resolved). Hand
+        // it to the disk browser, which lists a folder or resolves + plays a single file.
+        if (YaDiskApi.isYaDiskUrl(uri)) {
+            startActivity(Intent(this, YaDiskActivity::class.java).apply {
+                putExtra(YaDiskActivity.EXTRA_PUBLIC_KEY, uri.toString())
+            })
+            finish()
+            return
+        }
         android.util.Log.i("XPlayer2", "Source URI: $uri, host=${uri.host}, isSupported=${VideoStreamExtractor.isSupported(uri)}")
         if (VideoStreamExtractor.isSupported(uri)) {
             titleCenterView?.text = getString(R.string.loading_stream)
@@ -481,8 +493,8 @@ class PlayerActivity : AppCompatActivity() {
             (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
         ) {
             if (event.action == KeyEvent.ACTION_DOWN) {
-                if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) seekRelative(-5000L)
-                else seekRelative(15000L)
+                if (event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT) seekRelative(-10000L)
+                else seekRelative(10000L)
             }
             return true
         }
@@ -505,12 +517,12 @@ class PlayerActivity : AppCompatActivity() {
             }
             KeyEvent.KEYCODE_DPAD_LEFT -> {
                 if (!isOverlayVisible && !isControllerVisible && !isAudioMenuVisible) {
-                    seekRelative(-5000L); true
+                    seekRelative(-10000L); true
                 } else super.onKeyDown(keyCode, event)
             }
             KeyEvent.KEYCODE_DPAD_RIGHT -> {
                 if (!isOverlayVisible && !isControllerVisible && !isAudioMenuVisible) {
-                    seekRelative(15000L); true
+                    seekRelative(10000L); true
                 } else super.onKeyDown(keyCode, event)
             }
             KeyEvent.KEYCODE_BACK -> {
