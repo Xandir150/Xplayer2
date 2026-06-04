@@ -68,21 +68,6 @@
             android:textColor="@android:color/white"
             android:checkable="true" />
 
-        <!-- Shares the Shift slot: shown only while the clip is plain 2D (Shift is meaningless
-             there); Shift takes the slot in OU→SBS. Visibility is driven from PlayerActivity. -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnLazy3d"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="wrap_content"
-            android:layout_height="36dp"
-            android:insetLeft="8dp"
-            android:insetRight="8dp"
-            android:text="@string/player_lazy3d"
-            android:textAllCaps="false"
-            android:textColor="@android:color/white"
-            android:checkable="true"
-            android:visibility="gone" />
-
         <!-- Stream quality picker — shown only for sources that expose ≥2 qualities (VK/OK.ru).
              Visibility is driven from PlayerActivity. -->
         <ImageButton

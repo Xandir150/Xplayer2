@@ -42,11 +42,9 @@ class RemoteControlActivity : AppCompatActivity() {
     private lateinit var btnSbs: MaterialButton
     private lateinit var btnShift: MaterialButton
     private lateinit var btnResizeMode: MaterialButton
-    private lateinit var btnLazy3d: MaterialButton
     private lateinit var btnVolumeBoost: MaterialButton
     private lateinit var btnQuality: MaterialButton
     private lateinit var tvLazyDebug: TextView
-    private var lastLazyStarting: Boolean? = null
 
     private val handler = Handler(Looper.getMainLooper())
     private val updateRunnable = object : Runnable {
@@ -72,9 +70,6 @@ class RemoteControlActivity : AppCompatActivity() {
             } else {
                 tvLazyDebug.visibility = View.GONE
             }
-            // Keep the Lazy 3D button label in sync so "starting…" clears to the normal label
-            // the moment IMU data starts flowing — feedback so the user doesn't re-tap.
-            if (player != null) applyLazy3dLabel(player)
             handler.postDelayed(this, 120)
         }
     }
@@ -105,7 +100,6 @@ class RemoteControlActivity : AppCompatActivity() {
         btnSbs = findViewById(R.id.btnSbs)
         btnShift = findViewById(R.id.btnShift)
         btnResizeMode = findViewById(R.id.btnResizeMode)
-        btnLazy3d = findViewById(R.id.btnLazy3d)
         btnVolumeBoost = findViewById(R.id.btnVolumeBoost)
         btnQuality = findViewById(R.id.btnQuality)
         tvLazyDebug = findViewById(R.id.tvLazyDebug)
@@ -153,15 +147,6 @@ class RemoteControlActivity : AppCompatActivity() {
         btnResizeMode.setOnClickListener {
             val newLabel = PlayerActivity.currentInstance?.cycleResizeMode()
             if (newLabel != null) btnResizeMode.text = newLabel
-        }
-
-        // Lazy 3D: head-tracking parallax from the goggles' IMU. The button is only shown
-        // when XREAL Air-series glasses (the brand we can read IMU from) are attached; for
-        // any other brand the row stays hidden.
-        btnLazy3d.setOnClickListener {
-            val player = PlayerActivity.currentInstance ?: return@setOnClickListener
-            player.setLazy3dEnabled(!player.isLazy3dEnabled())
-            updateButtons()
         }
 
         // Stream quality — only relevant for multi-quality sources (VK/OK.ru). The button is
@@ -425,17 +410,13 @@ class RemoteControlActivity : AppCompatActivity() {
 
     private fun updateButtons() {
         val player = PlayerActivity.currentInstance ?: return
-        val lazy3d = player.isLazy3dEnabled()
 
-        // SBS button — 3-state (2D / OU→SBS / SBS); label reflects current mode. Disabled while
-        // Lazy 3D is on: Lazy 3D owns the stereo rendering, so switching the source stereo mode
-        // would only fight it (and Lazy 3D applies to plain-2D clips only). Dimmed to read inactive.
-        val sbsEnabled = player.isStereoSbsEnabled()
+        // Mode button — one 4-state cycle: 2D / Lazy 3D / OU→SBS / SBS. Label reflects the current
+        // mode; filled (active) for anything but plain 2D (Lazy 3D counts as active).
+        val active = player.isLazy3dEnabled() || player.isStereoSbsEnabled()
         btnSbs.text = player.getStereoModeLabel()
-        btnSbs.isChecked = sbsEnabled
-        applyButtonStyle(btnSbs, sbsEnabled)
-        btnSbs.isEnabled = !lazy3d
-        btnSbs.alpha = if (lazy3d) 0.4f else 1f
+        btnSbs.isChecked = active
+        applyButtonStyle(btnSbs, active)
 
         // Shift button — only shown in OU→SBS mode (vertical shift is meaningless otherwise).
         btnShift.visibility = if (player.isOuSbsMode()) View.VISIBLE else View.GONE
@@ -449,17 +430,6 @@ class RemoteControlActivity : AppCompatActivity() {
         // Volume boost label reflects the persisted value when the remote opens.
         btnVolumeBoost.text = player.getVolumeBoostLabel()
 
-        // Lazy 3D toggle: visible when (a) at least one runnable backend exists — IMU
-        // parallax needs XREAL goggles, depth synthesis needs the bundled TFLite model —
-        // AND (b) the clip is plain 2D. Real SBS / OU sources already carry depth info,
-        // synthesising more on top of them adds nothing.
-        val supported = player.isLazy3dSupported()
-        val applicable = player.isLazy3dApplicable()
-        btnLazy3d.visibility = if (supported && applicable) View.VISIBLE else View.GONE
-        btnLazy3d.isChecked = lazy3d
-        applyButtonStyle(btnLazy3d, lazy3d)
-        applyLazy3dLabel(player)
-
         // Quality picker — only for sources with ≥2 qualities. Label shows the current quality.
         if (player.hasMultipleQualities()) {
             btnQuality.visibility = View.VISIBLE
@@ -472,21 +442,6 @@ class RemoteControlActivity : AppCompatActivity() {
         } else {
             btnQuality.visibility = View.GONE
         }
-    }
-
-    /**
-     * Show "starting…" on the Lazy 3D button until real sensor/depth data is flowing, and
-     * disable taps while spinning up so a slow start can't be interrupted or re-toggled.
-     * The Starting state is time-bounded in the player, so the button can't stay stuck disabled.
-     */
-    private fun applyLazy3dLabel(player: PlayerActivity) {
-        val starting = player.lazy3dStatus() == PlayerActivity.Lazy3dStatus.Starting
-        // Only touch the button when the state actually changes — the debug poll calls this at
-        // ~8 Hz, and setText/isEnabled churn on a focused button can disrupt D-pad navigation.
-        if (lastLazyStarting == starting) return
-        lastLazyStarting = starting
-        btnLazy3d.setText(if (starting) R.string.remote_lazy3d_starting else R.string.remote_lazy3d)
-        btnLazy3d.isEnabled = !starting
     }
 
     /** Draw a bright focus ring over every button so D-pad / TV selection is visible. */

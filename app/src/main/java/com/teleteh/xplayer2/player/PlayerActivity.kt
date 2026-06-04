@@ -138,7 +138,6 @@ class PlayerActivity : AppCompatActivity() {
     private var currentResolvedTitle: String? = null
     private var btnSbsRef: MaterialButton? = null
     private var btnShiftRef: MaterialButton? = null
-    private var btnLazy3dRef: MaterialButton? = null
     private var btnResizeModeRef: MaterialButton? = null
     // 0=Auto, 1=16:9, 2=4:3, 3=21:9, 4=32:9, 5=1:1, 6=2.39:1
     private var resizeMode: Int = 0
@@ -281,14 +280,12 @@ class PlayerActivity : AppCompatActivity() {
         val btnBack = overlay.findViewById<MaterialButton>(R.id.btnBack)
         val btnSbs = overlay.findViewById<MaterialButton>(R.id.btnSbs)
         val btnShift = overlay.findViewById<MaterialButton>(R.id.btnShift)
-        val btnLazy3d = overlay.findViewById<MaterialButton>(R.id.btnLazy3d)
         val btnResizeMode = overlay.findViewById<MaterialButton>(R.id.btnResizeMode)
         val btnAudio = overlay.findViewById<ImageButton>(R.id.btnAudio)
         val btnSubtitle = overlay.findViewById<ImageButton>(R.id.btnSubtitle)
         val btnQuality = overlay.findViewById<ImageButton>(R.id.btnQuality)
         btnSbsRef = btnSbs
         btnShiftRef = btnShift
-        btnLazy3dRef = btnLazy3d
         btnResizeModeRef = btnResizeMode
         btnQualityRef = btnQuality
         titleCenterView = overlay.findViewById(R.id.tvTitleCenter)
@@ -328,14 +325,6 @@ class PlayerActivity : AppCompatActivity() {
             applySbsShiftIfNeeded()
             // Persist per-item shift state
             saveProgress()
-        }
-        // Lazy 3D (2D→3D depth synthesis) toggle. Shares the Shift slot: this is shown only
-        // while the clip is plain 2D (where Shift is meaningless), and Shift takes the slot in
-        // OU→SBS. Visibility is driven by updateStereoControlButtons() on every mode change.
-        btnLazy3d.isCheckable = true
-        btnLazy3d.setOnClickListener {
-            setLazy3dEnabled(!isLazy3dEnabled())
-            updateStereoControlButtons()
         }
         btnAudio.setOnClickListener { showAudioMenu() }
         btnSubtitle.setOnClickListener { showSubtitleMenu() }
@@ -1850,19 +1839,25 @@ class PlayerActivity : AppCompatActivity() {
     // for the rest of this clip and is persisted, so Full-SBS/Full-OU clips (which look like
     // 2D by resolution) keep the user's choice on reopen.
     private fun cycleStereoMode() {
-        stereoMode = when (stereoMode) {
-            StereoMode.Off -> StereoMode.Ou
-            StereoMode.Ou -> StereoMode.Sbs
-            StereoMode.Sbs -> StereoMode.Off
+        // One button, four states: 2D → Lazy 3D → OU→SBS → SBS → 2D. Lazy 3D is folded into this
+        // cycle (it used to be a separate button) and is skipped on devices that can't run it.
+        when {
+            stereoMode == StereoMode.Off && lazy3dEnabled -> {
+                setLazy3dEnabled(false); stereoMode = StereoMode.Ou        // Lazy 3D → OU→SBS
+            }
+            stereoMode == StereoMode.Off && isLazy3dSupported() ->
+                setLazy3dEnabled(true)                                     // 2D → Lazy 3D
+            stereoMode == StereoMode.Off -> stereoMode = StereoMode.Ou     // 2D → OU→SBS (no Lazy 3D)
+            stereoMode == StereoMode.Ou -> stereoMode = StereoMode.Sbs     // OU→SBS → SBS
+            else -> stereoMode = StereoMode.Off                            // SBS → 2D
         }
         sbsExplicitlyConfigured = true
-        val label = when (stereoMode) {
-            StereoMode.Off -> getString(R.string.stereo_mode_normal)
-            StereoMode.Ou -> "OU→SBS"
-            StereoMode.Sbs -> "SBS"
-        }
-        Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, getStereoModeLabel(), Toast.LENGTH_SHORT).show()
         applyRenderMode()
+        if (lazy3dEnabled) reapplyLazy3dToActiveView()
+        updateStereoControlButtons()
+        btnSbsRef?.let { applySbsButtonVisual(it) }
+        RemoteControlActivity.currentInstance?.syncControls()
         saveProgress()
     }
 
@@ -1911,13 +1906,9 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun applySbsButtonVisual(btn: MaterialButton) {
-        // Reflect the 3-state stereo mode: label + filled (active) vs outlined (2D).
-        btn.text = when (stereoMode) {
-            StereoMode.Off -> "2D"
-            StereoMode.Ou -> "OU→SBS"
-            StereoMode.Sbs -> "SBS"
-        }
-        val active = stereoMode != StereoMode.Off
+        // Reflect the 4-state mode (2D / Lazy 3D / OU→SBS / SBS): label + filled (active) vs 2D outline.
+        btn.text = getStereoModeLabel()
+        val active = lazy3dEnabled || stereoMode != StereoMode.Off
         btn.isChecked = active
         applyToggleButtonVisual(btn, active)
     }
@@ -1945,16 +1936,9 @@ class PlayerActivity : AppCompatActivity() {
      * The phone remote has its own equivalent logic and is intentionally left untouched.
      */
     private fun updateStereoControlButtons() {
+        // Shift (vertical pad toward 16:9) is only meaningful in OU→SBS. Lazy 3D is no longer a
+        // separate button — it's a state of the stereo-mode cycle (see cycleStereoMode / btnSbs).
         btnShiftRef?.visibility = if (isOuSbsMode()) View.VISIBLE else View.GONE
-        btnLazy3dRef?.let { btn ->
-            val show = isLazy3dApplicable() && isLazy3dSupported()
-            btn.visibility = if (show) View.VISIBLE else View.GONE
-            if (show) {
-                val on = isLazy3dEnabled()
-                btn.isChecked = on
-                applyToggleButtonVisual(btn, on)
-            }
-        }
     }
 
     // syncSbsButtons no longer needed with single toolbar
@@ -2013,10 +1997,11 @@ class PlayerActivity : AppCompatActivity() {
     fun toggleStereoSbs() = cycleStereoMode()
 
     /** Current stereo-mode label for the remote ("2D" / "OU→SBS" / "SBS"). */
-    fun getStereoModeLabel(): String = when (stereoMode) {
-        StereoMode.Off -> "2D"
-        StereoMode.Ou -> "OU→SBS"
-        StereoMode.Sbs -> "SBS"
+    fun getStereoModeLabel(): String = when {
+        lazy3dEnabled -> "Lazy 3D ⚠️"
+        stereoMode == StereoMode.Ou -> "OU→SBS"
+        stereoMode == StereoMode.Sbs -> "SBS"
+        else -> "2D"
     }
 
     fun isShiftEnabled(): Boolean = sbsShiftEnabled
