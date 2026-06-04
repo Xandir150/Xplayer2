@@ -46,7 +46,7 @@
     <string name="remote_ou_to_sbs">OU→SBS</string>
     <string name="remote_auto">Auto</string>
     <string name="remote_shift">Shift</string>
-    <string name="remote_lazy3d">Lazy 3D (head tracking)</string>
+    <string name="remote_lazy3d">Lazy 3D</string>
     <string name="remote_lazy3d_starting">Lazy 3D — starting…</string>
     <string name="remote_audio_track">Audio Track</string>
     <string name="remote_stop_playback">Stop Playback</string>

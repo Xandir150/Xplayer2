@@ -36,7 +36,7 @@
     <string name="remote_now_playing">Воспроизводится</string>
     <string name="remote_3d_mode">3D режим</string>
     <string name="remote_shift">Сдвиг</string>
-    <string name="remote_lazy3d">Lazy 3D (отслеживание головы)</string>
+    <string name="remote_lazy3d">Lazy 3D</string>
     <string name="remote_lazy3d_starting">Lazy 3D — запуск…</string>
     <string name="remote_audio_track">Аудиодорожка</string>
     <string name="remote_stop_playback">Остановить</string>
