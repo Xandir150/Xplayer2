@@ -88,7 +88,12 @@ class YaDiskActivity : AppCompatActivity() {
             }
             if (listing.isFile) {
                 // The shared link itself is a single video — resolve + play, then close the browser.
-                playFile(null, listing.fileName, listing.fileDirectUrl, finishAfter = true)
+                // The opened link (yadi.sk/i/… or disk.yandex.ru/i/…) is itself the durable recents key.
+                playFile(
+                    downloadPath = null, name = listing.fileName, direct = listing.fileDirectUrl,
+                    recentUri = publicKey, streamKey = listing.filePublicKey, streamPath = listing.filePath,
+                    finishAfter = true,
+                )
                 return@launch
             }
             progress.visibility = View.GONE
@@ -105,26 +110,49 @@ class YaDiskActivity : AppCompatActivity() {
                 putExtra(EXTRA_TITLE, e.name)
             })
         } else {
-            playFile(e.path, e.name, e.directUrl, finishAfter = false)
+            // Key recents by the file's durable public link (yadi.sk/i/…), not the ephemeral href.
+            playFile(
+                downloadPath = e.path, name = e.name, direct = e.directUrl,
+                recentUri = e.publicUrl, streamKey = e.itemPublicKey, streamPath = e.path, finishAfter = false,
+            )
         }
     }
 
     /** Resolve a fresh signed href (preferred over the possibly-stale `file` field) and open it. */
-    private fun playFile(itemPath: String?, name: String?, direct: String?, finishAfter: Boolean) {
+    private fun playFile(
+        downloadPath: String?, name: String?, direct: String?,
+        recentUri: String?, streamKey: String?, streamPath: String?, finishAfter: Boolean,
+    ) {
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
-            val href = runCatching { YaDiskApi.resolveHref(publicKey, itemPath) }.getOrNull() ?: direct
-            progress.visibility = View.GONE
-            if (href.isNullOrBlank()) {
-                Toast.makeText(this@YaDiskActivity, R.string.yadisk_error, Toast.LENGTH_SHORT).show()
-                if (finishAfter) finish()
-                return@launch
-            }
-            startActivity(Intent(this@YaDiskActivity, PlayerActivity::class.java).apply {
+            // Prefer Yandex's per-quality HLS renditions (a quality menu like VK/OK); fall back to the
+            // single original-file href when the internal streams API is unavailable.
+            val streams = if (streamKey != null && !streamPath.isNullOrEmpty())
+                runCatching { YaDiskApi.getVideoStreams(publicKey, streamKey, streamPath) }.getOrDefault(emptyList())
+            else emptyList()
+
+            val intent = Intent(this@YaDiskActivity, PlayerActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
-                data = Uri.parse(href)
                 putExtra(PlayerActivity.EXTRA_TITLE, name)
-            })
+                // Durable identity so this lands in Recents and replays/resumes (the play URL expires).
+                if (!recentUri.isNullOrBlank()) putExtra(PlayerActivity.EXTRA_RECENT_URI, recentUri)
+            }
+            if (streams.isNotEmpty()) {
+                intent.data = Uri.parse(streams[0].url)   // highest; PlayerActivity reads the arrays
+                intent.putExtra(PlayerActivity.EXTRA_STREAM_LABELS, streams.map { it.label }.toTypedArray())
+                intent.putExtra(PlayerActivity.EXTRA_STREAM_URLS, streams.map { it.url }.toTypedArray())
+            } else {
+                val href = runCatching { YaDiskApi.resolveHref(publicKey, downloadPath) }.getOrNull() ?: direct
+                if (href.isNullOrBlank()) {
+                    progress.visibility = View.GONE
+                    Toast.makeText(this@YaDiskActivity, R.string.yadisk_error, Toast.LENGTH_SHORT).show()
+                    if (finishAfter) finish()
+                    return@launch
+                }
+                intent.data = Uri.parse(href)
+            }
+            progress.visibility = View.GONE
+            startActivity(intent)
             if (finishAfter) finish()
         }
     }

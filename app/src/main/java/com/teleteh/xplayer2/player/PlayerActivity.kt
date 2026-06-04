@@ -90,6 +90,13 @@ class PlayerActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_START_POSITION_MS = "start_position_ms"
         const val EXTRA_TITLE = "title"
+        // Durable identity for the Recent list when the played URI is ephemeral (e.g. a Yandex Disk
+        // signed download href that expires). Recents are keyed/restored by this instead.
+        const val EXTRA_RECENT_URI = "recent_uri"
+        // Pre-resolved selectable qualities (parallel String[] arrays, highest first) — Yandex Disk
+        // hands its per-quality HLS renditions straight to the quality menu (no in-player extraction).
+        const val EXTRA_STREAM_LABELS = "stream_labels"
+        const val EXTRA_STREAM_URLS = "stream_urls"
 
         // Lazy-3D depth→stereo strength (max per-eye UV shift as a fraction of frame width).
         // Single tuning knob: higher = more "pop" but a wider disocclusion smear at object
@@ -125,6 +132,8 @@ class PlayerActivity : AppCompatActivity() {
     private var presentationDisplayId: Int = -1
     private val uiHandler = Handler(Looper.getMainLooper())
     private var sourceUri: Uri? = null
+    // Optional durable recents key (EXTRA_RECENT_URI) used when the play URI is ephemeral.
+    private var recentKeyUri: Uri? = null
     private var titleCenterView: TextView? = null
     private var currentResolvedTitle: String? = null
     private var btnSbsRef: MaterialButton? = null
@@ -419,8 +428,25 @@ class PlayerActivity : AppCompatActivity() {
             finish()
             return
         }
+        recentKeyUri = intent?.getStringExtra(EXTRA_RECENT_URI)
+            ?.let { runCatching { Uri.parse(it) }.getOrNull() }
         android.util.Log.i("XPlayer2", "Source URI: $uri, host=${uri.host}, isSupported=${VideoStreamExtractor.isSupported(uri)}")
-        if (VideoStreamExtractor.isSupported(uri)) {
+        val injectedLabels = intent?.getStringArrayExtra(EXTRA_STREAM_LABELS)
+        val injectedUrls = intent?.getStringArrayExtra(EXTRA_STREAM_URLS)
+        if (injectedUrls != null && injectedLabels != null &&
+            injectedUrls.isNotEmpty() && injectedLabels.size == injectedUrls.size) {
+            // Yandex Disk passes its per-quality HLS renditions directly (highest first); expose them
+            // as selectable variants so the quality menu works just like VK/OK. Index 0 = max quality.
+            streamVariants = injectedUrls.indices.map {
+                VideoStreamExtractor.StreamVariant(injectedLabels[it], injectedUrls[it])
+            }
+            selectedVariantIndex = 0
+            resolvedStreamUri = Uri.parse(injectedUrls[0])
+            initializePlayer()
+            updateCenterTitle()
+            updateQualityButtonVisibility()
+            RemoteControlActivity.currentInstance?.syncControls()
+        } else if (VideoStreamExtractor.isSupported(uri)) {
             titleCenterView?.text = getString(R.string.loading_stream)
             android.util.Log.i("XPlayer2", "Starting stream extraction for: $uri")
             isExtractingStream = true
@@ -652,7 +678,7 @@ class PlayerActivity : AppCompatActivity() {
                 // Use sourceUri for recents lookup (not resolvedStreamUri which may be different for extracted streams)
                 val requestedStart = intent?.getLongExtra(EXTRA_START_POSITION_MS, -1L) ?: -1L
                 val store = RecentStore(this)
-                val recent = store.find((sourceUri ?: uri).toString())
+                val recent = store.find((recentKeyUri ?: sourceUri ?: uri).toString())
                 val resumePos = when {
                     requestedStart >= 0L -> requestedStart
                     (recent?.lastPositionMs ?: 0L) > 0L -> recent!!.lastPositionMs
@@ -1526,6 +1552,9 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun saveProgress() {
         val uri = sourceUri ?: return
+        // Recents are keyed by the durable identity when one was provided (e.g. Yandex Disk's
+        // yadi.sk/i/… link), since the actual play URI (a signed href) is ephemeral.
+        val keyUri = recentKeyUri ?: uri
         val exo = player ?: return
         val position = exo.currentPosition.coerceAtLeast(0L)
         val duration = exo.duration.takeIf { it > 0 } ?: 0L
@@ -1538,14 +1567,14 @@ class PlayerActivity : AppCompatActivity() {
             null
         }
         val entry = RecentEntry(
-            uri = uri.toString(),
+            uri = keyUri.toString(),
             title = title,
             lastPositionMs = position,
             durationMs = duration,
             lastPlayedAt = System.currentTimeMillis(),
             framePacking = framePacking,
             sbsShiftEnabled = sbsShiftEnabled,
-            sourceType = RecentEntry.detectSourceType(uri),
+            sourceType = RecentEntry.detectSourceType(keyUri),
             resizeMode = resizeMode,
             // Persist the effective stereo mode (auto-detected or manual) as the single source of
             // truth — restored on reopen and used for the history badge. 0 = 2D, 1 = OU→SBS, 2 = SBS.

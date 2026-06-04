@@ -107,6 +107,7 @@ class RecentAdapter(
             SourceType.OK -> R.drawable.ic_source_ok
             SourceType.LOCAL -> R.drawable.ic_source_local
             SourceType.NETWORK -> R.drawable.ic_source_network
+            SourceType.YANDEX -> R.drawable.ic_source_yadisk
             SourceType.UNKNOWN -> R.drawable.ic_source_unknown
         }
         holder.sourceIcon.setImageResource(iconRes)

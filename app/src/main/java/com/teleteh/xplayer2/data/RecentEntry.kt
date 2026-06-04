@@ -10,6 +10,7 @@ enum class SourceType {
     NETWORK,    // SMB, HTTP stream, DLNA
     VK,         // vk.com, vkvideo.ru
     OK,         // ok.ru
+    YANDEX,     // Yandex Disk public links (disk.yandex.* / yadi.sk)
     UNKNOWN
 }
 
@@ -47,6 +48,10 @@ data class RecentEntry(
                 host.contains("vk.com") || host.contains("vkvideo.ru") -> SourceType.VK
                 // OK.ru
                 host.contains("ok.ru") -> SourceType.OK
+                // Yandex Disk public links (the durable yadi.sk/i/… we store for recents)
+                host == "yadi.sk" || host.endsWith("disk.yandex.ru") || host.endsWith("disk.yandex.com") ||
+                    host.endsWith("disk.yandex.kz") || host.endsWith("disk.yandex.by") ||
+                    host.endsWith("disk.360.yandex.ru") || host.endsWith("disk.360.yandex.com") -> SourceType.YANDEX
                 // Local files
                 scheme == "content" || scheme == "file" -> SourceType.LOCAL
                 // Network sources
