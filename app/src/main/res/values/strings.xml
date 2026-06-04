@@ -86,6 +86,9 @@
     <string name="common_add">Add</string>
     <string name="common_cancel">Cancel</string>
     <string name="delete">Delete</string>
+    <string name="recent_deleted">Deleted</string>
+    <string name="recent_delete_confirm">Remove from recents?</string>
+    <string name="undo">Undo</string>
     <string name="stop">Stop</string>
 
     <!-- Errors / status -->
@@ -123,6 +126,11 @@
     <string name="vk_club_empty">No videos found</string>
     <string name="vk_club_boosty">Hughey on Boosty</string>
     <string name="vk_club_search_hint">Search by title</string>
+
+    <!-- Remote redesign section captions -->
+    <string name="remote_now_playing_label">Now playing</string>
+    <string name="remote_section_display">Display</string>
+    <string name="remote_section_audio">Audio &amp; subtitles</string>
 
     <!-- Yandex Disk public-link browser -->
     <string name="yadisk_title">Yandex Disk</string>

@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
 
 class RecentAdapter(
     private val onClick: (RecentEntry) -> Unit,
-    private val onDelete: (RecentEntry) -> Unit = {}
+    private val onLongClick: (RecentEntry) -> Unit = {}
 ) : ListAdapter<RecentEntry, RecentAdapter.VH>(Diff) {
 
     object Diff : DiffUtil.ItemCallback<RecentEntry>() {
@@ -30,7 +30,7 @@ class RecentAdapter(
             oldItem == newItem
     }
 
-    class VH(view: View, val onClick: (Int) -> Unit, val onDeleteIdx: (Int) -> Unit) :
+    class VH(view: View, val onClick: (Int) -> Unit, val onLongClick: (Int) -> Unit) :
         RecyclerView.ViewHolder(view) {
         val sourceIcon: ImageView = view.findViewById(R.id.ivSourceIcon)
         val title: TextView = view.findViewById(R.id.tvTitle)
@@ -39,42 +39,18 @@ class RecentAdapter(
         val sbsState: TextView? = view.findViewById(R.id.tvSbsState)
 
         init {
-            val deleteButton = view.findViewById<View?>(R.id.btnDelete)
-
             view.isFocusable = true
             view.isFocusableInTouchMode = true
-            view.isLongClickable = false
+            view.isLongClickable = true
             view.setOnClickListener { onClick(bindingAdapterPosition) }
-
-            // Single-tap activation (touch ACTION_UP triggers click) so touch and D-pad behave consistently.
+            // Long-press deletes — works for touch AND D-pad/remote (long-press of the centre key on
+            // the focused row), so it's the delete path where there's no touch (XREAL Beam / TV).
+            view.setOnLongClickListener { onLongClick(bindingAdapterPosition); true }
+            // Focus the row on touch-down (TV highlight) without consuming, so the row's own click +
+            // long-press fire natively.
             view.setOnTouchListener { v, event ->
-                if (event.action == MotionEvent.ACTION_UP) {
-                    v.requestFocus(); v.performClick(); true
-                } else false
-            }
-
-            // D-pad RIGHT on a row jumps focus to its delete button (when present).
-            view.setOnKeyListener { _, keyCode, event ->
-                if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    if (deleteButton?.visibility == View.VISIBLE) {
-                        deleteButton.requestFocus(); return@setOnKeyListener true
-                    }
-                }
+                if (event.action == MotionEvent.ACTION_DOWN) v.requestFocus()
                 false
-            }
-
-            deleteButton?.isFocusable = true
-            deleteButton?.isFocusableInTouchMode = true
-            deleteButton?.setOnClickListener { onDeleteIdx(bindingAdapterPosition) }
-            deleteButton?.setOnKeyListener { _, keyCode, event ->
-                if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
-                when (keyCode) {
-                    KeyEvent.KEYCODE_DPAD_LEFT -> { view.requestFocus(); true }
-                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                        deleteButton.performClick(); true
-                    }
-                    else -> false
-                }
             }
         }
     }
@@ -84,7 +60,7 @@ class RecentAdapter(
         return VH(
             v,
             onClick = { pos -> if (pos != RecyclerView.NO_POSITION) onClick(getItem(pos)) },
-            onDeleteIdx = { pos -> if (pos != RecyclerView.NO_POSITION) onDelete(getItem(pos)) }
+            onLongClick = { pos -> if (pos != RecyclerView.NO_POSITION) onLongClick(getItem(pos)) }
         )
     }
 

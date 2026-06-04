@@ -44,7 +44,7 @@
             android:paddingBottom="2dp"
             android:textSize="10sp"
             android:textColor="#FFFFFF"
-            android:background="#4D000000"
+            android:background="@drawable/chip_neutral"
             android:visibility="gone"
             android:text="@string/menu_stereo_short" />
 
@@ -59,18 +59,10 @@
             android:paddingBottom="2dp"
             android:textSize="10sp"
             android:textColor="#FFFFFF"
-            android:background="#7F2196F3"
+            android:background="@drawable/chip_accent"
             android:visibility="gone"
             android:text="@string/menu_stereo_short" />
 
-        <ImageButton
-            android:id="@+id/btnDelete"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:layout_marginStart="8dp"
-            android:background="@android:color/transparent"
-            android:contentDescription="@string/delete"
-            android:src="@android:drawable/ic_menu_delete" />
     </LinearLayout>
 
     <TextView

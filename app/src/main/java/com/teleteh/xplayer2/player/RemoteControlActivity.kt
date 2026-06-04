@@ -434,11 +434,8 @@ class RemoteControlActivity : AppCompatActivity() {
         if (player.hasMultipleQualities()) {
             btnQuality.visibility = View.VISIBLE
             val current = player.getQualityVariants().getOrNull(player.getSelectedQualityIndex())
-            btnQuality.text = if (current != null) {
-                getString(R.string.quality) + ": " + current
-            } else {
-                getString(R.string.quality)
-            }
+            // Short label (just the resolution) since the button now shares a row with Aspect.
+            btnQuality.text = current ?: getString(R.string.quality)
         } else {
             btnQuality.visibility = View.GONE
         }
@@ -454,16 +451,22 @@ class RemoteControlActivity : AppCompatActivity() {
         }
     }
 
+    private fun themeColor(attr: Int): Int {
+        val tv = android.util.TypedValue()
+        theme.resolveAttribute(attr, tv, true)
+        return tv.data
+    }
+
     private fun applyButtonStyle(btn: MaterialButton, checked: Boolean) {
+        // Active = filled with the theme accent (Material You on Android 12+, else brand purple);
+        // inactive = the same tonal row colour as the non-toggle buttons, for a consistent card.
+        btn.strokeWidth = 0
         if (checked) {
-            btn.backgroundTintList = ColorStateList.valueOf("#2196F3".toColorInt())
-            btn.setTextColor(Color.WHITE)
-            btn.strokeWidth = 0
+            btn.backgroundTintList = ColorStateList.valueOf(themeColor(androidx.appcompat.R.attr.colorPrimary))
+            btn.setTextColor(themeColor(com.google.android.material.R.attr.colorOnPrimary))
         } else {
-            btn.backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
-            btn.setTextColor(Color.WHITE)
-            btn.strokeColor = ColorStateList.valueOf(Color.WHITE)
-            btn.strokeWidth = (2 * resources.displayMetrics.density).toInt()
+            btn.backgroundTintList = ColorStateList.valueOf(getColor(R.color.rc_row))
+            btn.setTextColor(getColor(R.color.rc_on_surface))
         }
     }
 

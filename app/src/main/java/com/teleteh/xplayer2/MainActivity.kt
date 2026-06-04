@@ -69,7 +69,12 @@ class MainActivity : AppCompatActivity() {
     private val glassesFocusListener =
         android.view.ViewTreeObserver.OnGlobalFocusChangeListener { _, _ -> pushGlassesMenu() }
     private val glassesPageCallback = object : ViewPager2.OnPageChangeCallback() {
-        override fun onPageSelected(position: Int) = refreshGlassesMenu()
+        override fun onPageSelected(position: Int) {
+            // Recent (page 0) hosts swipe-to-delete, which needs the horizontal gesture — disable
+            // ViewPager paging there (tap the tab to leave it). Sources (page 1) keeps swipe paging.
+            binding.viewPager.isUserInputEnabled = position != 0
+            refreshGlassesMenu()
+        }
     }
     // Head-as-D-pad: a nod past the threshold fires one DPAD_UP/DOWN into the phone's focus engine,
     // which moves the focused row (and the glasses highlight follows). Ratchets: re-arms near neutral.
@@ -157,6 +162,8 @@ class MainActivity : AppCompatActivity() {
 
         val viewPager: ViewPager2 = binding.viewPager
         viewPager.adapter = MainPagerAdapter(this)
+        // Start on Recent (page 0), where swipe-to-delete lives — so paging-by-swipe is off there.
+        viewPager.isUserInputEnabled = false
 
         val tabTitles = listOf(getString(R.string.tab_recent), getString(R.string.tab_sources))
         TabLayoutMediator(binding.tabLayout, viewPager) { tab, position ->

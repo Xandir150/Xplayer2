@@ -1,266 +1,316 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="#1A1A1A"
-    android:padding="16dp"
-    android:fitsSystemWindows="true">
+    android:background="@color/rc_bg"
+    android:fillViewport="true"
+    android:fitsSystemWindows="true"
+    android:scrollbars="none">
 
-    <!-- Title bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:layout_marginBottom="24dp">
+        android:orientation="vertical"
+        android:paddingStart="18dp"
+        android:paddingEnd="18dp"
+        android:paddingTop="22dp"
+        android:paddingBottom="40dp">
 
-        <ImageView
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:src="@mipmap/ic_launcher"
-            android:layout_marginEnd="12dp" />
-
-        <TextView
-            android:id="@+id/tvTitle"
-            android:layout_width="0dp"
+        <!-- Header: app mark + now-playing title -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:textColor="@android:color/white"
-            android:textSize="18sp"
-            android:maxLines="2"
-            android:ellipsize="end"
-            android:text="@string/remote_now_playing" />
-    </LinearLayout>
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="22dp">
 
-    <!-- Video mode buttons -->
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/remote_3d_mode"
-        android:textColor="#888888"
-        android:textSize="12sp"
-        android:layout_marginBottom="8dp" />
+            <ImageView
+                android:layout_width="42dp"
+                android:layout_height="42dp"
+                android:src="@mipmap/ic_launcher"
+                android:layout_marginEnd="14dp"
+                android:contentDescription="@null" />
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:layout_marginBottom="32dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnSbs"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="56dp"
-            android:layout_marginEnd="8dp"
-            android:text="@string/remote_ou_to_sbs"
-            android:textAllCaps="false"
-            android:textColor="@android:color/white"
-            android:checkable="true" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/remote_now_playing_label"
+                    android:textAppearance="@style/TextAppearance.XPlayer.Section" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnResizeMode"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="56dp"
-            android:layout_marginEnd="8dp"
-            android:text="@string/remote_auto"
-            android:textAllCaps="false"
-            android:textColor="@android:color/white" />
+                <TextView
+                    android:id="@+id/tvTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="@color/rc_on_surface"
+                    android:textSize="19sp"
+                    android:textStyle="bold"
+                    android:maxLines="2"
+                    android:ellipsize="end"
+                    android:text="@string/remote_now_playing" />
+            </LinearLayout>
+        </LinearLayout>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnShift"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="56dp"
-            android:text="@string/remote_shift"
-            android:textAllCaps="false"
-            android:textColor="@android:color/white"
-            android:checkable="true" />
-    </LinearLayout>
-
-    <!-- Playback controls -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center"
-        android:layout_marginBottom="24dp">
-
-        <ImageButton
-            android:id="@+id/btnRewind"
-            android:layout_width="72dp"
-            android:layout_height="72dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_rew"
-            android:tint="@android:color/white"
-            android:scaleType="centerInside"
-            android:contentDescription="@string/player_rewind" />
-
-        <ImageButton
-            android:id="@+id/btnPlayPause"
-            android:layout_width="96dp"
-            android:layout_height="96dp"
-            android:layout_marginStart="32dp"
-            android:layout_marginEnd="32dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_pause"
-            android:tint="@android:color/white"
-            android:scaleType="centerInside"
-            android:contentDescription="@string/player_play_pause" />
-
-        <ImageButton
-            android:id="@+id/btnForward"
-            android:layout_width="72dp"
-            android:layout_height="72dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_ff"
-            android:tint="@android:color/white"
-            android:scaleType="centerInside"
-            android:contentDescription="@string/player_forward" />
-    </LinearLayout>
-
-    <!-- Seek bar -->
-    <SeekBar
-        android:id="@+id/seekBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
-        android:progressTint="#2196F3"
-        android:thumbTint="#2196F3" />
-
-    <!-- Time display -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginBottom="32dp">
-
-        <TextView
-            android:id="@+id/tvPosition"
-            android:layout_width="wrap_content"
+        <!-- Transport -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#AAAAAA"
-            android:textSize="14sp"
-            android:text="0:00" />
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginBottom="16dp">
 
-        <View
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
+            <ImageButton
+                android:id="@+id/btnRewind"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_media_rew"
+                android:tint="@color/rc_on_surface"
+                android:scaleType="centerInside"
+                android:contentDescription="@string/player_rewind" />
 
-        <TextView
-            android:id="@+id/tvDuration"
-            android:layout_width="wrap_content"
+            <ImageButton
+                android:id="@+id/btnPlayPause"
+                android:layout_width="84dp"
+                android:layout_height="84dp"
+                android:layout_marginStart="28dp"
+                android:layout_marginEnd="28dp"
+                android:background="@drawable/bg_play_fab"
+                android:src="@android:drawable/ic_media_pause"
+                android:tint="@android:color/white"
+                android:scaleType="centerInside"
+                android:contentDescription="@string/player_play_pause" />
+
+            <ImageButton
+                android:id="@+id/btnForward"
+                android:layout_width="60dp"
+                android:layout_height="60dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_media_ff"
+                android:tint="@color/rc_on_surface"
+                android:scaleType="centerInside"
+                android:contentDescription="@string/player_forward" />
+        </LinearLayout>
+
+        <SeekBar
+            android:id="@+id/seekBar"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#AAAAAA"
-            android:textSize="14sp"
-            android:text="0:00" />
+            android:layout_marginBottom="4dp"
+            android:progressTint="?attr/colorPrimary"
+            android:thumbTint="?attr/colorPrimary" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="22dp">
+
+            <TextView
+                android:id="@+id/tvPosition"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/rc_secondary"
+                android:textSize="13sp"
+                android:text="0:00" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/tvDuration"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/rc_secondary"
+                android:textSize="13sp"
+                android:text="0:00" />
+        </LinearLayout>
+
+        <!-- Display / 3D card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="14dp"
+            app:cardBackgroundColor="@color/rc_card"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp"
+            app:strokeColor="@color/rc_outline"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:text="@string/remote_section_display"
+                    android:textAppearance="@style/TextAppearance.XPlayer.Section" />
+
+                <!-- Row: stereo-mode cycle | Shift (Shift appears only in OU→SBS; when it's gone the
+                     mode button expands to fill the row). -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSbs"
+                        style="@style/Widget.XPlayer.RemoteRow"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="54dp"
+                        android:text="@string/remote_ou_to_sbs"
+                        android:checkable="true" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnShift"
+                        style="@style/Widget.XPlayer.RemoteRow"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="54dp"
+                        android:layout_marginStart="8dp"
+                        android:text="@string/remote_shift"
+                        android:checkable="true"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <!-- Row: aspect ratio | quality (quality appears only for multi-quality sources). -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnResizeMode"
+                        style="@style/Widget.XPlayer.RemoteRow"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="54dp"
+                        android:text="@string/remote_auto" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnQuality"
+                        style="@style/Widget.XPlayer.RemoteRow"
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="54dp"
+                        android:layout_marginStart="8dp"
+                        android:text="@string/quality"
+                        app:icon="@drawable/ic_quality_24"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Audio &amp; subtitles card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="14dp"
+            app:cardBackgroundColor="@color/rc_card"
+            app:cardCornerRadius="20dp"
+            app:cardElevation="0dp"
+            app:strokeColor="@color/rc_outline"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:text="@string/remote_section_audio"
+                    android:textAppearance="@style/TextAppearance.XPlayer.Section" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAudio"
+                    style="@style/Widget.XPlayer.RemoteRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="54dp"
+                    android:text="@string/remote_audio_track"
+                    app:icon="@drawable/ear_sound_24px" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSubtitle"
+                    style="@style/Widget.XPlayer.RemoteRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="54dp"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/menu_subtitle"
+                    app:icon="@drawable/ic_subtitle_24" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnVolumeBoost"
+                    style="@style/Widget.XPlayer.RemoteRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="54dp"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/volume_boost_off" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Lazy 3D sensor debug readout (TEMPORARY; hidden unless Lazy 3D is on). -->
+        <TextView
+            android:id="@+id/tvLazyDebug"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="4dp"
+            android:fontFamily="monospace"
+            android:textColor="#66FF99"
+            android:textSize="12sp"
+            android:lineSpacingExtra="2dp"
+            android:visibility="gone" />
+
+        <!-- Stop — kept to half width and centred so it's hard to hit by accident. -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnStop"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="2"
+                android:text="@string/remote_stop_playback"
+                android:textAllCaps="false"
+                android:textColor="@color/rc_danger"
+                app:icon="@drawable/ic_stop"
+                app:iconTint="@color/rc_danger"
+                app:iconGravity="textStart"
+                app:strokeColor="@color/rc_danger" />
+
+            <Space
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+        </LinearLayout>
+
     </LinearLayout>
-
-    <!-- Stream quality picker — shown only for sources that expose ≥2 qualities (VK/OK.ru).
-         Visibility is driven from RemoteControlActivity.updateButtons(). -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnQuality"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:layout_marginBottom="12dp"
-        android:text="@string/quality"
-        android:textAllCaps="false"
-        android:textColor="@android:color/white"
-        app:icon="@drawable/ic_quality_24"
-        app:iconTint="@android:color/white"
-        android:visibility="gone" />
-
-    <!-- Audio track button -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnAudio"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:text="@string/remote_audio_track"
-        android:textAllCaps="false"
-        android:textColor="@android:color/white"
-        app:icon="@drawable/ear_sound_24px"
-        app:iconTint="@android:color/white" />
-
-    <!-- Subtitles button — subtitles default to off, so this is how the user turns them on
-         while the picture is on the goggles and the phone is the remote. -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnSubtitle"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:layout_marginTop="12dp"
-        android:text="@string/menu_subtitle"
-        android:textAllCaps="false"
-        android:textColor="@android:color/white"
-        app:icon="@drawable/ic_subtitle_24"
-        app:iconTint="@android:color/white" />
-
-    <!-- Volume boost — lifts quiet sources (low-mastered web video, goggle speakers). Persists. -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnVolumeBoost"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:layout_marginTop="12dp"
-        android:text="@string/volume_boost_off"
-        android:textAllCaps="false"
-        android:textColor="@android:color/white" />
-
-    <!-- Lazy 3D sensor debug readout (TEMPORARY tuning aid — remove once head-tracking is dialled in).
-         Hidden unless Lazy 3D is on; shows live IMU rates and the resulting parallax shift. -->
-    <TextView
-        android:id="@+id/tvLazyDebug"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:fontFamily="monospace"
-        android:textColor="#66FF99"
-        android:textSize="12sp"
-        android:lineSpacingExtra="2dp"
-        android:visibility="gone" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
-
-    <!-- Stop button — kept to 1/3 width and centred so it's hard to hit by accident (e.g. when a
-         system USB-connection prompt pops up over the bottom of the screen). -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal">
-
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnStop"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="56dp"
-            android:layout_weight="1"
-            android:text="@string/remote_stop_playback"
-            android:textAllCaps="false"
-            android:textColor="#FF5555"
-            app:strokeColor="#FF5555" />
-
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="1dp"
-            android:layout_weight="1" />
-    </LinearLayout>
-
-</LinearLayout>
+</ScrollView>

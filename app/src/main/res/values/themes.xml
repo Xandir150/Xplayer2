@@ -1,9 +1,9 @@
 <resources>
     <!-- Base application theme with edge-to-edge support -->
     <style name="Theme.XPlayer2" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Primary brand color. -->
-        <item name="colorPrimary">@color/purple_500</item>
-        <item name="colorPrimaryVariant">@color/purple_700</item>
+        <!-- Primary brand color (fallback; Material You overrides it on Android 12+). -->
+        <item name="colorPrimary">@color/brand_accent</item>
+        <item name="colorPrimaryVariant">@color/brand_accent_dark</item>
         <item name="colorOnPrimary">@color/white</item>
         <!-- Secondary brand color. -->
         <item name="colorSecondary">@color/teal_200</item>
@@ -14,10 +14,34 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
-    <!-- Fullscreen, no action bar theme for PlayerActivity -->
-    <style name="Theme.XPlayer2.Fullscreen" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <!-- Fullscreen, no action bar theme for PlayerActivity (inherits the brand/dynamic accent). -->
+    <style name="Theme.XPlayer2.Fullscreen" parent="Theme.XPlayer2">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+
+    <!-- Left-aligned tonal "settings row" button for the remote (icon + label). -->
+    <style name="Widget.XPlayer.RemoteRow" parent="Widget.MaterialComponents.Button.UnelevatedButton">
+        <item name="backgroundTint">@color/rc_row</item>
+        <item name="android:textColor">@color/rc_on_surface</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:gravity">start|center_vertical</item>
+        <item name="iconGravity">textStart</item>
+        <item name="iconPadding">14dp</item>
+        <item name="iconTint">?attr/colorPrimary</item>
+        <item name="cornerRadius">14dp</item>
+        <item name="android:paddingStart">18dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+    </style>
+
+    <!-- Section caption above a card's controls. -->
+    <style name="TextAppearance.XPlayer.Section" parent="TextAppearance.MaterialComponents.Overline">
+        <item name="android:textColor">@color/rc_secondary</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:letterSpacing">0.04</item>
+        <item name="android:textAllCaps">false</item>
     </style>
 </resources>

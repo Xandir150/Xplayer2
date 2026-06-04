@@ -101,6 +101,14 @@
 
     <!-- Recent subtitle -->
     <string name="recent_position_prefix">Позиция: </string>
+    <string name="recent_deleted">Удалено</string>
+    <string name="recent_delete_confirm">Убрать из недавних?</string>
+    <string name="undo">Отменить</string>
+
+    <!-- Remote redesign section captions -->
+    <string name="remote_now_playing_label">Сейчас играет</string>
+    <string name="remote_section_display">Изображение</string>
+    <string name="remote_section_audio">Звук и субтитры</string>
 
     <!-- Yandex Disk public-link browser -->
     <string name="yadisk_title">Яндекс Диск</string>

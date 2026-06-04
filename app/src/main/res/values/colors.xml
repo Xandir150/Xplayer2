@@ -7,4 +7,19 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Brand accent (fallback when Material You dynamic colour isn't available, i.e. below
+         Android 12). Purple, derived from the launcher (glasses) icon. -->
+    <color name="brand_accent">#7C4DFF</color>
+    <color name="brand_accent_dark">#5E35F1</color>
+
+    <!-- Remote-control / player surface palette (dark; accent now comes from ?attr/colorPrimary). -->
+    <color name="rc_bg">#0E0F13</color>          <!-- screen background -->
+    <color name="rc_card">#16181E</color>        <!-- grouped card surface -->
+    <color name="rc_row">#20232C</color>         <!-- tonal action row -->
+    <color name="rc_accent">#2196F3</color>      <!-- accent (matches applyButtonStyle) -->
+    <color name="rc_on_surface">#ECEDF1</color>  <!-- primary text/icon -->
+    <color name="rc_secondary">#9AA0AE</color>   <!-- secondary text -->
+    <color name="rc_danger">#FF6B72</color>      <!-- stop -->
+    <color name="rc_outline">#2A2E38</color>     <!-- card stroke -->
 </resources>
