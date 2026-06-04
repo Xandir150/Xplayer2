@@ -1,0 +1,5 @@
+• Yandex Disk: paste a public folder or file link to browse and play, with quality selection.
+• The app now appears in the system Share sheet; paste links straight from the clipboard.
+• Redesigned remote and Recent list with Material You colours; swipe or long-press to delete recents.
+• Player works with TV / media remotes and D-pad; ±10s skip; one button cycles 2D / Lazy 3D / OU→SBS / SBS.
+• Fixed a Lazy 3D crash on some devices and clearer messages when it can't run.
