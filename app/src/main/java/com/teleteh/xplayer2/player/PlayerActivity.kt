@@ -2166,6 +2166,7 @@ class PlayerActivity : AppCompatActivity() {
         if (depthEstimator != null || depthStarting) return
         depthStarting = true
         lifecycleScope.launch {
+          try {
             // Loading the TFLite model + GPU init takes a couple of seconds — do it off the
             // main thread so the toggle doesn't freeze. GL wiring happens back on the main thread.
             val estimator = withContext(Dispatchers.IO) {
@@ -2190,6 +2191,16 @@ class PlayerActivity : AppCompatActivity() {
             }
             startDepthTick(worker, estimator)
             android.util.Log.i("XPlayer2", "Lazy 3D: depth synthesis started (avg inference will appear in logs)")
+          } catch (e: Throwable) {
+            // Any failure spinning up depth (OOM on low-RAM devices, an unexpected delegate error)
+            // must not crash the app — disable Lazy 3D and restore the normal picture/toggle state.
+            android.util.Log.e("XPlayer2", "Lazy 3D: startup failed, disabling", e)
+            depthStarting = false
+            lazy3dEnabled = false
+            stopLazy3d()
+            btnSbsRef?.let { applySbsButtonVisual(it) }
+            RemoteControlActivity.currentInstance?.syncControls()
+          }
         }
     }
 

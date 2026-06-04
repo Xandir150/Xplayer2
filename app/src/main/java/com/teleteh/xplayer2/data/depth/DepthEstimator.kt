@@ -3,6 +3,7 @@ package com.teleteh.xplayer2.data.depth
 import android.content.Context
 import android.util.Log
 import org.tensorflow.lite.Interpreter
+import org.tensorflow.lite.gpu.CompatibilityList
 import org.tensorflow.lite.gpu.GpuDelegate
 import org.tensorflow.lite.nnapi.NnApiDelegate
 import java.io.FileInputStream
@@ -61,10 +62,18 @@ class DepthEstimator(
             ?: loadModelFile(DepthModelManager(context).cachedFile)
             ?: return false
 
-        // For an FP32 CNN like MiDaS, the GPU (Adreno/Mali) delegate is usually much faster
-        // than NNAPI, which often can't run FP32 graphs on the NPU and silently falls back to
-        // CPU. Try GPU first, then NNAPI, then plain multi-thread CPU.
-        if (tryInit(buffer) { o ->
+        // For an FP32 CNN like MiDaS, the GPU (Adreno/Mali) delegate is usually much faster than
+        // NNAPI. Try GPU first, then NNAPI, then plain multi-thread CPU — BUT only attempt the GPU
+        // delegate when TFLite reports it's safe on this device. On some GPUs/drivers (reported on
+        // ZTE) constructing the GPU delegate crashes NATIVELY (SIGSEGV), which the try/catch below
+        // CANNOT recover from — so we gate it with CompatibilityList and fall back to NNAPI/CPU.
+        val gpuSupported = try {
+            CompatibilityList().isDelegateSupportedOnThisDevice
+        } catch (e: Throwable) {
+            Log.w(TAG, "Lazy 3D: GPU compatibility probe failed (${e.message}); skipping GPU")
+            false
+        }
+        if (gpuSupported && tryInit(buffer) { o ->
                 val d = GpuDelegate(); gpuDelegate = d; o.addDelegate(d); "GPU"
             }) return true
         if (tryInit(buffer) { o ->
