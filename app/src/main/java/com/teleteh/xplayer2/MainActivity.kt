@@ -78,7 +78,7 @@ class MainActivity : AppCompatActivity() {
     // direction, right after a step) is suppressed for gestureReturnNs — only the intended direction
     // steps. Same-direction repeats are allowed after gestureMinGapNs. Pitch (gx): down(+)->FOCUS_DOWN,
     // up(-)->FOCUS_UP. Yaw (gz): left(+)->previous tab, right(-)->next tab.
-    private val nodRateDps = 70f
+    private val nodRateDps = 50f
     private val turnRateDps = 80f
     private val rollRateDps = 80f
     private val gestureMinGapNs = 250_000_000L   // debounce: ignore the rest of one spike
