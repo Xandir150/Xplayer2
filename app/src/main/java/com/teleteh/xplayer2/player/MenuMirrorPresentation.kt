@@ -23,6 +23,8 @@ import android.widget.TextView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.google.android.material.imageview.ShapeableImageView
+import com.google.android.material.shape.CornerFamily
 import com.teleteh.xplayer2.R
 
 /**
@@ -168,9 +170,24 @@ class MenuMirrorPresentation(
         }
 
         row.iconRes?.let { res ->
-            rootRow.addView(ImageView(ctx).apply {
+            val s = dp(ctx, 32)
+            // VK / OK / Yandex Disk are square app-store icons — round their corners so they read as
+            // proper app icons. The other source glyphs (local/network/unknown) stay square.
+            val isAppIcon = res == R.drawable.ic_source_vk ||
+                res == R.drawable.ic_source_ok ||
+                res == R.drawable.ic_source_yadisk
+            val iconView = if (isAppIcon) {
+                ShapeableImageView(ctx).apply {
+                    shapeAppearanceModel = shapeAppearanceModel.toBuilder()
+                        .setAllCorners(CornerFamily.ROUNDED, s * 0.22f)
+                        .build()
+                }
+            } else {
+                ImageView(ctx)
+            }
+            rootRow.addView(iconView.apply {
                 setImageResource(res)
-                val s = dp(ctx, 32)
+                scaleType = ImageView.ScaleType.FIT_CENTER
                 layoutParams = LinearLayout.LayoutParams(s, s).apply { marginEnd = dp(ctx, 16) }
             })
         }

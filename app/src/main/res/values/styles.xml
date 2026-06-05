@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Rounds the square app-store source icons (VK / OK / Yandex Disk) into proper
+         app-icon shapes wherever they're shown. ~22% corner radius of the icon size. -->
+    <style name="ShapeAppearanceOverlay.XPlayer2.SourceIcon" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">22%</item>
+    </style>
+</resources>
