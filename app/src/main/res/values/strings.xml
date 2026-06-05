@@ -129,6 +129,7 @@
     <!-- Hughey VK 3D-films shortcut (Network tab) -->
     <string name="network_hughey">Hughey</string>
     <string name="network_hughey_added">Hughey source added</string>
+    <string name="youtube_enabled">YouTube enabled. Paste or share a YouTube link to play it. (Uses an unofficial extraction; may break when YouTube changes — for personal use.)</string>
     <string name="vk_club_empty">No videos found</string>
     <string name="vk_club_boosty">Hughey on Boosty</string>
     <string name="vk_club_search_hint">Search by title</string>

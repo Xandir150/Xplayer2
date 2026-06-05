@@ -136,6 +136,15 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
                 Toast.makeText(requireContext(), R.string.network_hughey_added, Toast.LENGTH_SHORT).show()
                 return
             }
+            if (raw.equals("youtube", ignoreCase = true)) {
+                // Magic word: enable YouTube link handling (off by default in the Play build; this is
+                // the user opting in at their own risk — YouTube extraction violates YouTube's ToS).
+                requireContext().getSharedPreferences("youtube", Context.MODE_PRIVATE)
+                    .edit().putBoolean("enabled", true).apply()
+                etUrl.setText("")
+                Toast.makeText(requireContext(), R.string.youtube_enabled, Toast.LENGTH_LONG).show()
+                return
+            }
             // Classify the link. Container types (VK playlist/group, Yandex Disk folder) are opened
             // in their browser AND remembered as a Sources row; single videos / direct links play as
             // before. (YaDisk folder-vs-file is settled inside YaDiskActivity — see EXTRA_REMEMBER_URL.)

@@ -49,6 +49,7 @@
     <string name="glasses_send_failed">Не удалось переключить режим очков</string>
     <string name="glasses_brand_unsupported">Смена режима очков требует проприетарного SDK %1$s, который не включён в поставку. Используйте физическое меню очков.</string>
     <string name="glasses_rayneo_manual">RayNeo Air переключает 2D/3D на самих очках: одновременно нажмите кнопку громкости (левая дужка) и кнопку яркости (правая дужка). При отключении 3D выключается автоматически.</string>
+    <string name="youtube_enabled">YouTube включён. Вставьте или поделитесь ссылкой YouTube — воспроизведём. (Неофициальное извлечение; может ломаться при изменениях YouTube — для личного использования.)</string>
     <string name="glasses_not_connected">Поддерживаемые XR-очки не обнаружены. Подключите очки (XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S) и разрешите доступ USB.</string>
 
     <!-- Lazy 3D -->

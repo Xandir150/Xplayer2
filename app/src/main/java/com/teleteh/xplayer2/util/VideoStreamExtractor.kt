@@ -34,30 +34,39 @@ object VideoStreamExtractor {
         // All selectable qualities, highest first. The primary [url] above always matches the
         // first/highest one. Empty when the source exposes only a single playable URL (the
         // quality picker is hidden unless this has ≥2 entries).
-        val variants: List<StreamVariant> = emptyList()
+        val variants: List<StreamVariant> = emptyList(),
+        // For sources that deliver video and audio as SEPARATE streams (YouTube adaptive formats):
+        // the audio URL to play alongside [url] (video) via a MergingMediaSource. Null = [url] is
+        // already a muxed/HLS stream that carries its own audio.
+        val audioUrl: String? = null,
+        // Extra HTTP headers some CDNs require for the stream requests (e.g. YouTube's client UA).
+        val headers: Map<String, String>? = null,
     )
 
     /**
      * Checks if the given URI is from a supported video hosting service.
      */
-    fun isSupported(uri: Uri): Boolean {
+    fun isSupported(uri: Uri, youtubeEnabled: Boolean = false): Boolean {
         val host = uri.host?.lowercase() ?: return false
         return host.contains("ok.ru") ||
                 host.contains("vkvideo.ru") ||
-                (host.contains("vk.com") && uri.path?.contains("video") == true)
+                (host.contains("vk.com") && uri.path?.contains("video") == true) ||
+                (youtubeEnabled && isYouTubeUrl(uri))
     }
 
     /**
      * Extracts the direct video stream URL from a supported hosting service.
-     * Returns null if extraction fails or the service is not supported.
+     * Returns null if extraction fails or the service is not supported. [youtubeEnabled] gates the
+     * YouTube path (off by default; flavour/setting-controlled — see BuildConfig.YOUTUBE_ENABLED_DEFAULT).
      */
-    suspend fun extract(uri: Uri): ExtractedStream? = withContext(Dispatchers.IO) {
+    suspend fun extract(uri: Uri, youtubeEnabled: Boolean = false): ExtractedStream? = withContext(Dispatchers.IO) {
         val host = uri.host?.lowercase() ?: return@withContext null
         try {
             val result = when {
                 host.contains("ok.ru") -> extractOkRu(uri)
                 host.contains("vkvideo.ru") -> extractVkVideo(uri)
                 host.contains("vk.com") && uri.path?.contains("video") == true -> extractVkVideo(uri)
+                youtubeEnabled && isYouTubeUrl(uri) -> extractYouTube(uri)
                 else -> null
             }
             if (result != null) {
@@ -70,6 +79,160 @@ object VideoStreamExtractor {
             Log.e(TAG, "Failed to extract stream from $uri", e)
             null
         }
+    }
+
+    // ----------------------------------------------------------------------------------------------
+    // YouTube — InnerTube `youtubei/v1/player` with the ANDROID_VR client. As of 2026 this is the one
+    // client that still returns classic adaptiveFormats with PLAIN, directly-playable `url` fields
+    // (no PO token, no signature/nsig deciphering) — IF the request carries a fresh `visitorData`
+    // session token (without it YouTube answers LOGIN_REQUIRED). Lightweight HTTP+JSON, exactly like
+    // the VK path. The client version is a moving target: bump [YT_CLIENT_VERSION] when YouTube breaks
+    // it (mirror yt-dlp's `android_vr` constants).
+    // ----------------------------------------------------------------------------------------------
+
+    private const val YT_CLIENT_VERSION = "1.65.10"
+    private val YT_UA =
+        "com.google.android.apps.youtube.vr.oculus/$YT_CLIENT_VERSION (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
+    private const val YT_DESKTOP_UA =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+    @Volatile private var ytVisitorData: String? = null
+
+    fun isYouTubeUrl(uri: Uri): Boolean {
+        val host = uri.host?.lowercase()?.removePrefix("www.")?.removePrefix("m.") ?: return false
+        return host == "youtube.com" || host == "youtu.be" || host == "youtube-nocookie.com" ||
+                host == "music.youtube.com"
+    }
+
+    /** Pull the 11-char video id out of any YouTube URL form (watch?v=, youtu.be/, shorts/embed/v/live/). */
+    fun extractYouTubeVideoId(uri: Uri): String? {
+        val host = uri.host?.lowercase()?.removePrefix("www.")?.removePrefix("m.") ?: return null
+        val id = if (host == "youtu.be") uri.lastPathSegment
+        else uri.getQueryParameter("v")
+            ?: Regex("/(?:shorts|embed|v|live)/([A-Za-z0-9_-]{11})").find(uri.path ?: "")?.groupValues?.getOrNull(1)
+        return id?.takeIf { Regex("[A-Za-z0-9_-]{11}").matches(it) }
+    }
+
+    /** Fetch + cache a visitorData session token from the YouTube homepage (required by ANDROID_VR). */
+    private fun fetchVisitorData(): String? {
+        ytVisitorData?.let { return it }
+        return try {
+            val conn = (URL("https://www.youtube.com/").openConnection() as HttpURLConnection).apply {
+                connectTimeout = 15000; readTimeout = 20000; instanceFollowRedirects = true
+                setRequestProperty("User-Agent", YT_DESKTOP_UA)
+                setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+            }
+            val html = conn.inputStream.bufferedReader().use { it.readText() }
+            conn.disconnect()
+            Regex("\"visitorData\":\"([^\"]+)\"").find(html)?.groupValues?.getOrNull(1)
+                ?.also { ytVisitorData = it }
+        } catch (e: Exception) {
+            Log.w(TAG, "YouTube visitorData fetch failed", e); null
+        }
+    }
+
+    private fun innertubePlayer(videoId: String, visitorData: String?): JSONObject? {
+        return try {
+            val client = JSONObject().apply {
+                put("clientName", "ANDROID_VR"); put("clientVersion", YT_CLIENT_VERSION)
+                put("deviceMake", "Oculus"); put("deviceModel", "Quest 3")
+                put("osName", "Android"); put("osVersion", "12L"); put("androidSdkVersion", 32)
+                put("hl", "en"); put("gl", "US"); put("userAgent", YT_UA)
+                if (!visitorData.isNullOrBlank()) put("visitorData", visitorData)
+            }
+            val body = JSONObject().apply {
+                put("videoId", videoId); put("contentCheckOk", true); put("racyCheckOk", true)
+                put("context", JSONObject().put("client", client))
+            }.toString()
+            val conn = (URL("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
+                .openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"; doOutput = true
+                connectTimeout = 15000; readTimeout = 20000
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("User-Agent", YT_UA)
+                setRequestProperty("X-YouTube-Client-Name", "28")
+                setRequestProperty("X-YouTube-Client-Version", YT_CLIENT_VERSION)
+                if (!visitorData.isNullOrBlank()) setRequestProperty("X-Goog-Visitor-Id", visitorData)
+            }
+            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val resp = stream?.bufferedReader()?.use { it.readText() }
+            conn.disconnect()
+            if (code in 200..299 && resp != null) JSONObject(resp)
+            else { Log.w(TAG, "InnerTube HTTP $code: ${resp?.take(160)}"); null }
+        } catch (e: Exception) {
+            Log.e(TAG, "InnerTube request failed", e); null
+        }
+    }
+
+    private suspend fun extractYouTube(uri: Uri): ExtractedStream? = withContext(Dispatchers.IO) {
+        val videoId = extractYouTubeVideoId(uri) ?: run { Log.w(TAG, "No YouTube videoId in $uri"); return@withContext null }
+        var json = innertubePlayer(videoId, fetchVisitorData())
+        // A stale visitorData yields LOGIN_REQUIRED — drop it and retry once with a fresh one.
+        if (json == null || json.optJSONObject("playabilityStatus")?.optString("status") != "OK") {
+            ytVisitorData = null
+            json = innertubePlayer(videoId, fetchVisitorData())
+        }
+        json ?: return@withContext null
+        val status = json.optJSONObject("playabilityStatus")?.optString("status")
+        if (status != "OK") { Log.w(TAG, "YouTube playabilityStatus=$status"); return@withContext null }
+        val sd = json.optJSONObject("streamingData") ?: return@withContext null
+        val title = json.optJSONObject("videoDetails")?.optString("title")?.takeIf { it.isNotBlank() }
+        val ytHeaders = mapOf("User-Agent" to YT_UA)
+
+        // Preferred: best separate video (≤1080p) + best audio → MergingMediaSource.
+        val (videoUrl, audioUrl) = pickYtAdaptive(sd.optJSONArray("adaptiveFormats"))
+        if (videoUrl != null && audioUrl != null) {
+            Log.i(TAG, "YouTube extracted (adaptive video+audio) title=$title")
+            return@withContext ExtractedStream(url = videoUrl, audioUrl = audioUrl, title = title,
+                quality = "auto", headers = ytHeaders)
+        }
+        // Fallback: muxed progressive (single URL with audio, ≤720p).
+        pickYtMuxed(sd.optJSONArray("formats"))?.let {
+            Log.i(TAG, "YouTube extracted (muxed) title=$title")
+            return@withContext ExtractedStream(url = it, title = title, headers = ytHeaders)
+        }
+        // Last resort: combined HLS manifest.
+        sd.optString("hlsManifestUrl").takeIf { it.isNotBlank() }?.let {
+            return@withContext ExtractedStream(url = it, title = title)
+        }
+        null
+    }
+
+    /** From adaptiveFormats: best video ≤1080p (prefer AVC for compat) + best audio (prefer AAC). */
+    private fun pickYtAdaptive(arr: JSONArray?): Pair<String?, String?> {
+        arr ?: return null to null
+        val videos = ArrayList<JSONObject>()
+        val audios = ArrayList<JSONObject>()
+        for (i in 0 until arr.length()) {
+            val f = arr.optJSONObject(i) ?: continue
+            if (!f.optString("url").startsWith("http")) continue
+            val mime = f.optString("mimeType")
+            when {
+                mime.startsWith("video/") -> if (f.optInt("height") in 1..1080) videos.add(f)
+                mime.startsWith("audio/") -> audios.add(f)
+            }
+        }
+        val video = videos.maxWithOrNull(
+            compareBy({ if (it.optString("mimeType").contains("avc1")) 1 else 0 },
+                { it.optInt("height") }, { it.optInt("bitrate") })
+        )
+        val audio = audios.maxWithOrNull(
+            compareBy({ if (it.optString("mimeType").contains("mp4a")) 1 else 0 }, { it.optInt("bitrate") })
+        )
+        return video?.optString("url")?.takeIf { it.isNotBlank() } to
+                audio?.optString("url")?.takeIf { it.isNotBlank() }
+    }
+
+    private fun pickYtMuxed(arr: JSONArray?): String? {
+        arr ?: return null
+        var best: JSONObject? = null
+        for (i in 0 until arr.length()) {
+            val f = arr.optJSONObject(i) ?: continue
+            if (!f.optString("url").startsWith("http")) continue
+            if (best == null || f.optInt("height") > best.optInt("height")) best = f
+        }
+        return best?.optString("url")?.takeIf { it.isNotBlank() }
     }
 
     /**

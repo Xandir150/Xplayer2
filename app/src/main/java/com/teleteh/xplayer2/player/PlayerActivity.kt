@@ -54,6 +54,9 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -76,6 +79,7 @@ import com.teleteh.xplayer2.data.depth.DepthFrameWorker
 import com.teleteh.xplayer2.data.depth.DepthModelManager
 import com.teleteh.xplayer2.data.glasses.GlassesController
 import com.teleteh.xplayer2.ui.util.DisplayUtils
+import com.teleteh.xplayer2.BuildConfig
 import com.teleteh.xplayer2.util.VideoStreamExtractor
 import com.teleteh.xplayer2.util.WebSourceClassifier
 import androidx.lifecycle.lifecycleScope
@@ -222,6 +226,10 @@ class PlayerActivity : AppCompatActivity() {
     }
     // Resolved stream URL (may differ from sourceUri for ok.ru, vkvideo, etc.)
     private var resolvedStreamUri: Uri? = null
+    // For YouTube (separate video+audio adaptive streams): the audio URL to merge with the video, and
+    // any extra request headers (the YouTube client UA) the stream CDN needs.
+    private var resolvedAudioUri: Uri? = null
+    private var extractedHeaders: Map<String, String>? = null
     private var extractedTitle: String? = null
     // Flag to prevent premature player initialization during stream extraction
     private var isExtractingStream: Boolean = false
@@ -423,7 +431,7 @@ class PlayerActivity : AppCompatActivity() {
         }
         recentKeyUri = intent?.getStringExtra(EXTRA_RECENT_URI)
             ?.let { runCatching { Uri.parse(it) }.getOrNull() }
-        android.util.Log.i("XPlayer2", "Source URI: $uri, host=${uri.host}, isSupported=${VideoStreamExtractor.isSupported(uri)}")
+        android.util.Log.i("XPlayer2", "Source URI: $uri, host=${uri.host}, isSupported=${VideoStreamExtractor.isSupported(uri, isYouTubeEnabled())}")
         val injectedLabels = intent?.getStringArrayExtra(EXTRA_STREAM_LABELS)
         val injectedUrls = intent?.getStringArrayExtra(EXTRA_STREAM_URLS)
         if (injectedUrls != null && injectedLabels != null &&
@@ -439,17 +447,19 @@ class PlayerActivity : AppCompatActivity() {
             updateCenterTitle()
             updateQualityButtonVisibility()
             RemoteControlActivity.currentInstance?.syncControls()
-        } else if (VideoStreamExtractor.isSupported(uri)) {
+        } else if (VideoStreamExtractor.isSupported(uri, isYouTubeEnabled())) {
             titleCenterView?.text = getString(R.string.loading_stream)
             android.util.Log.i("XPlayer2", "Starting stream extraction for: $uri")
             isExtractingStream = true
             lifecycleScope.launch {
                 try {
-                    val extracted = VideoStreamExtractor.extract(uri)
+                    val extracted = VideoStreamExtractor.extract(uri, isYouTubeEnabled())
                     isExtractingStream = false
                     if (extracted != null) {
                         android.util.Log.i("XPlayer2", "Stream extracted successfully: ${extracted.url}")
                         resolvedStreamUri = Uri.parse(extracted.url)
+                        resolvedAudioUri = extracted.audioUrl?.let { Uri.parse(it) }
+                        extractedHeaders = extracted.headers
                         extractedTitle = extracted.title
                         // Primary URL is always the highest variant; default selection = index 0.
                         streamVariants = extracted.variants
@@ -565,6 +575,15 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Whether YouTube link extraction is on. ON by default in the `full` (GitHub) build, OFF in the
+     * `play` (Google Play) build — the user opts in there at their own risk by typing the magic word
+     * "youtube" into the URL field (NetworkFragment persists the flag).
+     */
+    private fun isYouTubeEnabled(): Boolean =
+        getSharedPreferences("youtube", MODE_PRIVATE)
+            .getBoolean("enabled", BuildConfig.YOUTUBE_ENABLED_DEFAULT)
+
     private fun initializePlayer() {
         val uri = resolvedStreamUri ?: sourceUri ?: return
         android.util.Log.i("XPlayer2", "initializePlayer called with uri=$uri, player=${player != null}")
@@ -650,7 +669,22 @@ class PlayerActivity : AppCompatActivity() {
                     .setUri(uri)
                     .apply { meta?.let { setMediaMetadata(it) } }
                     .build()
-                exo.setMediaItem(mediaItem)
+                val audioUri = resolvedAudioUri
+                if (audioUri != null) {
+                    // YouTube adaptive: video and audio are SEPARATE streams — play them in parallel
+                    // via a MergingMediaSource. The googlevideo CDN wants the YouTube client UA on
+                    // every request, so build a DataSource factory carrying it.
+                    val ua = extractedHeaders?.get("User-Agent")
+                    val dsFactory = DefaultHttpDataSource.Factory()
+                        .setAllowCrossProtocolRedirects(true)
+                        .apply { if (!ua.isNullOrBlank()) setUserAgent(ua) }
+                    val videoSrc = ProgressiveMediaSource.Factory(dsFactory).createMediaSource(mediaItem)
+                    val audioSrc = ProgressiveMediaSource.Factory(dsFactory)
+                        .createMediaSource(MediaItem.fromUri(audioUri))
+                    exo.setMediaSource(MergingMediaSource(videoSrc, audioSrc))
+                } else {
+                    exo.setMediaItem(mediaItem)
+                }
 
                 // --- Diagnostics: FFmpeg availability ---
                 val ffmpegAvailable = try { FfmpegLibrary.isAvailable() } catch (_: Throwable) { false }

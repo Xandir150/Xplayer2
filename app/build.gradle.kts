@@ -53,8 +53,17 @@ android {
     // includes VITURE 2D/3D → for GitHub/sideload.
     flavorDimensions += "distribution"
     productFlavors {
-        create("play") { dimension = "distribution" }   // no VITURE  -> 16 KB compliant (Google Play)
-        create("full") { dimension = "distribution" }   // + VITURE One SDK (libsdk.so) (GitHub)
+        create("play") {
+            dimension = "distribution"   // no VITURE -> 16 KB compliant (Google Play)
+            // YouTube link extraction violates YouTube's ToS (Google Play polices it hard), so it's
+            // OFF by default in the Play build — the user can flip it on at their own risk by typing
+            // the magic word "youtube" into the URL field.
+            buildConfigField("boolean", "YOUTUBE_ENABLED_DEFAULT", "false")
+        }
+        create("full") {
+            dimension = "distribution"   // + VITURE One SDK (libsdk.so) (GitHub sideload)
+            buildConfigField("boolean", "YOUTUBE_ENABLED_DEFAULT", "true")
+        }
     }
 
     compileOptions {
@@ -72,6 +81,7 @@ android {
     }
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
     packaging {
         jniLibs {
