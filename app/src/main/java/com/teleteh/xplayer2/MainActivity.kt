@@ -633,8 +633,9 @@ class MainActivity : AppCompatActivity() {
         val connected = glasses.currentState() == GlassesController.ConnectionState.Connected &&
             glasses.supportsRemoteSwitch()
         if (connected) {
-            // VITURE is a plain 2D/3D toggle (no Hz), so drop the frequency for it.
-            tv.text = if (glasses.currentBrand() == GlassesController.Brand.VITURE)
+            // VITURE and RayNeo are plain 2D/3D toggles (no Hz variants), so drop the frequency.
+            val brand = glasses.currentBrand()
+            tv.text = if (brand == GlassesController.Brand.VITURE || brand == GlassesController.Brand.RAYNEO)
                 (if (GlassesProtocol.is3DMode(glasses.lastMode())) "3D" else "2D")
             else GlassesProtocol.shortModeName(glasses.lastMode())
             tv.visibility = View.VISIBLE
@@ -660,20 +661,25 @@ class MainActivity : AppCompatActivity() {
             GlassesController.ConnectionState.Connected -> Unit
         }
 
-        // Detected glasses, but their brand needs a closed-source SDK we don't bundle.
+        // Detected glasses we don't drive: RayNeo self-manages 2D/3D via the temple buttons (tell the
+        // user how); other brands would need a closed-source SDK we don't bundle.
         if (!glasses.supportsRemoteSwitch()) {
             val brand = glasses.currentBrand()?.name ?: "Glasses"
             val model = glasses.currentModel().orEmpty()
+            val message = if (glasses.currentBrand() == GlassesController.Brand.RAYNEO)
+                getString(R.string.glasses_rayneo_manual)
+            else getString(R.string.glasses_brand_unsupported, brand)
             AlertDialog.Builder(this)
                 .setTitle("$brand $model".trim())
-                .setMessage(getString(R.string.glasses_brand_unsupported, brand))
+                .setMessage(message)
                 .setPositiveButton(android.R.string.ok, null)
                 .show()
             return
         }
 
-        val items = if (glasses.currentBrand() == GlassesController.Brand.VITURE) {
-            // VITURE switches 2D/3D as a binary toggle (no Hz variants).
+        val brand = glasses.currentBrand()
+        val items = if (brand == GlassesController.Brand.VITURE || brand == GlassesController.Brand.RAYNEO) {
+            // VITURE and RayNeo switch 2D/3D as a binary toggle (no Hz variants).
             listOf(
                 GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60 to getString(R.string.glasses_mode_2d_plain),
                 GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_90_SBS to getString(R.string.glasses_mode_3d_plain),
@@ -700,6 +706,11 @@ class MainActivity : AppCompatActivity() {
                 val (mode, label) = items[which]
                 if (glasses.setDisplayMode(mode)) {
                     Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
+                } else if (glasses.currentBrand() == GlassesController.Brand.RAYNEO) {
+                    // The RayNeo USB toggle can be refused if Android doesn't surface the HID
+                    // interface while DP video is active — fall back to telling the user the
+                    // physical temple-button way, which always works.
+                    Toast.makeText(this, R.string.glasses_rayneo_manual, Toast.LENGTH_LONG).show()
                 } else {
                     Toast.makeText(this, R.string.glasses_send_failed, Toast.LENGTH_SHORT).show()
                 }

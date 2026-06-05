@@ -63,6 +63,7 @@
     <string name="glasses_needs_permission">USB permission required for glasses</string>
     <string name="glasses_send_failed">Failed to switch glasses mode</string>
     <string name="glasses_brand_unsupported">Switching glasses display mode requires the closed-source %1$s SDK, which is not bundled. Please use the glasses\' physical menu to change mode for now.</string>
+    <string name="glasses_rayneo_manual">RayNeo Air switches 2D/3D on the glasses themselves: press the Volume button (left temple) and the Brightness button (right temple) at the same time. 3D turns off automatically when you disconnect.</string>
     <string name="glasses_not_connected">No supported XR glasses detected on USB. Plug the goggles in (XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S) and grant USB permission when prompted.</string>
 
     <!-- Lazy 3D -->

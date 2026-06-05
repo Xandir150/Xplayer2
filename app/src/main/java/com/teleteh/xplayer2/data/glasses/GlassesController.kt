@@ -192,15 +192,26 @@ class GlassesController(private val appContext: Context) {
         else -> ConnectionState.Disconnected
     }
 
+    /** The matched table entry (brand/model/capabilities) for the attached glasses, or null. */
+    private fun currentMatched(): SupportedDevice? = (device ?: findAttachedGlasses())?.matchedDevice()
+
     /** Returns the brand of the currently attached glasses, or null if none. */
-    fun currentBrand(): Brand? = (device ?: findAttachedGlasses())?.matchedDevice()?.brand
+    fun currentBrand(): Brand? = currentMatched()?.brand
 
     /** Human-readable model string for the currently attached glasses, or null. */
-    fun currentModel(): String? = (device ?: findAttachedGlasses())?.matchedDevice()?.model
+    fun currentModel(): String? = currentMatched()?.model
 
-    /** True only for brands whose protocol/SDK we actually speak: XREAL (HID MCU) and VITURE (SDK). */
+    /** True only for a RayNeo model we have a verified USB 2D/3D toggle for (gated by VID/PID). */
+    private fun rayneoToggleCapable(): Boolean =
+        currentMatched()?.let { it.brand == Brand.RAYNEO && it.rayneoToggle } == true
+
+    /**
+     * True only for brands/models whose 2D/3D switching we can actually drive: XREAL (HID MCU),
+     * VITURE (SDK), and a RayNeo model with a verified HID toggle. Every other RayNeo (and Rokid)
+     * is detected but self-managed via its own buttons, so it returns false here.
+     */
     fun supportsRemoteSwitch(): Boolean =
-        currentBrand() == Brand.XREAL || currentBrand() == Brand.VITURE
+        currentBrand() == Brand.XREAL || currentBrand() == Brand.VITURE || rayneoToggleCapable()
 
     /**
      * Send a `Write display mode` MCU command to the connected glasses.
@@ -217,6 +228,8 @@ class GlassesController(private val appContext: Context) {
             Brand.XREAL -> sendMcuCommand(GlassesProtocol.MCU_MSG_W_DISP_MODE, byteArrayOf(mode.toByte()))
             // VITURE: SDK binary 2D/3D toggle — any SBS mode means "3D on".
             Brand.VITURE -> viture?.set3d(GlassesProtocol.is3DMode(mode)) ?: false
+            // RayNeo (verified models only): reverse-engineered HID 2D/3D toggle — any SBS mode = 3D.
+            Brand.RAYNEO -> sendRayneoDisplayMode(GlassesProtocol.is3DMode(mode))
             else -> false
         }
         if (ok) {
@@ -265,9 +278,20 @@ class GlassesController(private val appContext: Context) {
 
     private fun attachOrRequestPermission(dev: UsbDevice) {
         device = dev
-        if (dev.matchedDevice()?.brand == Brand.VITURE) {
+        val matched = dev.matchedDevice()
+        if (matched?.brand == Brand.VITURE) {
             // VITURE: the SDK owns the USB device + permission prompt — don't claim HID ourselves.
             startViture()
+            notifyState()
+            return
+        }
+        // RayNeo without a verified toggle: the glasses self-manage 2D/3D via the temple-button combo
+        // (Volume + Brightness together). Report "connected" so the UI can detect them and hint the
+        // user, but DON'T prompt for USB permission or claim HID for a device we won't drive — that
+        // would be a pointless permission dialog plus an interface grab we never use. (A toggle-capable
+        // RayNeo, e.g. the Air 3s Pro, falls through and opens so we can send the HID command.)
+        if (matched?.brand == Brand.RAYNEO && !matched.rayneoToggle) {
+            Log.i(TAG, "RayNeo ${matched.model} attached — passive (self-managed 3D via temple buttons)")
             notifyState()
             return
         }
@@ -489,6 +513,58 @@ class GlassesController(private val appContext: Context) {
         return false
     }
 
+    /**
+     * RayNeo Air HID display-mode toggle — verified models only (double-gated by [rayneoToggleCapable]
+     * so the frame can only ever reach a known RayNeo VID/PID, never another device).
+     *
+     * Sends one 64-byte HID output report — magic 0x66, command (0x06 = 3D SBS on / 0x07 = 2D),
+     * value 0, zero-padded, NO checksum — first as a HID SET_REPORT class request (bmRequestType
+     * 0x21, bRequest 0x09, wValue 0x0200 = Output report id 0), then, if that's refused, as an
+     * interrupt/bulk OUT write on the HID interface's OUT endpoint. Everything is wrapped so a
+     * misbehaving or unexpected device can only ever make this return false, never throw/crash.
+     * Protocol: verncat/RayNeo-Air-3S-Pro-OpenVR (MIT), cross-checked against RayNeo's FXR headers.
+     */
+    private fun sendRayneoDisplayMode(on: Boolean): Boolean {
+        if (!rayneoToggleCapable()) return false
+        val conn = connection ?: return false
+        val dev = device ?: return false
+        return try {
+            val frame = ByteArray(GlassesProtocol.RAYNEO_FRAME_SIZE)
+            frame[0] = GlassesProtocol.RAYNEO_SEND_MAGIC
+            frame[1] = if (on) GlassesProtocol.RAYNEO_CMD_DISPLAY_3D else GlassesProtocol.RAYNEO_CMD_DISPLAY_2D
+            // frame[2] (value) and the remaining 61 bytes stay 0.
+            val hid = (0 until dev.interfaceCount)
+                .map { dev.getInterface(it) }
+                .firstOrNull { it.interfaceClass == UsbConstants.USB_CLASS_HID }
+            if (hid == null) {
+                Log.w(TAG, "RayNeo: no HID interface to send display toggle")
+                return false
+            }
+            // 1) HID SET_REPORT (Output report, id 0) on the HID interface.
+            val rc = conn.controlTransfer(0x21, 0x09, 0x0200, hid.id, frame, frame.size, 500)
+            if (rc == frame.size) {
+                Log.i(TAG, "RayNeo display ${if (on) "3D" else "2D"} via SET_REPORT (iface ${hid.id})")
+                return true
+            }
+            // 2) Fallback: interrupt/bulk OUT on the HID interface's OUT endpoint.
+            for (j in 0 until hid.endpointCount) {
+                val ep = hid.getEndpoint(j)
+                if (ep.direction == UsbConstants.USB_DIR_OUT) {
+                    val sent = conn.bulkTransfer(ep, frame, frame.size, 500)
+                    if (sent == frame.size) {
+                        Log.i(TAG, "RayNeo display ${if (on) "3D" else "2D"} via OUT endpoint")
+                        return true
+                    }
+                }
+            }
+            Log.w(TAG, "RayNeo display toggle: SET_REPORT rc=$rc and no OUT endpoint accepted it")
+            false
+        } catch (t: Throwable) {
+            Log.w(TAG, "RayNeo display toggle threw — ignored", t)
+            false
+        }
+    }
+
     private fun notifyState() {
         listener?.onChanged(currentState(), lastReportedMode)
     }
@@ -504,7 +580,17 @@ class GlassesController(private val appContext: Context) {
         else
             @Suppress("DEPRECATION") getParcelableExtra(UsbManager.EXTRA_DEVICE)
 
-    private data class SupportedDevice(val vid: Int, val pid: Int, val brand: Brand, val model: String)
+    // [rayneoToggle] = we have a verified per-model USB HID command to flip this RayNeo's 2D/3D
+    // (see [sendRayneoDisplayMode]). Only models we've actually confirmed get it; every other RayNeo
+    // stays passive (detect + hint, user uses the temple-button combo) so we never poke an unverified
+    // device with a command that might mean something else on its firmware.
+    private data class SupportedDevice(
+        val vid: Int,
+        val pid: Int,
+        val brand: Brand,
+        val model: String,
+        val rayneoToggle: Boolean = false,
+    )
 
     companion object {
         private const val TAG = "GlassesController"
@@ -545,8 +631,13 @@ class GlassesController(private val appContext: Context) {
             SupportedDevice(0x35ca, 0x1151, Brand.VITURE, "Luma Cyber"),
             SupportedDevice(0x35ca, 0x1201, Brand.VITURE, "Beast"),
 
-            // TCL / RayNeo — detection only. Switching requires the closed RayNeo SDK.
-            SupportedDevice(0x1bbb, 0xaf50, Brand.RAYNEO, "NXTWEAR / Air series"),
+            // TCL / RayNeo Air series — USB-C DisplayPort glasses that self-manage 2D/3D via a
+            // physical temple-button combo (Volume + Brightness together). No vendor Android SDK
+            // exists for them, so there's no .so and no Play 16 KB concern. The Air 3s Pro additionally
+            // accepts a reverse-engineered HID display-mode toggle (verncat/RayNeo-Air-3S-Pro-OpenVR,
+            // MIT) which we drive from [sendRayneoDisplayMode] — flagged per-PID so it's the ONLY
+            // RayNeo we ever send that command to. Other RayNeo PIDs stay passive (detect + hint).
+            SupportedDevice(0x1bbb, 0xaf50, Brand.RAYNEO, "Air 3s Pro", rayneoToggle = true),
 
             // Rokid — detection only. Switching requires the closed Rokid SDK.
             // (Rokid VID is published as the literal "ROKID_GLASS_VID" macro in the upstream driver;

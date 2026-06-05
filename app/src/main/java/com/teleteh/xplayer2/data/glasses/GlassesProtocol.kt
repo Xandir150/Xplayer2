@@ -40,7 +40,19 @@ object GlassesProtocol {
     const val MCU_DISPLAY_MODE_3840x1080_90_SBS = 0x09
     const val MCU_DISPLAY_MODE_1920x1080_90 = 0x0A
     const val MCU_DISPLAY_MODE_1920x1080_120 = 0x0B
-    
+
+    // --- RayNeo Air HID protocol ---
+    // Reverse-engineered from the MIT-licensed verncat/RayNeo-Air-3S-Pro-OpenVR (which in turn
+    // carries FFALCON/RayNeo's own "FXR" SDK headers). The display 2D/3D toggle is a single 64-byte
+    // HID output report with NO checksum: byte0 = magic 0x66, byte1 = command, byte2 = value, rest 0.
+    // Sent as a HID SET_REPORT (Output report, id 0) over the glasses' HID interface — see
+    // GlassesController.sendRayneoDisplayMode. Verified only on the Air 3s Pro (0x1bbb:0xaf50), so the
+    // send path is gated to that exact VID/PID and never reaches any other device.
+    const val RAYNEO_FRAME_SIZE = 64
+    const val RAYNEO_SEND_MAGIC = 0x66.toByte()     // FXR_HID_SEND_MAGIC
+    const val RAYNEO_CMD_DISPLAY_3D = 0x06.toByte() // kCmdDisplay3dMode → 3D SBS on
+    const val RAYNEO_CMD_DISPLAY_2D = 0x07.toByte() // kCmdDisplay2dMode → 2D
+
     // CRC32 table (полная таблица 256 элементов)
     private val CRC32_TABLE = intArrayOf(
         0x00000000.toInt(), 0x77073096.toInt(), 0xEE0E612C.toInt(), 0x990951BA.toInt(),

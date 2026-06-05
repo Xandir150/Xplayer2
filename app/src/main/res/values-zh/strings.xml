@@ -48,6 +48,7 @@
     <string name="glasses_needs_permission">眼镜需要USB权限</string>
     <string name="glasses_send_failed">切换眼镜模式失败</string>
     <string name="glasses_brand_unsupported">切换眼镜显示模式需要 %1$s 的闭源SDK，该SDK未包含在应用中。请使用眼镜的物理菜单更改模式。</string>
+    <string name="glasses_rayneo_manual">RayNeo Air 在眼镜上切换 2D/3D：同时按下音量键（左镜腿）和亮度键（右镜腿）。断开连接后 3D 会自动关闭。</string>
     <string name="glasses_not_connected">未在USB上检测到支持的XR眼镜。请连接眼镜（XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S）并授予USB权限。</string>
 
     <!-- Lazy 3D -->
