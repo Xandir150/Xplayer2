@@ -187,6 +187,10 @@ class GlassesController(private val appContext: Context) {
             device != null -> ConnectionState.NeedsPermission
             else -> ConnectionState.Disconnected
         }
+        // RayNeo is detected but self-managed: we open it lazily (only when the user switches mode
+        // from the picker), so "present" counts as Connected — we never sit in NeedsPermission and
+        // nag, and we never auto-prompt on attach.
+        currentBrand() == Brand.RAYNEO -> ConnectionState.Connected
         connection != null -> ConnectionState.Connected
         device != null -> ConnectionState.NeedsPermission
         else -> ConnectionState.Disconnected
@@ -229,7 +233,9 @@ class GlassesController(private val appContext: Context) {
             // VITURE: SDK binary 2D/3D toggle — any SBS mode means "3D on".
             Brand.VITURE -> viture?.set3d(GlassesProtocol.is3DMode(mode)) ?: false
             // RayNeo (verified models only): reverse-engineered HID 2D/3D toggle — any SBS mode = 3D.
-            Brand.RAYNEO -> sendRayneoDisplayMode(GlassesProtocol.is3DMode(mode))
+            // Only send once we've actually opened the device (via requestRayneoControl from the picker);
+            // automatic re-applies while still passive are a no-op so they never trigger a USB prompt.
+            Brand.RAYNEO -> if (connection != null) sendRayneoDisplayMode(GlassesProtocol.is3DMode(mode)) else false
             else -> false
         }
         if (ok) {
@@ -285,30 +291,51 @@ class GlassesController(private val appContext: Context) {
             notifyState()
             return
         }
-        // RayNeo without a verified toggle: the glasses self-manage 2D/3D via the temple-button combo
-        // (Volume + Brightness together). Report "connected" so the UI can detect them and hint the
-        // user, but DON'T prompt for USB permission or claim HID for a device we won't drive — that
-        // would be a pointless permission dialog plus an interface grab we never use. (A toggle-capable
-        // RayNeo, e.g. the Air 3s Pro, falls through and opens so we can send the HID command.)
-        if (matched?.brand == Brand.RAYNEO && !matched.rayneoToggle) {
-            Log.i(TAG, "RayNeo ${matched.model} attached — passive (self-managed 3D via temple buttons)")
+        // RayNeo (any model): stay fully passive on attach. The glasses self-manage 2D/3D via the
+        // temple-button combo (Volume + Brightness together); we never auto-launch (it's dropped from
+        // the manifest USB filter) and we never auto-prompt for USB permission here. We just record the
+        // device so the UI shows it as connected. A toggle-capable model (Air 3s Pro) opens lazily —
+        // permission is requested only when the user actually switches mode (see [requestRayneoControl]).
+        if (matched?.brand == Brand.RAYNEO) {
+            Log.i(TAG, "RayNeo ${matched.model} attached — passive (no auto permission; opens lazily on mode switch)")
             notifyState()
             return
         }
         if (usbManager.hasPermission(dev)) {
             openDevice(dev)
         } else {
-            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            else PendingIntent.FLAG_UPDATE_CURRENT
-            val pi = PendingIntent.getBroadcast(
-                appContext, 0,
-                Intent(permissionAction).setPackage(appContext.packageName),
-                flags
-            )
-            usbManager.requestPermission(dev, pi)
-            notifyState()
+            requestUsbPermission(dev)
         }
+    }
+
+    /** Fire the system USB-permission prompt for [dev]; the grant comes back to [receiver]. */
+    private fun requestUsbPermission(dev: UsbDevice) {
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        else PendingIntent.FLAG_UPDATE_CURRENT
+        val pi = PendingIntent.getBroadcast(
+            appContext, 0,
+            Intent(permissionAction).setPackage(appContext.packageName),
+            flags
+        )
+        usbManager.requestPermission(dev, pi)
+        notifyState()
+    }
+
+    /**
+     * Lazily bring up control of a toggle-capable RayNeo (Air 3s Pro) the first time the user picks a
+     * 2D/3D mode in the glasses menu. Persists the chosen [mode] and opens the device (requesting USB
+     * permission if needed); the open path re-applies the saved mode, so the HID command is sent once
+     * access is granted. No-op (false) for any RayNeo we don't have a verified toggle for. This is the
+     * ONLY place RayNeo asks for USB permission — never on attach — so plugging the glasses in is silent.
+     */
+    fun requestRayneoControl(mode: Int): Boolean {
+        if (!rayneoToggleCapable()) return false
+        val dev = device ?: findAttachedGlasses() ?: return false
+        prefs.edit().putInt(KEY_DISPLAY_MODE, mode).apply()
+        lastReportedMode = mode
+        if (usbManager.hasPermission(dev)) openDevice(dev) else requestUsbPermission(dev)
+        return true
     }
 
     private fun openDevice(dev: UsbDevice) {

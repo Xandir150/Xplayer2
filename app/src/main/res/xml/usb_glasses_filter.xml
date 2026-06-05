@@ -33,6 +33,9 @@
     <usb-device vendor-id="13770" product-id="4433" />  <!-- 0x1151 Luma Cyber -->
     <usb-device vendor-id="13770" product-id="4609" />  <!-- 0x1201 Beast -->
 
-    <!-- TCL / RayNeo: VID 0x1bbb (decimal 7099) -->
-    <usb-device vendor-id="7099" product-id="44880" />  <!-- 0xaf50 NXTWEAR/Air series -->
+    <!-- RayNeo (TCL): intentionally NOT listed here. We don't want Android to auto-launch XPlayer2
+         or show the "open app / always open for this device" association dialog when RayNeo glasses
+         are plugged in. RayNeo is still detected at runtime (GlassesController's broadcast receiver +
+         deviceList) while the app is open, and the Air 3s Pro requests USB access lazily — only when
+         the user actually switches 2D/3D from the glasses menu. -->
 </resources>

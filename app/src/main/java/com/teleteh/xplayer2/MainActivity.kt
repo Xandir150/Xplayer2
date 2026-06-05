@@ -706,10 +706,15 @@ class MainActivity : AppCompatActivity() {
                 val (mode, label) = items[which]
                 if (glasses.setDisplayMode(mode)) {
                     Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
+                } else if (glasses.currentBrand() == GlassesController.Brand.RAYNEO &&
+                    glasses.requestRayneoControl(mode)) {
+                    // RayNeo opens lazily: this is the first switch, so we ask for USB access now and
+                    // the chosen mode is applied once it's granted. (Plugging the glasses in stays
+                    // silent — no auto-prompt — by design.)
+                    Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
                 } else if (glasses.currentBrand() == GlassesController.Brand.RAYNEO) {
-                    // The RayNeo USB toggle can be refused if Android doesn't surface the HID
-                    // interface while DP video is active — fall back to telling the user the
-                    // physical temple-button way, which always works.
+                    // USB toggle unavailable (e.g. Android won't surface the HID interface while DP
+                    // video is active) — fall back to the physical temple-button way, which always works.
                     Toast.makeText(this, R.string.glasses_rayneo_manual, Toast.LENGTH_LONG).show()
                 } else {
                     Toast.makeText(this, R.string.glasses_send_failed, Toast.LENGTH_SHORT).show()
