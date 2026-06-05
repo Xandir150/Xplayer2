@@ -66,6 +66,7 @@
                 android:textAllCaps="false"
                 android:focusable="true"
                 app:icon="@drawable/ic_source_vk"
+                app:iconSize="24dp"
                 app:iconGravity="textStart"
                 app:iconTint="@null" />
         </LinearLayout>
