@@ -291,14 +291,20 @@ class GlassesController(private val appContext: Context) {
             notifyState()
             return
         }
-        // RayNeo (any model): stay fully passive on attach. The glasses self-manage 2D/3D via the
-        // temple-button combo (Volume + Brightness together); we never auto-launch (it's dropped from
-        // the manifest USB filter) and we never auto-prompt for USB permission here. We just record the
-        // device so the UI shows it as connected. A toggle-capable model (Air 3s Pro) opens lazily —
-        // permission is requested only when the user actually switches mode (see [requestRayneoControl]).
+        // RayNeo: never PROMPT for USB on attach (the glasses self-manage 2D/3D via the temple-button
+        // combo, and they're dropped from the manifest USB filter so plugging in stays silent). BUT the
+        // panel reverts to 2D on every disconnect, so if the user already granted USB access earlier for
+        // a toggle-capable model (Air 3s Pro), silently re-open and re-assert their saved 2D/3D mode on
+        // reconnect — no new prompt. Without an existing grant we stay fully passive and open lazily only
+        // when the user actually picks a mode (see [requestRayneoControl]).
         if (matched?.brand == Brand.RAYNEO) {
-            Log.i(TAG, "RayNeo ${matched.model} attached — passive (no auto permission; opens lazily on mode switch)")
-            notifyState()
+            if (matched.rayneoToggle && usbManager.hasPermission(dev)) {
+                Log.i(TAG, "RayNeo ${matched.model} reattached with USB permission — re-asserting saved mode")
+                openDevice(dev)
+            } else {
+                Log.i(TAG, "RayNeo ${matched.model} attached — passive (no auto permission; opens lazily on mode switch)")
+                notifyState()
+            }
             return
         }
         if (usbManager.hasPermission(dev)) {
