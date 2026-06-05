@@ -244,6 +244,17 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
 
     }
 
+    override fun onResume() {
+        super.onResume()
+        // A web source (YaDisk folder, VK playlist/group) can be saved while we're away — notably
+        // YaDiskActivity persists a folder only AFTER it confirms the listing, i.e. after we've
+        // already returned from tryOpen(). Rebuild on return so the new row shows up. Skip while
+        // browsing a DLNA device so we don't drop out of that view.
+        if (currentDlnaControlUrl == null) {
+            rebuildInitialList()
+        }
+    }
+
     override fun onStop() {
         super.onStop()
         releaseMulticast()
