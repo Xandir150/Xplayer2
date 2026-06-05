@@ -55,6 +55,7 @@ object YaDiskApi {
         val filePublicKey: String?,     // single-file resource's public_key (for quality streams)
         val filePath: String?,          // single-file resource's path ("/" typically)
         val entries: List<Entry>,       // folder contents when !isFile (dirs first, then videos)
+        val folderName: String? = null, // the folder's own display name on Yandex Disk (when !isFile)
     )
 
     fun isYaDiskUrl(uri: Uri?): Boolean {
@@ -155,7 +156,12 @@ object YaDiskApi {
             if (offset >= total) break
             page = httpGetJson("$base&offset=$offset")
         }
-        Listing(isFile = false, fileName = null, fileDirectUrl = null, filePublicKey = null, filePath = null, entries = out)
+        Listing(
+            isFile = false, fileName = null, fileDirectUrl = null, filePublicKey = null,
+            filePath = null, entries = out,
+            // The browsed resource's own name = the folder's display name on Yandex Disk.
+            folderName = root.optString("name").takeIf { it.isNotBlank() },
+        )
     }
 
     /**

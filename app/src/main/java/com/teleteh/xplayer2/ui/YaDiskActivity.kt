@@ -104,7 +104,10 @@ class YaDiskActivity : AppCompatActivity() {
             // next time. Only the original public link is remembered (EXTRA_REMEMBER_URL is set on
             // the first open, not on subfolder drill-ins), so single-file links never get saved.
             rememberUrl?.let {
+                // Name the saved source after the actual Yandex Disk folder when the API gives us one;
+                // fall back to an explicit intent title, then the generic "Yandex Disk".
                 val title = intent.getStringExtra(EXTRA_TITLE)?.takeIf { t -> t.isNotBlank() }
+                    ?: listing.folderName?.takeIf { t -> t.isNotBlank() }
                     ?: getString(R.string.yadisk_title)
                 WebSourceStore(this@YaDiskActivity)
                     .addOrUpdate(WebSourceType.YADISK_FOLDER, title, it)
