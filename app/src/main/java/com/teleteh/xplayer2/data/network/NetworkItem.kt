@@ -31,4 +31,18 @@ sealed class NetworkItem {
         val deviceLocation: String,
         val controlUrl: String
     ) : NetworkItem()
+
+    /**
+     * A remembered network container (a folder or a video list — never a single video). Persisted
+     * by [WebSourceStore] and shown as a tappable row in the Sources tab so it's there next time.
+     * [url] is the original link the user opened/shared; routing is by [type].
+     */
+    data class WebSource(
+        val type: WebSourceType,
+        val title: String,
+        val url: String
+    ) : NetworkItem()
 }
+
+/** The kinds of container we remember. Single videos are NOT remembered (Recent covers those). */
+enum class WebSourceType { YADISK_FOLDER, VK_PLAYLIST, VK_GROUP }

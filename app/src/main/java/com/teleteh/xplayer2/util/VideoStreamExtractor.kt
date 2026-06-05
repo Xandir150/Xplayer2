@@ -670,6 +670,51 @@ object VideoStreamExtractor {
         out
     }
 
+    /**
+     * List the videos of a VK playlist (album) via al_video.php `load_videos_silent`. Identical to
+     * [listOwnerVideos] except it targets a `playlist_<id>` section, so the envelope key is
+     * "playlist_$playlistId" instead of "all". [ownerId] and [playlistId] may both be negative,
+     * e.g. owner -225720479, playlist -4 (from `/playlist/-225720479_-4`).
+     */
+    suspend fun listPlaylistVideos(
+        ownerId: String,
+        playlistId: String,
+        titleContains: String? = null,
+    ): List<VkVideoItem> = withContext(Dispatchers.IO) {
+        val needle = titleContains?.lowercase()
+        val section = "playlist_$playlistId"
+        val json = postAlVideo("act=load_videos_silent&al=1&offset=0&oid=$ownerId&section=$section")
+            ?: return@withContext emptyList()
+        val all = json.optJSONArray("payload")?.optJSONArray(1)
+            ?.optJSONObject(0)?.optJSONObject(section)
+            ?: return@withContext emptyList()
+        val list = all.optJSONArray("list") ?: return@withContext emptyList()
+        val seen = HashSet<String>()
+        val out = mutableListOf<VkVideoItem>()
+        for (i in 0 until list.length()) {
+            val v = list.optJSONArray(i) ?: continue
+            val oid = v.optLong(0)
+            val vid = v.optLong(1)
+            if (oid == 0L || vid == 0L) continue
+            val key = "${oid}_$vid"
+            if (!seen.add(key)) continue   // de-dupe: VK can repeat ids within the window
+            val title = v.optString(3).trim()
+            if (needle != null && !title.lowercase().contains(needle)) continue
+            // No thumbnail => removed/unavailable video; skip so the list only shows what will play.
+            val thumb = v.optString(2).takeIf { it.startsWith("http") } ?: continue
+            out.add(
+                VkVideoItem(
+                    url = "https://vkvideo.ru/video$key",
+                    title = title.ifBlank { "video$key" },
+                    thumbnailUrl = thumb,
+                    duration = v.optString(5).takeIf { it.isNotBlank() },
+                )
+            )
+        }
+        Log.i(TAG, "listPlaylistVideos(oid=$ownerId, pl=$playlistId) -> ${out.size} of ${all.optInt("total")}")
+        out
+    }
+
     private fun extractOkRuVideoId(uri: Uri): String? {
         // https://m.ok.ru/video/88843291236 or https://ok.ru/video/88843291236
         val path = uri.path ?: return null
