@@ -258,6 +258,22 @@ class OuToSbsGlView @JvmOverloads constructor(
         private var l3dDivergenceLoc = 0
         private var l3dConvergenceLoc = 0
         private var l3dEyeSignLoc = 0
+        private var l3dDepthTexelLoc = 0
+
+        // Depth-refine pass: a joint-bilateral + asymmetric smooth of the raw depth, using the
+        // low-res source snapshot (readbackTextureId) as an edge guide. Snaps fuzzy MiDaS depth edges
+        // onto real image edges (kills warp halos) and smooths more vertically than horizontally (so
+        // depth discontinuities bend instead of tear). Output feeds the warp instead of the raw depth.
+        private var bilateralProgram = 0
+        private var blPosLoc = 0
+        private var blTexLoc = 0
+        private var blDepthLoc = 0
+        private var blGuideLoc = 0
+        private var blTexelLoc = 0
+        private var procDepthTex: Int = 0
+        private var procDepthFbo: Int = 0
+        private var procW: Int = 0
+        private var procH: Int = 0
 
         // Single-channel depth texture (re-uploaded each new inference, default 256x256).
         private var depthTextureId: Int = 0
@@ -298,6 +314,13 @@ class OuToSbsGlView @JvmOverloads constructor(
         )
 
         override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+            // The EGL context was (re)created — every GL object id from any previous context is now
+            // invalid. Programs/textures below are rebuilt explicitly; zero the LAZILY-created depth
+            // ids so they get reallocated on next use instead of a stale id surviving a pause/resume
+            // (which would make the size-unchanged fast-paths render to dead handles).
+            depthTextureId = 0; depthTexWidth = 0; depthTexHeight = 0
+            procDepthTex = 0; procDepthFbo = 0; procW = 0; procH = 0
+
             program = buildProgram(VERT, FRAG)
             aPosLoc = GLES20.glGetAttribLocation(program, "aPosition")
             aTexLoc = GLES20.glGetAttribLocation(program, "aTexCoord")
@@ -316,6 +339,15 @@ class OuToSbsGlView @JvmOverloads constructor(
             l3dDivergenceLoc = GLES20.glGetUniformLocation(lazy3dProgram, "uDivergence")
             l3dConvergenceLoc = GLES20.glGetUniformLocation(lazy3dProgram, "uConvergence")
             l3dEyeSignLoc = GLES20.glGetUniformLocation(lazy3dProgram, "uEyeSign")
+            l3dDepthTexelLoc = GLES20.glGetUniformLocation(lazy3dProgram, "uDepthTexel")
+
+            // Depth-refine (joint-bilateral) program — runs at depth resolution into an off-screen FBO.
+            bilateralProgram = buildProgram(VERT, FRAG_DEPTH_REFINE)
+            blPosLoc = GLES20.glGetAttribLocation(bilateralProgram, "aPosition")
+            blTexLoc = GLES20.glGetAttribLocation(bilateralProgram, "aTexCoord")
+            blDepthLoc = GLES20.glGetUniformLocation(bilateralProgram, "uDepth")
+            blGuideLoc = GLES20.glGetUniformLocation(bilateralProgram, "uGuide")
+            blTexelLoc = GLES20.glGetUniformLocation(bilateralProgram, "uTexel")
 
             // Dither amplitude = one framebuffer LSB. Set once per program (uniform state persists).
             val ditherAmp = if (fbBitsPerChannel >= 10) 1f / 1023f else 1f / 255f
@@ -386,12 +418,13 @@ class OuToSbsGlView @JvmOverloads constructor(
             pendingDepthHeight = h
         }
 
-        private fun consumePendingDepth() {
-            val bytes = pendingDepthBytes ?: return
+        /** Uploads any pending depth map to [depthTextureId]; returns true iff a new map was uploaded. */
+        private fun consumePendingDepth(): Boolean {
+            val bytes = pendingDepthBytes ?: return false
             val w = pendingDepthWidth
             val h = pendingDepthHeight
             pendingDepthBytes = null
-            if (w <= 0 || h <= 0 || bytes.size < w * h) return
+            if (w <= 0 || h <= 0 || bytes.size < w * h) return false
 
             if (depthTextureId == 0 || w != depthTexWidth || h != depthTexHeight) {
                 if (depthTextureId != 0) {
@@ -418,6 +451,86 @@ class OuToSbsGlView @JvmOverloads constructor(
                     GLES20.GL_LUMINANCE, GLES20.GL_UNSIGNED_BYTE, ByteBuffer.wrap(bytes)
                 )
             }
+            return true
+        }
+
+        /** (Re)allocate the depth-refine FBO + its RGBA8 colour texture at [w]x[h]. */
+        private fun ensureProcDepth(w: Int, h: Int) {
+            if (procDepthFbo != 0 && procW == w && procH == h) return
+            if (procDepthTex != 0) { GLES20.glDeleteTextures(1, intArrayOf(procDepthTex), 0); procDepthTex = 0 }
+            if (procDepthFbo != 0) { GLES20.glDeleteFramebuffers(1, intArrayOf(procDepthFbo), 0); procDepthFbo = 0 }
+            val t = IntArray(1)
+            GLES20.glGenTextures(1, t, 0)
+            procDepthTex = t[0]
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, procDepthTex)
+            // RGBA8 (LUMINANCE isn't colour-renderable as an FBO attachment); we read/write .r only.
+            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, w, h, 0,
+                GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+            val f = IntArray(1)
+            GLES20.glGenFramebuffers(1, f, 0)
+            procDepthFbo = f[0]
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, procDepthFbo)
+            GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0,
+                GLES20.GL_TEXTURE_2D, procDepthTex, 0)
+            val status = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER)
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+            if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
+                android.util.Log.w("OuToSbsGlView", "Depth-refine FBO incomplete: 0x${status.toString(16)} — using raw depth")
+                GLES20.glDeleteTextures(1, intArrayOf(procDepthTex), 0); procDepthTex = 0
+                GLES20.glDeleteFramebuffers(1, intArrayOf(procDepthFbo), 0); procDepthFbo = 0
+                procW = 0; procH = 0
+                return
+            }
+            procW = w; procH = h
+        }
+
+        /**
+         * Joint-bilateral + asymmetric smooth of the freshly-uploaded raw depth into [procDepthTex],
+         * guided by the low-res source snapshot. Run only when a new depth map arrived. Self-contained:
+         * binds its own FBO/program/textures and restores the viewport + default texture unit after.
+         */
+        private fun refineDepth() {
+            if (bilateralProgram == 0 || depthTextureId == 0 || readbackTextureId == 0) return
+            if (depthTexWidth <= 0 || depthTexHeight <= 0) return
+            ensureProcDepth(depthTexWidth, depthTexHeight)
+            if (procDepthFbo == 0) return
+
+            val savedViewport = IntArray(4)
+            GLES20.glGetIntegerv(GLES20.GL_VIEWPORT, savedViewport, 0)
+            val savedProgram = IntArray(1)
+            GLES20.glGetIntegerv(GLES20.GL_CURRENT_PROGRAM, savedProgram, 0)
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, procDepthFbo)
+            GLES20.glViewport(0, 0, procW, procH)
+            GLES20.glUseProgram(bilateralProgram)
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, depthTextureId)
+            GLES20.glUniform1i(blDepthLoc, 0)
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, readbackTextureId)
+            GLES20.glUniform1i(blGuideLoc, 1)
+            GLES20.glUniform2f(blTexelLoc, 1f / procW, 1f / procH)
+            vertexData.position(0)
+            GLES20.glEnableVertexAttribArray(blPosLoc)
+            GLES20.glVertexAttribPointer(blPosLoc, 2, GLES20.GL_FLOAT, false, 16, vertexData)
+            vertexData.position(2)
+            GLES20.glEnableVertexAttribArray(blTexLoc)
+            GLES20.glVertexAttribPointer(blTexLoc, 2, GLES20.GL_FLOAT, false, 16, vertexData)
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+            // Leave GL state exactly as we found it so the visible draw is never affected
+            // (truly self-contained): disable our attrib arrays, unbind both 2D units, restore the
+            // framebuffer, viewport and program.
+            GLES20.glDisableVertexAttribArray(blPosLoc)
+            GLES20.glDisableVertexAttribArray(blTexLoc)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)        // unit 1 (currently active)
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0)        // unit 0
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+            GLES20.glViewport(savedViewport[0], savedViewport[1], savedViewport[2], savedViewport[3])
+            GLES20.glUseProgram(savedProgram[0])
         }
 
         /**
@@ -504,11 +617,14 @@ class OuToSbsGlView @JvmOverloads constructor(
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
             GLES20.glUniform1i(l3dSourceLoc, 0)
             GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, depthTextureId)
+            // Prefer the joint-bilateral-refined depth; fall back to the raw upload until it exists.
+            val depthTex = if (procDepthTex != 0) procDepthTex else depthTextureId
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, depthTex)
             GLES20.glUniform1i(l3dDepthLoc, 1)
             GLES20.glUniformMatrix4fv(l3dTexMatrixLoc, 1, false, texMatrix, 0)
             GLES20.glUniform1f(l3dDivergenceLoc, stereoDivergence)
             GLES20.glUniform1f(l3dConvergenceLoc, stereoConvergence)
+            GLES20.glUniform2f(l3dDepthTexelLoc, 1f / maxOf(depthTexWidth, 1), 1f / maxOf(depthTexHeight, 1))
 
             vertexData.position(0)
             GLES20.glEnableVertexAttribArray(l3dPosLoc)
@@ -549,8 +665,13 @@ class OuToSbsGlView @JvmOverloads constructor(
             // can run depth on it. Both are no-ops when Lazy 3D is off.
             val lazy3d = lazy3dStereoEnabled.get()
             if (lazy3d) {
-                consumePendingDepth()
+                // Capture the source guide (frame N) first, then upload + refine the latest available
+                // depth (computed from ~frame N-1 — async, never blocking on inference). The bilateral
+                // edge-snap thus uses the freshest pixels; on fast motion the ~1-frame guide/depth
+                // offset can slightly mis-snap edges — an accepted real-time trade-off (conservative
+                // disparity + the forgiving luma-range weight keep it minor).
                 maybeReadbackFrame()
+                if (consumePendingDepth()) refineDepth()
             }
 
             // Always (re)assert the full on-screen viewport before the visible draw. The depth
@@ -893,8 +1014,9 @@ uniform sampler2D uDepth;
 uniform mat4 uTexMatrix;
 uniform float uDivergence;
 uniform float uConvergence;
-uniform float uEyeSign;    // -1 left, +1 right
-uniform float uDitherAmp;  // one framebuffer LSB; amplitude of the anti-banding dither
+uniform float uEyeSign;     // -1 left, +1 right
+uniform vec2 uDepthTexel;   // 1/depthSize; step for the foreground-dilation taps
+uniform float uDitherAmp;   // one framebuffer LSB; amplitude of the anti-banding dither
 float h21(vec2 p) {
   vec3 q = fract(vec3(p.xyx) * 0.1031);
   q += dot(q, q.yzx + 33.33);
@@ -911,7 +1033,7 @@ void main() {
   // silhouette so it covers the disocclusion band the warp opens along edges — the main
   // source of the "smear/halo at object borders". Span ±3 depth-texels ≈ the max disparity
   // at the current divergence, so the foreground edge wins instead of stretched background.
-  float dpx = 1.0 / 256.0;
+  float dpx = uDepthTexel.x;
   float d = texture2D(uDepth, vTexCoord).r;
   d = max(d, texture2D(uDepth, vTexCoord + vec2(dpx, 0.0)).r);
   d = max(d, texture2D(uDepth, vTexCoord - vec2(dpx, 0.0)).r);
@@ -919,10 +1041,60 @@ void main() {
   d = max(d, texture2D(uDepth, vTexCoord - vec2(2.0 * dpx, 0.0)).r);
   d = max(d, texture2D(uDepth, vTexCoord + vec2(3.0 * dpx, 0.0)).r);
   d = max(d, texture2D(uDepth, vTexCoord - vec2(3.0 * dpx, 0.0)).r);
-  float disparity = (d - uConvergence) * uDivergence * uEyeSign;
+  // Signed depth around the screen plane: + = nearer (pops out), - = farther (recedes).
+  float dn = d - uConvergence;
+  // Asymmetric comfort: recession (behind the screen) is the less comfortable direction on
+  // far-focus glasses AND opens the widest disocclusions, so compress it relative to pop-out.
+  if (dn < 0.0) dn *= 0.7;
+  float disparity = dn * uDivergence * uEyeSign;
+  // Hard safety clamp on per-eye shift (fraction of width) so a depth outlier can't tear the image.
+  disparity = clamp(disparity, -0.03, 0.03);
   vec2 sampleUv = tcSrc + vec2(disparity, 0.0);
   vec3 col = texture2D(uSource, sampleUv).rgb;
   gl_FragColor = vec4(col + ditherTPDF(gl_FragCoord.xy) * uDitherAmp, 1.0);
+}
+"""
+
+/**
+ * Depth-refine shader: a 5×5 joint-bilateral on the raw depth, guided by the low-res source
+ * snapshot, run once per new inference into an off-screen FBO at depth resolution.
+ *
+ *  - Range weight uses the *guide* luma, so depth only blends across pixels of similar colour →
+ *    fuzzy MiDaS depth edges snap onto the real image edges, killing the warp's halo/ghosting.
+ *  - Spatial weight is asymmetric (wider vertical SY than horizontal SX) → smooths depth more
+ *    vertically, so horizontal depth discontinuities bend into gradients (fewer tears/holes after
+ *    warp) without smearing horizontal disparity.
+ */
+private const val FRAG_DEPTH_REFINE = """
+precision highp float;
+varying vec2 vTexCoord;
+uniform sampler2D uDepth;   // raw normalised depth (.r)
+uniform sampler2D uGuide;   // low-res source snapshot (RGBA) — edge guide
+uniform vec2 uTexel;        // 1/depthSize
+const float SX = 1.2;       // horizontal spatial sigma (texels)
+const float SY = 2.2;       // vertical spatial sigma — wider (asymmetric smooth)
+const float SR = 0.10;      // luma range sigma — joint-bilateral edge-snap
+float luma(vec2 uv) {
+  vec3 c = texture2D(uGuide, uv).rgb;
+  return dot(c, vec3(0.299, 0.587, 0.114));
+}
+void main() {
+  float cL = luma(vTexCoord);
+  float sumW = 0.0;
+  float sumD = 0.0;
+  for (int dy = -2; dy <= 2; dy++) {
+    for (int dx = -2; dx <= 2; dx++) {
+      vec2 off = vec2(float(dx), float(dy)) * uTexel;
+      float dd = texture2D(uDepth, vTexCoord + off).r;
+      float ll = luma(vTexCoord + off);
+      float ws = exp(-(float(dx * dx) / (2.0 * SX * SX) + float(dy * dy) / (2.0 * SY * SY)));
+      float wr = exp(-((ll - cL) * (ll - cL)) / (2.0 * SR * SR));
+      float w = ws * wr;
+      sumW += w;
+      sumD += w * dd;
+    }
+  }
+  gl_FragColor = vec4(vec3(clamp(sumD / max(sumW, 1e-4), 0.0, 1.0)), 1.0);
 }
 """
 

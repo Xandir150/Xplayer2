@@ -43,6 +43,30 @@ class DepthEstimator(
         .allocateDirect(inputSize * inputSize * 4)
         .order(ByteOrder.nativeOrder())
 
+    // --- Temporal smoothing (Lazy 3D: kills depth flicker + scale "breathing") ---
+    // MiDaS normalises each frame by its OWN min/max, so the same physical depth maps to different
+    // values every inference → the whole picture's depth "breathes" → visible shimmer in the warp.
+    // We EMA both the normalisation min/max AND the per-pixel normalised depth across inferences.
+    // alpha = weight kept from history; ~0.85 ≈ a few-frame time constant at the ~30 Hz infer rate.
+    @Volatile var temporalAlpha: Float = 0.85f
+    // All temporal state below is guarded by [temporalLock]: estimate() runs on the worker thread
+    // while resetTemporal()/close() can run on the teardown thread — they must not race the buffers.
+    private val temporalLock = Any()
+    private var emaMin = 0f
+    private var emaMax = 0f
+    private var emaDepth: FloatArray? = null
+    private var temporalSeeded = false
+
+    /** Clear temporal-smoothing state so a new clip/session starts clean (no stale depth bleed). */
+    fun resetTemporal() {
+        synchronized(temporalLock) {
+            temporalSeeded = false
+            emaMin = 0f
+            emaMax = 0f
+            emaDepth = null
+        }
+    }
+
     /** Exponential-moving-average inference latency in ms. Updated after every [estimate]. */
     @Volatile var avgInferenceMs: Float = 0f
         private set
@@ -161,8 +185,36 @@ class DepthEstimator(
             if (v < min) min = v
             if (v > max) max = v
         }
-        val range = (max - min).coerceAtLeast(1e-6f)
-        for (i in out.indices) out[i] = (out[i] - min) / range
+        // Temporally-stable normalisation + per-pixel EMA. Guarded so a concurrent resetTemporal()
+        // can't null/realloc the buffer mid-flight (see [temporalLock]).
+        synchronized(temporalLock) {
+            val a = temporalAlpha.coerceIn(0f, 0.97f)
+            // The normalisation min/max use a slower EMA than the per-pixel depth: a steadier range
+            // avoids re-mapping the whole picture every frame (which would itself shimmer), while the
+            // per-pixel EMA still adapts at [a].
+            val aRange = maxOf(a, 0.92f)
+            var ema = emaDepth
+            // Scene-cut detection: if the new raw range barely overlaps the smoothed one (hard cut,
+            // seek, or a new clip), snap to it instead of slowly morphing the scale across the change.
+            val overlap = minOf(max, emaMax) - maxOf(min, emaMin)
+            val span = maxOf(max - min, emaMax - emaMin).coerceAtLeast(1e-6f)
+            val cut = temporalSeeded && overlap < 0.3f * span
+            val seed = cut || !temporalSeeded || ema == null || ema.size != out.size
+            if (seed) {
+                emaMin = min; emaMax = max
+            } else {
+                emaMin = aRange * emaMin + (1f - aRange) * min
+                emaMax = aRange * emaMax + (1f - aRange) * max
+            }
+            val range = (emaMax - emaMin).coerceAtLeast(1e-6f)
+            if (ema == null || ema.size != out.size) { ema = FloatArray(out.size); emaDepth = ema }
+            for (i in out.indices) {
+                val norm = ((out[i] - emaMin) / range).coerceIn(0f, 1f)
+                ema[i] = if (seed) norm else a * ema[i] + (1f - a) * norm
+                out[i] = ema[i]
+            }
+            temporalSeeded = true
+        }
         return out
     }
 
@@ -173,6 +225,7 @@ class DepthEstimator(
         interpreter = null
         nnApiDelegate = null
         gpuDelegate = null
+        resetTemporal()
     }
 
     private fun loadModelAsset(context: Context, assetPath: String): MappedByteBuffer? {
