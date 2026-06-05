@@ -55,10 +55,11 @@ android {
     productFlavors {
         create("play") {
             dimension = "distribution"   // no VITURE -> 16 KB compliant (Google Play)
-            // YouTube link extraction violates YouTube's ToS (Google Play polices it hard), so it's
-            // OFF by default in the Play build — the user can flip it on at their own risk by typing
-            // the magic word "youtube" into the URL field.
-            buildConfigField("boolean", "YOUTUBE_ENABLED_DEFAULT", "false")
+            // YouTube is ON here too: the feature is invisible (no UI button, no youtube.com manifest
+            // filter) — it only does anything when the user pastes/shares a YouTube link — and we
+            // simply don't advertise it in the Play listing. This flag stays as a kill-switch we can
+            // flip to false (rebuild) if Google ever objects.
+            buildConfigField("boolean", "YOUTUBE_ENABLED_DEFAULT", "true")
         }
         create("full") {
             dimension = "distribution"   // + VITURE One SDK (libsdk.so) (GitHub sideload)

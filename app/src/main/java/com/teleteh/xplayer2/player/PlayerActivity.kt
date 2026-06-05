@@ -579,9 +579,10 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * Whether YouTube link extraction is on. ON by default in the `full` (GitHub) build, OFF in the
-     * `play` (Google Play) build — the user opts in there at their own risk by typing the magic word
-     * "youtube" into the URL field (NetworkFragment persists the flag).
+     * Whether YouTube link extraction is on. ON by default in both flavours — the feature is
+     * invisible (no UI, no youtube.com manifest filter; it only fires on a pasted/shared link), so
+     * there's nothing for the Play listing to advertise. [BuildConfig.YOUTUBE_ENABLED_DEFAULT] is a
+     * build-time kill-switch we can flip to false if Google ever objects.
      */
     private fun isYouTubeEnabled(): Boolean =
         getSharedPreferences("youtube", MODE_PRIVATE)
