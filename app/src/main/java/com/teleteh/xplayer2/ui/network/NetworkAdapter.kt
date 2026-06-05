@@ -11,16 +11,19 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import coil3.dispose
 import coil3.load
 import coil3.request.crossfade
 import coil3.request.error
 import coil3.request.placeholder
 import com.teleteh.xplayer2.R
 import com.teleteh.xplayer2.data.network.NetworkItem
+import com.teleteh.xplayer2.data.network.WebSourceType
 
 class NetworkAdapter(
     private val onClick: (NetworkItem) -> Unit,
-    private val onDelete: (NetworkItem.SmbShare) -> Unit = {}
+    // Fired for the deletable rows: SMB shares and remembered web sources.
+    private val onDelete: (NetworkItem) -> Unit = {}
 ) : ListAdapter<NetworkItem, NetworkAdapter.VH>(DIFF) {
 
     companion object {
@@ -36,6 +39,7 @@ class NetworkAdapter(
                         oldItem.url == newItem.url
 
                     oldItem is NetworkItem.DlnaUp && newItem is NetworkItem.DlnaUp -> true
+                    oldItem is NetworkItem.WebSource && newItem is NetworkItem.WebSource -> oldItem.url == newItem.url
                     else -> false
                 }
             }
@@ -57,7 +61,7 @@ class NetworkAdapter(
     class VH(
         itemView: View,
         private val onClick: (NetworkItem) -> Unit,
-        private val onDelete: (NetworkItem.SmbShare) -> Unit
+        private val onDelete: (NetworkItem) -> Unit
     ) : RecyclerView.ViewHolder(itemView) {
         private val title: TextView = itemView.findViewById(R.id.tvTitle)
         private val sub: TextView = itemView.findViewById(R.id.tvSubtitle)
@@ -91,7 +95,14 @@ class NetworkAdapter(
 
             deleteButton?.isFocusable = true
             deleteButton?.isFocusableInTouchMode = true
-            deleteButton?.setOnClickListener { (current as? NetworkItem.SmbShare)?.let(onDelete) }
+            deleteButton?.setOnClickListener {
+                // Only the deletable rows have the button visible (SMB shares, remembered web sources).
+                when (val c = current) {
+                    is NetworkItem.SmbShare -> onDelete(c)
+                    is NetworkItem.WebSource -> onDelete(c)
+                    else -> {}
+                }
+            }
             deleteButton?.setOnKeyListener { _, keyCode, event ->
                 if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
                 when (keyCode) {
@@ -157,6 +168,25 @@ class NetworkAdapter(
                     icon.setImageResource(
                         if (mime.startsWith("audio")) R.drawable.ic_audio_24 else R.drawable.ic_video_24
                     )
+                }
+
+                is NetworkItem.WebSource -> {
+                    title.text = item.title
+                    sub.text = item.url
+                    // Brand logos are 240×240 PNGs — the icon ImageView is a fixed 40dp box with
+                    // padding + centerInside, so they scale down to the row size (never intrinsic).
+                    // No circular background here (the logos are self-contained), so clear it.
+                    iconBg.setImageDrawable(null)
+                    // Cancel any in-flight Coil load bound to this recycled view (a DLNA device icon)
+                    // before setting the static brand logo, so it can't get overwritten asynchronously.
+                    icon.dispose()
+                    icon.setImageResource(
+                        when (item.type) {
+                            WebSourceType.YADISK_FOLDER -> R.drawable.ic_source_yadisk
+                            WebSourceType.VK_PLAYLIST, WebSourceType.VK_GROUP -> R.drawable.ic_source_vk
+                        }
+                    )
+                    deleteButton?.visibility = View.VISIBLE
                 }
             }
         }

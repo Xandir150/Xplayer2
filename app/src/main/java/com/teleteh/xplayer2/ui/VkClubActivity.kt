@@ -48,7 +48,7 @@ class VkClubActivity : AppCompatActivity() {
         val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = intent.getStringExtra(EXTRA_TITLE)?.takeIf { it.isNotBlank() } ?: "Hughey"
+        supportActionBar?.title = intent.getStringExtra(EXTRA_TITLE)?.takeIf { it.isNotBlank() } ?: "VK"
         toolbar.setNavigationOnClickListener { finish() }
 
         // Optional first row: an external link (the author's Boosty) opened in the browser.
@@ -72,16 +72,22 @@ class VkClubActivity : AppCompatActivity() {
 
         val ownerId = intent.getStringExtra(EXTRA_OWNER_ID)
         if (ownerId.isNullOrBlank()) { finish(); return }
-        load(ownerId, intent.getStringExtra(EXTRA_TITLE_FILTER))
+        load(ownerId, intent.getStringExtra(EXTRA_PLAYLIST_ID), intent.getStringExtra(EXTRA_TITLE_FILTER))
     }
 
-    private fun load(ownerId: String, titleFilter: String?) {
-        val cacheFile = File(cacheDir, "vkclub_${ownerId}_${titleFilter ?: "all"}.json")
+    private fun load(ownerId: String, playlistId: String?, titleFilter: String?) {
+        // A playlist lists that album's videos; otherwise the owner's whole library. Distinct cache.
+        val cacheTag = if (!playlistId.isNullOrBlank()) "pl${playlistId}" else (titleFilter ?: "all")
+        val cacheFile = File(cacheDir, "vkclub_${ownerId}_${cacheTag}.json")
         readCache(cacheFile)?.let { showItems(it); return }   // fresh cache (<10 min) — show instantly
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
-            val items = runCatching { VideoStreamExtractor.listOwnerVideos(ownerId, titleFilter) }
-                .getOrDefault(emptyList())
+            val items = runCatching {
+                if (!playlistId.isNullOrBlank())
+                    VideoStreamExtractor.listPlaylistVideos(ownerId, playlistId, titleFilter)
+                else
+                    VideoStreamExtractor.listOwnerVideos(ownerId, titleFilter)
+            }.getOrDefault(emptyList())
             progress.visibility = View.GONE
             if (items.isNotEmpty()) writeCache(cacheFile, items)
             showItems(items)
@@ -186,6 +192,7 @@ class VkClubActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_OWNER_ID = "vk_owner_id"
+        const val EXTRA_PLAYLIST_ID = "vk_playlist_id"
         const val EXTRA_TITLE_FILTER = "vk_title_filter"
         const val EXTRA_TITLE = "vk_screen_title"
         const val EXTRA_BOOSTY_URL = "vk_boosty_url"

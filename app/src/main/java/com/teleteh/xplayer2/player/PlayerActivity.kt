@@ -75,10 +75,9 @@ import com.teleteh.xplayer2.data.depth.DepthEstimator
 import com.teleteh.xplayer2.data.depth.DepthFrameWorker
 import com.teleteh.xplayer2.data.depth.DepthModelManager
 import com.teleteh.xplayer2.data.glasses.GlassesController
-import com.teleteh.xplayer2.ui.YaDiskActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import com.teleteh.xplayer2.util.VideoStreamExtractor
-import com.teleteh.xplayer2.util.YaDiskApi
+import com.teleteh.xplayer2.util.WebSourceClassifier
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -411,13 +410,14 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         val uri = sourceUri!!
-        // A Yandex Disk public link opened/shared straight into the player can't be played as-is
-        // (a folder has no single file; a single-file link needs its download href resolved). Hand
-        // it to the disk browser, which lists a folder or resolves + plays a single file.
-        if (YaDiskApi.isYaDiskUrl(uri)) {
-            startActivity(Intent(this, YaDiskActivity::class.java).apply {
-                putExtra(YaDiskActivity.EXTRA_PUBLIC_KEY, uri.toString())
-            })
+        // A container link opened/shared into the player can't be played as a single file — a VK
+        // playlist/group is a video LIST, and a Yandex Disk public link may be a folder (no single
+        // file) or a single file that needs its download href resolved. Classify it: container types
+        // go to their browser (and the VK ones are remembered as a Sources row; YaDisk remembers
+        // itself once it confirms a folder), while single videos / direct links fall through to play.
+        val kind = WebSourceClassifier.classify(uri.toString())
+        WebSourceClassifier.openIntent(this, uri.toString(), kind)?.let { browse ->
+            startActivity(browse)
             finish()
             return
         }

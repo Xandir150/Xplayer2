@@ -28,11 +28,13 @@ import com.teleteh.xplayer2.data.network.DlnaBrowser
 import com.teleteh.xplayer2.data.network.DlnaDiscovery
 import com.teleteh.xplayer2.data.network.NetworkItem
 import com.teleteh.xplayer2.data.network.SmbStorage
+import com.teleteh.xplayer2.data.network.WebSourceStore
+import com.teleteh.xplayer2.data.network.WebSourceType
 import com.teleteh.xplayer2.player.PlayerActivity
 import com.teleteh.xplayer2.ui.VkClubActivity
 import com.teleteh.xplayer2.ui.YaDiskActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
-import com.teleteh.xplayer2.util.YaDiskApi
+import com.teleteh.xplayer2.util.WebSourceClassifier
 import kotlinx.coroutines.launch
 
 class NetworkFragment : Fragment(R.layout.fragment_network) {
@@ -40,6 +42,7 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
     private lateinit var rv: RecyclerView
     private lateinit var adapter: NetworkAdapter
     private lateinit var smbStorage: SmbStorage
+    private lateinit var webSourceStore: WebSourceStore
     private val items = mutableListOf<NetworkItem>()
     private val discovery = DlnaDiscovery()
     private val dlnaBrowser = DlnaBrowser()
@@ -72,6 +75,7 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
         super.onViewCreated(view, savedInstanceState)
 
         smbStorage = SmbStorage(requireContext())
+        webSourceStore = WebSourceStore(requireContext())
         view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnOpenFile)
             ?.setOnClickListener { openDocLauncher.launch(arrayOf("video/*")) }
 
@@ -82,8 +86,12 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
 
         adapter = NetworkAdapter(
             onClick = { item -> onItemClick(item) },
-            onDelete = { share ->
-                smbStorage.remove(share.name)
+            onDelete = { item ->
+                when (item) {
+                    is NetworkItem.SmbShare -> smbStorage.remove(item.name)
+                    is NetworkItem.WebSource -> webSourceStore.remove(item.url)
+                    else -> {}
+                }
                 reloadShares()
             }
         )
@@ -128,15 +136,19 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
                 Toast.makeText(requireContext(), R.string.network_hughey_added, Toast.LENGTH_SHORT).show()
                 return
             }
-            // Yandex Disk public link (folder or single file) → open the disk browser: it lists a
-            // folder's videos, or plays a single-file link directly. Max-quality original playback.
-            if (YaDiskApi.isYaDiskUrl(runCatching { Uri.parse(raw) }.getOrNull())) {
-                startActivity(Intent(requireContext(), YaDiskActivity::class.java).apply {
-                    putExtra(YaDiskActivity.EXTRA_PUBLIC_KEY, raw)
-                })
+            // Classify the link. Container types (VK playlist/group, Yandex Disk folder) are opened
+            // in their browser AND remembered as a Sources row; single videos / direct links play as
+            // before. (YaDisk folder-vs-file is settled inside YaDiskActivity — see EXTRA_REMEMBER_URL.)
+            val kind = WebSourceClassifier.classify(raw)
+            val intent = WebSourceClassifier.openIntent(requireContext(), raw, kind)
+            if (intent != null) {
+                startActivity(intent)
                 etUrl.setText("")
+                // A web source may have just been saved → refresh the list so its row shows now.
+                if (WebSourceClassifier.isRememberedContainer(kind)) reloadShares()
                 return
             }
+            // Not a recognized container → play as today (single VK/OK video, direct file, HLS, …).
             val uri = normalizeToUri(raw)
             if (uri == null) {
                 Toast.makeText(requireContext(), R.string.network_url_invalid, Toast.LENGTH_SHORT).show()
@@ -272,14 +284,43 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
                 // Play media url with better title from DIDL metadata
                 playMediaUrl(item.url, item.title)
             }
+
+            is NetworkItem.WebSource -> openWebSource(item)
+        }
+    }
+
+    /** Re-open a remembered container in the right browser, routed by its type. */
+    private fun openWebSource(item: NetworkItem.WebSource) {
+        when (item.type) {
+            WebSourceType.YADISK_FOLDER ->
+                startActivity(Intent(requireContext(), YaDiskActivity::class.java).apply {
+                    putExtra(YaDiskActivity.EXTRA_PUBLIC_KEY, item.url)
+                })
+
+            WebSourceType.VK_PLAYLIST, WebSourceType.VK_GROUP -> {
+                // Re-derive owner (+ playlist) from the saved URL so we don't store parsed ids.
+                when (val kind = WebSourceClassifier.classify(item.url)) {
+                    is WebSourceClassifier.Kind.VkPlaylist ->
+                        startActivity(Intent(requireContext(), VkClubActivity::class.java).apply {
+                            putExtra(VkClubActivity.EXTRA_OWNER_ID, kind.ownerId)
+                            putExtra(VkClubActivity.EXTRA_PLAYLIST_ID, kind.playlistId)
+                        })
+
+                    is WebSourceClassifier.Kind.VkGroup ->
+                        startActivity(Intent(requireContext(), VkClubActivity::class.java).apply {
+                            putExtra(VkClubActivity.EXTRA_OWNER_ID, kind.ownerId)
+                        })
+
+                    else -> Toast.makeText(requireContext(), R.string.network_url_invalid, Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
     private fun reloadShares() {
-        val shares = smbStorage.getAll()
-        items.removeAll { it is NetworkItem.SmbShare }
-        items.addAll(0, shares)
-        adapter.submitList(items.toList())
+        // SMB shares and web sources both live in the "initial" (non-DLNA-browsing) list, so a
+        // change to either just rebuilds it. Safe because this is never called mid-DLNA-browse.
+        rebuildInitialList()
     }
 
     private fun showAddSmbDialog() {
@@ -321,23 +362,24 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
         discovery.discover(viewLifecycleOwner.lifecycleScope) { device ->
             // Append if not already present
             val exists =
-                items.any { it is NetworkItem.DlnaDevice && it.location == device.location }
+                discoveredDevices.any { it.location == device.location }
             if (!exists) {
                 discoveredDevices.add(device)
-                // Only update list if we are not browsing a DLNA device
+                // Only update list if we are not browsing a DLNA device. Rebuild (rather than a bare
+                // append) so the order stays SMB + DLNA, then web sources at the end.
                 if (currentDlnaControlUrl == null) {
-                    items.add(device)
-                    adapter.submitList(items.toList())
+                    rebuildInitialList()
                 }
             }
         }
     }
 
     private fun rebuildInitialList() {
-        val shares = smbStorage.getAll()
+        // Order: SMB shares + discovered DLNA devices FIRST, remembered web sources appended at the end.
         items.clear()
-        items.addAll(shares)
+        items.addAll(smbStorage.getAll())
         items.addAll(discoveredDevices)
+        items.addAll(webSourceStore.getAll())
         adapter.submitList(items.toList())
     }
 

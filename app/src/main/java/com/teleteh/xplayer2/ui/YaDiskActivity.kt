@@ -22,6 +22,8 @@ import coil3.load
 import coil3.request.crossfade
 import com.google.android.material.appbar.MaterialToolbar
 import com.teleteh.xplayer2.R
+import com.teleteh.xplayer2.data.network.WebSourceStore
+import com.teleteh.xplayer2.data.network.WebSourceType
 import com.teleteh.xplayer2.player.PlayerActivity
 import com.teleteh.xplayer2.util.YaDiskApi
 import kotlinx.coroutines.launch
@@ -46,6 +48,7 @@ class YaDiskActivity : AppCompatActivity() {
     private lateinit var empty: TextView
     private lateinit var publicKey: String
     private var path: String? = null
+    private var rememberUrl: String? = null   // set only on the first open → remember a folder once
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,6 +76,7 @@ class YaDiskActivity : AppCompatActivity() {
         publicKey = intent.getStringExtra(EXTRA_PUBLIC_KEY)?.takeIf { it.isNotBlank() }
             ?: run { finish(); return }
         path = intent.getStringExtra(EXTRA_PATH)
+        rememberUrl = intent.getStringExtra(EXTRA_REMEMBER_URL)?.takeIf { it.isNotBlank() }
         load()
     }
 
@@ -95,6 +99,15 @@ class YaDiskActivity : AppCompatActivity() {
                     finishAfter = true,
                 )
                 return@launch
+            }
+            // Confirmed a FOLDER: remember it as a network source so it's a row in the Sources tab
+            // next time. Only the original public link is remembered (EXTRA_REMEMBER_URL is set on
+            // the first open, not on subfolder drill-ins), so single-file links never get saved.
+            rememberUrl?.let {
+                val title = intent.getStringExtra(EXTRA_TITLE)?.takeIf { t -> t.isNotBlank() }
+                    ?: getString(R.string.yadisk_title)
+                WebSourceStore(this@YaDiskActivity)
+                    .addOrUpdate(WebSourceType.YADISK_FOLDER, title, it)
             }
             progress.visibility = View.GONE
             adapter.submit(listing.entries)
@@ -231,5 +244,9 @@ class YaDiskActivity : AppCompatActivity() {
         const val EXTRA_PUBLIC_KEY = "yadisk_public_key"
         const val EXTRA_PATH = "yadisk_path"
         const val EXTRA_TITLE = "yadisk_title"
+
+        /** When set (only on the first open, not subfolder drill-ins), remember this public link as
+         *  a [WebSourceType.YADISK_FOLDER] source once the listing confirms it's a folder. */
+        const val EXTRA_REMEMBER_URL = "yadisk_remember_url"
     }
 }
