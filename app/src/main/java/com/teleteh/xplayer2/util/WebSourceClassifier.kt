@@ -93,12 +93,15 @@ object WebSourceClassifier {
                 Intent(context, VkClubActivity::class.java).apply {
                     putExtra(VkClubActivity.EXTRA_OWNER_ID, kind.ownerId)
                     putExtra(VkClubActivity.EXTRA_PLAYLIST_ID, kind.playlistId)
+                    // Let VkClubActivity refresh this saved row's title to the real community name.
+                    putExtra(VkClubActivity.EXTRA_REMEMBER_URL, url)
                 }
             }
             is Kind.VkGroup -> {
                 WebSourceStore(context).addOrUpdate(WebSourceType.VK_GROUP, "VK", url)
                 Intent(context, VkClubActivity::class.java).apply {
                     putExtra(VkClubActivity.EXTRA_OWNER_ID, kind.ownerId)
+                    putExtra(VkClubActivity.EXTRA_REMEMBER_URL, url)
                 }
             }
             is Kind.YaDisk -> Intent(context, YaDiskActivity::class.java).apply {

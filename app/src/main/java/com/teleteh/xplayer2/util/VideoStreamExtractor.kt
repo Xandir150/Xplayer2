@@ -613,7 +613,23 @@ object VideoStreamExtractor {
         val title: String,
         val thumbnailUrl: String?,
         val duration: String?,
+        // Community/owner display name, parsed from the row's owner-link HTML ([8]). Same for every
+        // row in a list, so the caller reads it off the first item to title the screen / saved source.
+        val ownerName: String? = null,
     )
+
+    // Owner-link HTML in row[8] is like `<a href='…' class='VideoCard__ownerLink' …>NAME</a>`.
+    private val VK_OWNER_NAME = Regex(">([^<]+)</a>")
+
+    /** Pull the community/owner display name out of a VK owner-link HTML cell, or null. */
+    private fun parseVkOwnerName(ownerLinkHtml: String?): String? {
+        val name = ownerLinkHtml?.let { VK_OWNER_NAME.find(it)?.groupValues?.getOrNull(1) }
+            ?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return name
+            .replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'")
+            .replace("&lt;", "<").replace("&gt;", ">").trim()
+            .takeIf { it.isNotEmpty() }
+    }
 
     /**
      * List an owner's (user/group) newest videos via al_video.php `load_videos_silent`,
@@ -663,6 +679,7 @@ object VideoStreamExtractor {
                     title = title.ifBlank { "video$key" },
                     thumbnailUrl = thumb,
                     duration = v.optString(5).takeIf { it.isNotBlank() },
+                    ownerName = parseVkOwnerName(v.optString(8)),
                 )
             )
         }
@@ -708,6 +725,7 @@ object VideoStreamExtractor {
                     title = title.ifBlank { "video$key" },
                     thumbnailUrl = thumb,
                     duration = v.optString(5).takeIf { it.isNotBlank() },
+                    ownerName = parseVkOwnerName(v.optString(8)),
                 )
             )
         }

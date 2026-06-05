@@ -21,6 +21,8 @@ import coil3.load
 import coil3.request.crossfade
 import com.google.android.material.appbar.MaterialToolbar
 import com.teleteh.xplayer2.R
+import com.teleteh.xplayer2.data.network.WebSourceStore
+import com.teleteh.xplayer2.data.network.WebSourceType
 import com.teleteh.xplayer2.player.PlayerActivity
 import com.teleteh.xplayer2.util.VideoStreamExtractor
 import kotlinx.coroutines.launch
@@ -41,6 +43,11 @@ class VkClubActivity : AppCompatActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var empty: TextView
 
+    // When opened from a remembered Sources link, the url + type to refresh once we know the real
+    // community name (the eager save used a generic "VK" title). Null for the Hughey button etc.
+    private var rememberUrl: String? = null
+    private var rememberType: WebSourceType? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_vk_club)
@@ -50,6 +57,10 @@ class VkClubActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = intent.getStringExtra(EXTRA_TITLE)?.takeIf { it.isNotBlank() } ?: "VK"
         toolbar.setNavigationOnClickListener { finish() }
+
+        rememberUrl = intent.getStringExtra(EXTRA_REMEMBER_URL)?.takeIf { it.isNotBlank() }
+        rememberType = if (!intent.getStringExtra(EXTRA_PLAYLIST_ID).isNullOrBlank())
+            WebSourceType.VK_PLAYLIST else WebSourceType.VK_GROUP
 
         // Optional first row: an external link (the author's Boosty) opened in the browser.
         val btnBoosty = findViewById<com.google.android.material.button.MaterialButton>(R.id.btnBoosty)
@@ -79,7 +90,7 @@ class VkClubActivity : AppCompatActivity() {
         // A playlist lists that album's videos; otherwise the owner's whole library. Distinct cache.
         val cacheTag = if (!playlistId.isNullOrBlank()) "pl${playlistId}" else (titleFilter ?: "all")
         val cacheFile = File(cacheDir, "vkclub_${ownerId}_${cacheTag}.json")
-        readCache(cacheFile)?.let { showItems(it); return }   // fresh cache (<10 min) — show instantly
+        readCache(cacheFile)?.let { applyResult(it); return }   // fresh cache (<10 min) — show instantly
         progress.visibility = View.VISIBLE
         lifecycleScope.launch {
             val items = runCatching {
@@ -90,7 +101,7 @@ class VkClubActivity : AppCompatActivity() {
             }.getOrDefault(emptyList())
             progress.visibility = View.GONE
             if (items.isNotEmpty()) writeCache(cacheFile, items)
-            showItems(items)
+            applyResult(items)
         }
     }
 
@@ -101,6 +112,24 @@ class VkClubActivity : AppCompatActivity() {
             empty.visibility = View.VISIBLE
         } else {
             empty.visibility = View.GONE
+        }
+    }
+
+    /**
+     * Show the list and, once we know the real community/owner name (parsed from the list), upgrade
+     * the screen title and the remembered Sources row from the generic "VK" to that real name. The
+     * name is identical across rows, so we take it off the first item that carries one.
+     */
+    private fun applyResult(items: List<VideoStreamExtractor.VkVideoItem>) {
+        showItems(items)
+        val name = items.firstOrNull { !it.ownerName.isNullOrBlank() }?.ownerName?.trim()
+        if (name.isNullOrBlank()) return
+        // Only override the screen title when the caller didn't pass an explicit one (e.g. Hughey).
+        if (intent.getStringExtra(EXTRA_TITLE).isNullOrBlank()) supportActionBar?.title = name
+        val url = rememberUrl
+        val type = rememberType
+        if (url != null && type != null) {
+            WebSourceStore(this).addOrUpdate(type, name, url)
         }
     }
 
@@ -124,6 +153,7 @@ class VkClubActivity : AppCompatActivity() {
                     title = o.getString("t"),
                     thumbnailUrl = o.optString("th").takeIf { it.isNotBlank() },
                     duration = o.optString("d").takeIf { it.isNotBlank() },
+                    ownerName = o.optString("on").takeIf { it.isNotBlank() },
                 )
             }
         }.getOrNull()?.takeIf { it.isNotEmpty() }
@@ -135,7 +165,8 @@ class VkClubActivity : AppCompatActivity() {
             items.forEach {
                 arr.put(JSONObject()
                     .put("u", it.url).put("t", it.title)
-                    .put("th", it.thumbnailUrl ?: "").put("d", it.duration ?: ""))
+                    .put("th", it.thumbnailUrl ?: "").put("d", it.duration ?: "")
+                    .put("on", it.ownerName ?: ""))
             }
             f.writeText(arr.toString())
         }
@@ -193,6 +224,8 @@ class VkClubActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_OWNER_ID = "vk_owner_id"
         const val EXTRA_PLAYLIST_ID = "vk_playlist_id"
+        // Original Sources URL to refresh once the real community name is known (set by the classifier).
+        const val EXTRA_REMEMBER_URL = "vk_remember_url"
         const val EXTRA_TITLE_FILTER = "vk_title_filter"
         const val EXTRA_TITLE = "vk_screen_title"
         const val EXTRA_BOOSTY_URL = "vk_boosty_url"
