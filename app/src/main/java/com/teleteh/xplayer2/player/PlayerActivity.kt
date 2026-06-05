@@ -106,6 +106,9 @@ class PlayerActivity : AppCompatActivity() {
         // edges; lower = gentler 3D with cleaner edges. iw3 default-ish is ~0.02; we run a bit
         // softer for comfort on a synthesised (mono-depth) pair.
         const val LAZY3D_DIVERGENCE = 0.013f
+        // Default loudness boost (millibels; +6 dB) for new ONLINE clips — online streams are often
+        // quiet cinema mixes (~ -20 LUFS vs ~ -14 of streaming apps). User-overridable per clip.
+        const val DEFAULT_ONLINE_BOOST_MB = 600
 
         // Current instance for remote control access
         var currentInstance: PlayerActivity? = null
@@ -743,9 +746,13 @@ class PlayerActivity : AppCompatActivity() {
                     stereoMode = StereoMode.Off
                     sbsExplicitlyConfigured = false
                 }
-                // Restore this clip's audio boost (0 = off). Applied once the audio session
-                // is ready — see rebindLoudnessEnhancer on onAudioSessionIdChanged.
-                volumeBoostMb = (recent?.volumeBoostMb ?: 0).coerceIn(0, 2400)
+                // Restore this clip's audio boost. For a clip we haven't seen before, online streams
+                // (VK/OK/YouTube/Yandex/DLNA/direct) default to a gentle loudness boost — they're
+                // commonly quiet, wide-dynamic-range cinema mixes (~ -20 LUFS), worse on the quieter
+                // glasses audio path; local files default to 0. Always user-overridable (0 = off),
+                // applied once the audio session is ready (see rebindLoudnessEnhancer).
+                volumeBoostMb = (recent?.volumeBoostMb ?: defaultBoostMbFor(sourceUri ?: uri))
+                    .coerceIn(0, 2400)
                 renderSourceIsSbs = false
                 renderDuplicateMono = false
                 applyRenderConfig()
@@ -1038,6 +1045,14 @@ class PlayerActivity : AppCompatActivity() {
     // --- Audio gain (LoudnessEnhancer) ---
     // Per-clip: held in [volumeBoostMb], persisted to / restored from the clip's RecentEntry.
     private fun getVolumeBoostMb(): Int = volumeBoostMb.coerceIn(0, 2400)
+
+    /** Default loudness boost for a brand-new clip: a gentle bump for online (http/https) streams,
+     *  none for local files. The LoudnessEnhancer is an AGC+limiter, so this raises perceived
+     *  loudness without hard-clipping; the user can still set it to 0 or higher per clip. */
+    private fun defaultBoostMbFor(source: Uri?): Int {
+        val scheme = source?.scheme?.lowercase() ?: return 0
+        return if (scheme == "http" || scheme == "https") DEFAULT_ONLINE_BOOST_MB else 0
+    }
 
     private fun setVolumeBoostMb(value: Int) {
         val clamped = value.coerceIn(0, 2400)
