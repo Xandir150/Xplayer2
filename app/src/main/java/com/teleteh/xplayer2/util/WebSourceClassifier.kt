@@ -6,6 +6,7 @@ import android.net.Uri
 import com.teleteh.xplayer2.data.network.WebSourceStore
 import com.teleteh.xplayer2.data.network.WebSourceType
 import com.teleteh.xplayer2.player.PlayerActivity
+import com.teleteh.xplayer2.ui.MailCloudActivity
 import com.teleteh.xplayer2.ui.VkClubActivity
 import com.teleteh.xplayer2.ui.YaDiskActivity
 
@@ -35,6 +36,9 @@ object WebSourceClassifier {
         /** A Yandex Disk public link (folder OR file) — routed to [YaDiskActivity]. */
         data class YaDisk(val publicKey: String) : Kind()
 
+        /** A Mail.ru Cloud public link (folder OR file) — routed to [MailCloudActivity]. */
+        data class MailCloud(val weblink: String, val rawUrl: String) : Kind()
+
         /** Anything else (direct file/HLS, unknown host) — handled the old way by the caller. */
         object Other : Kind()
     }
@@ -46,6 +50,9 @@ object WebSourceClassifier {
     fun classify(rawUrl: String): Kind {
         val uri = runCatching { Uri.parse(rawUrl.trim()) }.getOrNull() ?: return Kind.Other
         if (YaDiskApi.isYaDiskUrl(uri)) return Kind.YaDisk(rawUrl.trim())
+        if (MailCloudApi.isMailCloudUrl(uri)) {
+            MailCloudApi.weblinkFromUrl(rawUrl)?.let { return Kind.MailCloud(it, rawUrl.trim()) }
+        }
 
         val host = uri.host?.lowercase()?.removePrefix("www.")?.removePrefix("m.") ?: return Kind.Other
         val isVk = host == "vk.com" || host == "vk.ru" || host == "vkvideo.ru" || host == "m.vk.com"
@@ -108,6 +115,11 @@ object WebSourceClassifier {
                 putExtra(YaDiskActivity.EXTRA_PUBLIC_KEY, kind.publicKey)
                 // Tell the browser the original link so it can remember the folder once confirmed.
                 putExtra(YaDiskActivity.EXTRA_REMEMBER_URL, kind.publicKey)
+            }
+            is Kind.MailCloud -> Intent(context, MailCloudActivity::class.java).apply {
+                putExtra(MailCloudActivity.EXTRA_PUBLIC_KEY, kind.weblink)
+                // The original share URL is what we remember (once the listing confirms it's a folder).
+                putExtra(MailCloudActivity.EXTRA_REMEMBER_URL, kind.rawUrl)
             }
             Kind.VkVideo, Kind.Other -> null
         }

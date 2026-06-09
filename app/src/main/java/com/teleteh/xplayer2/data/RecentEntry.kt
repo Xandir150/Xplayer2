@@ -11,6 +11,7 @@ enum class SourceType {
     VK,         // vk.com, vkvideo.ru
     OK,         // ok.ru
     YANDEX,     // Yandex Disk public links (disk.yandex.* / yadi.sk)
+    MAILRU,     // Mail.ru Cloud public links (cloud.mail.ru)
     UNKNOWN
 }
 
@@ -52,6 +53,8 @@ data class RecentEntry(
                 host == "yadi.sk" || host.endsWith("disk.yandex.ru") || host.endsWith("disk.yandex.com") ||
                     host.endsWith("disk.yandex.kz") || host.endsWith("disk.yandex.by") ||
                     host.endsWith("disk.360.yandex.ru") || host.endsWith("disk.360.yandex.com") -> SourceType.YANDEX
+                // Mail.ru Cloud public links (the durable cloud.mail.ru/public/… we store for recents)
+                host == "cloud.mail.ru" -> SourceType.MAILRU
                 // Local files
                 scheme == "content" || scheme == "file" -> SourceType.LOCAL
                 // Network sources

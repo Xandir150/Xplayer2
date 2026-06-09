@@ -31,6 +31,7 @@ import com.teleteh.xplayer2.data.network.SmbStorage
 import com.teleteh.xplayer2.data.network.WebSourceStore
 import com.teleteh.xplayer2.data.network.WebSourceType
 import com.teleteh.xplayer2.player.PlayerActivity
+import com.teleteh.xplayer2.ui.MailCloudActivity
 import com.teleteh.xplayer2.ui.VkClubActivity
 import com.teleteh.xplayer2.ui.YaDiskActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
@@ -306,6 +307,12 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
             WebSourceType.YADISK_FOLDER ->
                 startActivity(Intent(requireContext(), YaDiskActivity::class.java).apply {
                     putExtra(YaDiskActivity.EXTRA_PUBLIC_KEY, item.url)
+                })
+
+            WebSourceType.MAILRU_FOLDER ->
+                startActivity(Intent(requireContext(), MailCloudActivity::class.java).apply {
+                    // MailCloudActivity normalises a full share URL to its weblink.
+                    putExtra(MailCloudActivity.EXTRA_PUBLIC_KEY, item.url)
                 })
 
             WebSourceType.VK_PLAYLIST, WebSourceType.VK_GROUP -> {

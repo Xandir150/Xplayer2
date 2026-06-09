@@ -45,4 +45,4 @@ sealed class NetworkItem {
 }
 
 /** The kinds of container we remember. Single videos are NOT remembered (Recent covers those). */
-enum class WebSourceType { YADISK_FOLDER, VK_PLAYLIST, VK_GROUP }
+enum class WebSourceType { YADISK_FOLDER, MAILRU_FOLDER, VK_PLAYLIST, VK_GROUP }

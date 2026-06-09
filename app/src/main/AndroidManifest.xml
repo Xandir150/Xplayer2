@@ -364,6 +364,10 @@
             android:name=".ui.YaDiskActivity"
             android:exported="false"
             android:theme="@style/Theme.XPlayer2" />
+        <activity
+            android:name=".ui.MailCloudActivity"
+            android:exported="false"
+            android:theme="@style/Theme.XPlayer2" />
 
         <service
             android:name=".player.PlaybackService"

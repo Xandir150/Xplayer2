@@ -183,6 +183,7 @@ class NetworkAdapter(
                     icon.setImageResource(
                         when (item.type) {
                             WebSourceType.YADISK_FOLDER -> R.drawable.ic_source_yadisk
+                            WebSourceType.MAILRU_FOLDER -> R.drawable.ic_source_mailru
                             WebSourceType.VK_PLAYLIST, WebSourceType.VK_GROUP -> R.drawable.ic_source_vk
                         }
                     )

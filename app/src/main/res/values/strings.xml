@@ -143,4 +143,9 @@
     <string name="yadisk_empty">No videos here</string>
     <string name="yadisk_error">Couldn\'t open this Yandex Disk link</string>
     <string name="yadisk_folder">Folder</string>
+
+    <!-- Mail.ru Cloud public-link browser -->
+    <string name="mailru_title">Mail.ru Cloud</string>
+    <string name="mailru_empty">No videos here</string>
+    <string name="mailru_error">Couldn\'t open this Mail.ru Cloud link</string>
 </resources>

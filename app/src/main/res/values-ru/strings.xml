@@ -116,4 +116,9 @@
     <string name="yadisk_empty">Здесь нет видео</string>
     <string name="yadisk_error">Не удалось открыть ссылку Яндекс Диска</string>
     <string name="yadisk_folder">Папка</string>
+
+    <!-- Mail.ru Cloud public-link browser -->
+    <string name="mailru_title">Облако Mail.ru</string>
+    <string name="mailru_empty">Здесь нет видео</string>
+    <string name="mailru_error">Не удалось открыть ссылку Облака Mail.ru</string>
 </resources>

@@ -484,6 +484,7 @@ class MainActivity : AppCompatActivity() {
                         SourceType.LOCAL -> R.drawable.ic_source_local
                         SourceType.NETWORK -> R.drawable.ic_source_network
                         SourceType.YANDEX -> R.drawable.ic_source_yadisk
+                        SourceType.MAILRU -> R.drawable.ic_source_mailru
                         else -> R.drawable.ic_source_unknown
                     }
                     val chip = when {

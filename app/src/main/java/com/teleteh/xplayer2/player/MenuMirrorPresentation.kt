@@ -175,7 +175,8 @@ class MenuMirrorPresentation(
             // proper app icons. The other source glyphs (local/network/unknown) stay square.
             val isAppIcon = res == R.drawable.ic_source_vk ||
                 res == R.drawable.ic_source_ok ||
-                res == R.drawable.ic_source_yadisk
+                res == R.drawable.ic_source_yadisk ||
+                res == R.drawable.ic_source_mailru
             val iconView = if (isAppIcon) {
                 ShapeableImageView(ctx).apply {
                     shapeAppearanceModel = shapeAppearanceModel.toBuilder()
