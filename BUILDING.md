@@ -20,8 +20,10 @@ Android's built-in `MediaCodec` does **not** decode Dolby (AC-3/E-AC-3/TrueHD), 
 other audio formats common in MKV movie rips. We decode those with Media3's FFmpeg audio extension
 (`libffmpegJNI.so`, used via `DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON`).
 
-**`libffmpegJNI.so` is committed prebuilt** in `app/src/main/jniLibs/<abi>/` (≈7 MB, 4 ABIs). This is
-deliberate:
+**`libffmpegJNI.so` is committed prebuilt** in `app/src/main/jniLibs/<abi>/` (≈3.4 MB, 2 ARM ABIs:
+`arm64-v8a` + `armeabi-v7a`). The app is **ARM-only** — every real target (phones, XReal/RayNeo
+glasses, the XREAL Beam box) is ARM, so we don't ship x86/x86_64 at all (emulators need an ARM
+image). This is deliberate:
 
 - Building FFmpeg from source is slow and fragile in CI, so the GitHub-release APK used to ship
   **without** these decoders and played AC-3/DTS files as "no audio" — while the Play build (built
@@ -41,15 +43,16 @@ pcm_s16le pcm_s24le pcm_s32le pcm_f32le atrac3 atrac3p`).
 ### Regenerating the prebuilt `.so` (only when changing the decoder set or bumping FFmpeg/Media3)
 
 ```bash
-# 1) Build FFmpeg for all ABIs (creates the jni/ffmpeg symlink + applies the needed flags).
+# 1) Build FFmpeg for the ARM ABIs (creates the jni/ffmpeg symlink + applies the needed flags).
 #    Edit --decoders to change the set; default is the wide list above.
 scripts/setup_media3_ffmpeg.sh            # uses ANDROID_NDK_HOME / $ANDROID_HOME/ndk/*
 
 # 2) Build once so the module links libffmpegJNI.so from the fresh FFmpeg .a:
 ./gradlew :app:assembleRelease
 
-# 3) Copy the freshly built, stripped .so over the committed prebuilt:
-for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+# 3) Copy the freshly built, stripped .so over the committed prebuilt (ARM only — the build also
+#    produces x86/x86_64, but we ship ARM-only, so don't copy those):
+for abi in arm64-v8a armeabi-v7a; do
   cp "app/build/intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/$abi/libffmpegJNI.so" \
      "app/src/main/jniLibs/$abi/libffmpegJNI.so"
 done

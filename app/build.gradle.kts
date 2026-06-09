@@ -15,9 +15,10 @@ android {
         versionName = "1.0.9b2"
 
         ndk {
-            // Real targets (phones, XReal glasses, the XREAL Beam box) are all ARM. x86/x86_64 are
-            // emulator-only AND TFLite's x86_64 .so isn't 16 KB-aligned (fails Play's 16 KB check),
-            // so ship ARM only — 16 KB-compliant and smaller.
+            // ARM-only by policy: every real target (phones, XReal/RayNeo glasses, the XREAL Beam
+            // box) is ARM, so we don't ship x86/x86_64 at all — no x86 prebuilts in the tree, and
+            // x86 is emulator-only anyway (TFLite's x86_64 .so isn't even 16 KB-aligned). Run the app
+            // on an ARM emulator image. Smaller APK, fully 16 KB-compliant.
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
 
