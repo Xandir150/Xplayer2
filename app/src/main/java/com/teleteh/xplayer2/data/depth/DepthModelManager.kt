@@ -3,10 +3,14 @@ package com.teleteh.xplayer2.data.depth
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Manages the on-device location of the depth-estimation model used by [DepthEstimator].
@@ -39,9 +43,23 @@ class DepthModelManager(private val appContext: Context) {
         appContext.assets.openFd(MODEL_FILENAME).close(); true
     } catch (_: Throwable) { false }
 
-    fun isCached(): Boolean = cachedFile.exists() && cachedFile.length() > 1_000_000
+    fun isCached(): Boolean =
+        cachedFile.exists() && cachedFile.length() > 1_000_000 && hasTfliteMagic(cachedFile)
 
     fun isAvailable(): Boolean = isBundled() || isCached()
+
+    /**
+     * Delete the cached model. Called when [DepthEstimator] fails to load it on EVERY backend —
+     * a plain CPU Interpreter only rejects a corrupt flatbuffer, and a corrupt cached file would
+     * otherwise brick Lazy 3D forever (it passes the size check on every retry, and if its size
+     * matches the remote the update check never replaces it either). Next enable re-downloads.
+     */
+    fun invalidateCache() {
+        if (cachedFile.exists()) {
+            Log.w(TAG, "Invalidating cached depth model (${cachedFile.length()} bytes) — failed to load")
+            cachedFile.delete()
+        }
+    }
 
     fun currentState(): State = when {
         isBundled() -> State.BundledInAssets
@@ -56,7 +74,13 @@ class DepthModelManager(private val appContext: Context) {
      */
     suspend fun ensureAvailable(progress: ProgressListener? = null): Boolean {
         if (isAvailable()) return true
-        return downloadInternal(progress)
+        // Single-flight: the on-demand enable, the MainActivity prefetch and the update check used
+        // to download CONCURRENTLY into the same .part file, each opening it with O_TRUNC — the
+        // interleaved writes could land a full-size corrupt model (which then bricked Lazy 3D, see
+        // invalidateCache). Late acquirers re-check: the winner downloaded the file for everyone.
+        return downloadMutex.withLock {
+            if (isAvailable()) true else downloadInternal(progress)
+        }
     }
 
     /**
@@ -86,7 +110,8 @@ class DepthModelManager(private val appContext: Context) {
     }
 
     /** Re-download even if we already have a copy. Returns true on success. */
-    suspend fun forceUpdate(progress: ProgressListener? = null): Boolean = downloadInternal(progress)
+    suspend fun forceUpdate(progress: ProgressListener? = null): Boolean =
+        downloadMutex.withLock { downloadInternal(progress) }
 
     private suspend fun downloadInternal(progress: ProgressListener?): Boolean = withContext(Dispatchers.IO) {
         val target = cachedFile
@@ -98,6 +123,7 @@ class DepthModelManager(private val appContext: Context) {
             conn.connectTimeout = 10_000
             conn.readTimeout = 30_000
             conn.instanceFollowRedirects = true
+            var expected = -1L
             try {
                 val code = conn.responseCode
                 if (code !in 200..299) {
@@ -105,6 +131,7 @@ class DepthModelManager(private val appContext: Context) {
                     return@withContext false
                 }
                 val total = conn.contentLengthLong
+                expected = total
                 conn.inputStream.use { input ->
                     tmp.outputStream().use { out ->
                         val buf = ByteArray(64 * 1024)
@@ -132,6 +159,18 @@ class DepthModelManager(private val appContext: Context) {
                 tmp.delete()
                 return@withContext false
             }
+            // A truncated body (connection-close mid-transfer) or an HTML interstitial from a
+            // proxy/captive portal can exceed 1 MB — never let either replace a working model.
+            if (expected > 0 && tmp.length() != expected) {
+                Log.w(TAG, "Downloaded ${tmp.length()} of $expected bytes (truncated), discarding")
+                tmp.delete()
+                return@withContext false
+            }
+            if (!hasTfliteMagic(tmp)) {
+                Log.w(TAG, "Downloaded file is not a TFLite flatbuffer, discarding")
+                tmp.delete()
+                return@withContext false
+            }
             if (target.exists()) target.delete()
             success = tmp.renameTo(target)
             if (!success) {
@@ -149,6 +188,30 @@ class DepthModelManager(private val appContext: Context) {
 
     companion object {
         private const val TAG = "DepthModelManager"
+
+        /** Serializes ALL model downloads process-wide (instances are created ad hoc everywhere). */
+        private val downloadMutex = Mutex()
+
+        private val updateCheckClaimed = AtomicBoolean(false)
+
+        /** Claim the once-per-process update check — true for the first caller only. Keeps every
+         *  Lazy-3D toggle from re-HEADing GitHub (and from racing a re-download mid-session). */
+        fun claimUpdateCheck(): Boolean = updateCheckClaimed.compareAndSet(false, true)
+
+        /** TFLite flatbuffers carry the "TFL3" file identifier at bytes 4..7 — an 8-byte read that
+         *  rejects HTML error pages and zero-filled garbage masquerading as a model. */
+        private fun hasTfliteMagic(f: File): Boolean = try {
+            RandomAccessFile(f, "r").use { raf ->
+                raf.seek(4)
+                val b = ByteArray(4)
+                raf.readFully(b)
+                b[0] == 'T'.code.toByte() && b[1] == 'F'.code.toByte() &&
+                        b[2] == 'L'.code.toByte() && b[3] == '3'.code.toByte()
+            }
+        } catch (_: Throwable) {
+            false
+        }
+
         // MiDaS v2.1 small (256x256, FP32). Clean float NHWC I/O that matches DepthEstimator.
         // To upgrade the model later (e.g. to a Depth-Anything-V2 export), just publish the
         // new .tflite under a new release tag and bump REMOTE_VERSION — clients pick it up

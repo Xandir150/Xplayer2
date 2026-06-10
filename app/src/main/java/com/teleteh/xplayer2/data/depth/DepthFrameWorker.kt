@@ -52,13 +52,22 @@ class DepthFrameWorker(
         }
     }
 
-    fun stop() {
-        if (!running.compareAndSet(true, false)) return
+    /**
+     * Stop the worker. Returns true when the worker thread actually exited; false when it is
+     * still wedged inside an inference after the join timeout — in that case the caller MUST NOT
+     * close the estimator (closing a TFLite interpreter mid-`run()` is native UB that can take the
+     * GPU delegate down for the whole process); leak it instead.
+     */
+    fun stop(): Boolean {
+        if (!running.compareAndSet(true, false)) return thread == null
         lock.withLock { condition.signalAll() }
-        try { thread?.join(500) } catch (_: InterruptedException) { }
-        thread = null
+        // Generous join: a slow CPU-fallback inference can exceed the old 500 ms on weak devices.
+        try { thread?.join(3000) } catch (_: InterruptedException) { }
+        val exited = thread?.isAlive != true
+        if (exited) thread = null
         latestDepth = null
         latestDepthTimestampNanos = 0L
+        return exited
     }
 
     /**

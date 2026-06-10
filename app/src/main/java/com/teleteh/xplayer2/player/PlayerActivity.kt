@@ -165,6 +165,11 @@ class PlayerActivity : AppCompatActivity() {
     // Startup runs off the main thread (GPU model load is slow), so this flags the in-flight
     // phase and drives the remote's "starting…" indicator.
     @Volatile private var depthStarting: Boolean = false
+    // Lazy-3D startup generation, bumped by every stopLazy3d() (main thread only). An async
+    // startup captures it at launch and discards itself if a stop/restart happened while the
+    // model was loading — without this, a fast off→on toggle ended with TWO estimator/worker
+    // pairs alive and one GPU delegate leaked per occurrence.
+    private var lazy3dGen = 0
     // When Lazy 3D was last switched on (System.nanoTime). Used to time-bound the "Starting"
     // state so the remote's button can't stay disabled forever if startup stalls.
     @Volatile private var lazy3dEnabledAtNanos: Long = 0L
@@ -1824,10 +1829,12 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
 
-        // GL pass is needed whenever we transform the picture: SBS split/convert, or
-        // duplicate-mono on an ultrawide panel. Plain mono passthrough goes DIRECT for
-        // best quality / battery.
-        val needsGl = getStereoSbs() || renderDuplicateMono
+        // GL pass is needed whenever we transform the picture: SBS split/convert, duplicate-mono
+        // on an ultrawide panel, or Lazy 3D — the depth warp AND the frame readback both live in
+        // the GL view, so without GL the Lazy 3D toggle silently rendered nothing on the phone's
+        // own screen (with glasses attached the pipeline is always GL, which masked it). Plain
+        // mono passthrough goes DIRECT for best quality / battery.
+        val needsGl = getStereoSbs() || renderDuplicateMono || lazy3dEnabled
         val target = if (needsGl) VideoPipeline.GL else VideoPipeline.DIRECT
         if (target == currentPipeline) return
 
@@ -2173,25 +2180,36 @@ class PlayerActivity : AppCompatActivity() {
                             }
                         }
                     }
+                    depthDownloadJob = null
                     if (!lazy3dEnabled) return@launch // user toggled off while downloading
                     if (ok) {
                         Toast.makeText(this@PlayerActivity, R.string.lazy3d_downloaded, Toast.LENGTH_SHORT).show()
                         startLazy3dDepth()
                     } else {
-                        // Download failed — nothing else to do.
+                        // Download failed — drop the toggle so the button/status don't claim an
+                        // "active" Lazy 3D that will never come, and so the user can simply retry.
                         Toast.makeText(this@PlayerActivity, R.string.lazy3d_download_failed, Toast.LENGTH_LONG).show()
+                        lazy3dEnabled = false
+                        applyVideoPipeline()
+                        btnSbsRef?.let { applySbsButtonVisual(it) }
+                        RemoteControlActivity.currentInstance?.syncControls()
                     }
                 }
             }
-            // Fire-and-forget update check: if the cached model is older than what's on
-            // GitHub, fetch the new one in the background. Next session uses the fresh copy.
-            lifecycleScope.launch(Dispatchers.IO) {
-                try {
-                    if (mgr.isUpdateAvailable()) {
-                        android.util.Log.i("XPlayer2", "Lazy 3D: depth model update available, refreshing in background")
-                        mgr.forceUpdate(null)
-                    }
-                } catch (_: Throwable) { }
+            // Fire-and-forget update check: if the cached model is older than what's on GitHub,
+            // fetch the new one in the background. Next session uses the fresh copy. Gated to
+            // (a) once per process — no point re-HEADing GitHub on every toggle — and (b) only
+            // when a cached copy actually exists: with no copy, ensureAvailable above is already
+            // downloading, and this used to kick off a SECOND download of the same file.
+            if (mgr.isCached() && DepthModelManager.claimUpdateCheck()) {
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        if (mgr.isUpdateAvailable()) {
+                            android.util.Log.i("XPlayer2", "Lazy 3D: depth model update available, refreshing in background")
+                            mgr.forceUpdate(null)
+                        }
+                    } catch (_: Throwable) { }
+                }
             }
 
             // If nothing is starting and nothing is in flight (no depth model / download), there's
@@ -2215,6 +2233,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun startLazy3dDepth() {
         if (depthEstimator != null || depthStarting) return
         depthStarting = true
+        val gen = lazy3dGen
         lifecycleScope.launch {
           try {
             // Loading the TFLite model + GPU init takes a couple of seconds — do it off the
@@ -2222,11 +2241,29 @@ class PlayerActivity : AppCompatActivity() {
             val estimator = withContext(Dispatchers.IO) {
                 DepthEstimator().apply { if (!init(applicationContext)) close() }
             }
+            if (gen != lazy3dGen) {
+                // stopLazy3d() ran while we were loading (toggle-off, or an off→on restart whose
+                // new startup now owns depthStarting/depthEstimator) — this startup is stale.
+                // Release our estimator and leave the shared state strictly alone.
+                withContext(Dispatchers.IO) { estimator.close() }
+                return@launch
+            }
             depthStarting = false
             if (!lazy3dEnabled || !estimator.isReady()) {
                 withContext(Dispatchers.IO) { estimator.close() }
                 if (lazy3dEnabled && !estimator.isReady()) {
                     android.util.Log.w("XPlayer2", "Lazy 3D: depth model not loaded on this device")
+                    // No backend could load the model (GPU→NNAPI→CPU; plain CPU only rejects a
+                    // corrupt flatbuffer or OOM). A corrupt cached file would brick Lazy 3D on
+                    // every future attempt — it passes the size check, and when its size matches
+                    // the remote the update check never replaces it. Delete it so the next enable
+                    // re-downloads a fresh copy (no-op when the model came from bundled assets).
+                    DepthModelManager(applicationContext).invalidateCache()
+                    // Drop the toggle so the button/status reflect reality and retry stays one tap.
+                    lazy3dEnabled = false
+                    applyVideoPipeline()
+                    btnSbsRef?.let { applySbsButtonVisual(it) }
+                    RemoteControlActivity.currentInstance?.syncControls()
                     Toast.makeText(this@PlayerActivity, R.string.lazy3d_unsupported, Toast.LENGTH_LONG).show()
                 }
                 return@launch
@@ -2247,16 +2284,22 @@ class PlayerActivity : AppCompatActivity() {
                 Toast.makeText(this@PlayerActivity, R.string.lazy3d_slow_cpu, Toast.LENGTH_LONG).show()
             }
           } catch (e: Throwable) {
+            if (e is kotlinx.coroutines.CancellationException) throw e   // activity going away — not a failure
             // Any failure spinning up depth (OOM on low-RAM devices, an unexpected delegate error)
             // must not crash the app — disable Lazy 3D and restore the normal picture/toggle state.
             android.util.Log.e("XPlayer2", "Lazy 3D: startup failed, disabling", e)
-            depthStarting = false
-            lazy3dEnabled = false
-            stopLazy3d()
-            btnSbsRef?.let { applySbsButtonVisual(it) }
-            RemoteControlActivity.currentInstance?.syncControls()
-            val msg = if (e is OutOfMemoryError) R.string.lazy3d_low_memory else R.string.lazy3d_failed
-            Toast.makeText(this@PlayerActivity, msg, Toast.LENGTH_LONG).show()
+            if (gen == lazy3dGen) {
+                // Only the startup that still owns the state may reset it — a stale one (stop or
+                // restart happened mid-load) must not clobber the newer startup's flags.
+                depthStarting = false
+                lazy3dEnabled = false
+                stopLazy3d()
+                applyVideoPipeline()
+                btnSbsRef?.let { applySbsButtonVisual(it) }
+                RemoteControlActivity.currentInstance?.syncControls()
+                val msg = if (e is OutOfMemoryError) R.string.lazy3d_low_memory else R.string.lazy3d_failed
+                Toast.makeText(this@PlayerActivity, msg, Toast.LENGTH_LONG).show()
+            }
           }
         }
     }
@@ -2287,6 +2330,10 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun stopLazy3d() {
         depthStarting = false
+        // Invalidate any in-flight async startup: it compares its captured generation and discards
+        // itself (closing its own estimator) instead of racing a later restart into two live
+        // estimator/worker pairs (which leaked a GPU delegate per toggle).
+        lazy3dGen++
         // --- Immediate, main-thread visual teardown so the picture restores at once. ---
         // We're on the main thread, and the tick runs on the same thread, so removeCallbacks
         // guarantees no tick is mid-flight or will fire again.
@@ -2306,8 +2353,17 @@ class PlayerActivity : AppCompatActivity() {
         // onDestroy (where the scope is cancelled). ---
         if (worker != null || estimator != null) {
             Thread({
-                try { worker?.stop() } catch (_: Throwable) {}
-                try { estimator?.close() } catch (_: Throwable) {}
+                val workerExited = try { worker?.stop() ?: true } catch (_: Throwable) { true }
+                if (workerExited) {
+                    try { estimator?.close() } catch (_: Throwable) {}
+                } else {
+                    // The worker thread is wedged inside interp.run() (driver stall / very slow CPU
+                    // frame): closing the interpreter under a live inference is native UB that can
+                    // take the GPU delegate down for the whole process — after which every Lazy 3D
+                    // re-enable fails until the app is killed. Leaking this one estimator is the
+                    // lesser evil; the OS reclaims it with the process.
+                    android.util.Log.w("XPlayer2", "Lazy 3D: depth worker didn't exit in time; leaking estimator (close mid-inference is unsafe)")
+                }
             }, "Lazy3dTeardown").start()
         }
     }
