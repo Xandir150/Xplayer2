@@ -1538,7 +1538,16 @@ class PlayerActivity : AppCompatActivity() {
             glSurface?.let { player?.setVideoSurface(it) }
             // Local glView is the active target again — re-push render config to it.
             applyRenderMode()
-            if (lazy3dEnabled) reapplyLazy3dToActiveView()
+            if (lazy3dEnabled && !hasLazy3dDisplay()) {
+                // The glasses were the only stereo target (phone screen isn't ultrawide):
+                // an SBS pair has nowhere to go now, so shut Lazy 3D down instead of burning
+                // inference on a split picture nobody can view.
+                setLazy3dEnabled(false)
+                btnSbsRef?.let { applySbsButtonVisual(it) }
+                RemoteControlActivity.currentInstance?.syncControls()
+            } else if (lazy3dEnabled) {
+                reapplyLazy3dToActiveView()
+            }
             updatePlaybackService()
         }
     }
@@ -1829,11 +1838,13 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
 
-        // GL pass is needed whenever we transform the picture: SBS split/convert, duplicate-mono
-        // on an ultrawide panel, or Lazy 3D — the depth warp AND the frame readback both live in
-        // the GL view, so without GL the Lazy 3D toggle silently rendered nothing on the phone's
-        // own screen (with glasses attached the pipeline is always GL, which masked it). Plain
-        // mono passthrough goes DIRECT for best quality / battery.
+        // GL pass is needed whenever we transform the picture: SBS split/convert, or
+        // duplicate-mono on an ultrawide panel. Plain mono passthrough goes DIRECT for
+        // best quality / battery. lazy3dEnabled is a safety net: its display gate
+        // (hasLazy3dDisplay) means GL is normally already on via presentation/ultrawide,
+        // but the depth warp + frame readback live in the GL view, so a transitional
+        // state must never leave Lazy 3D running on a DIRECT pipeline (it would silently
+        // render nothing while burning inference).
         val needsGl = getStereoSbs() || renderDuplicateMono || lazy3dEnabled
         val target = if (needsGl) VideoPipeline.GL else VideoPipeline.DIRECT
         if (target == currentPipeline) return
@@ -2133,17 +2144,25 @@ class PlayerActivity : AppCompatActivity() {
 
     /**
      * Whether Lazy 3D can run now or could obtain what it needs:
+     *  - somewhere to SHOW a stereo pair (see [hasLazy3dDisplay]), AND
      *  - depth model bundled in assets / already cached locally, OR
      *  - device has any network capability (model can be downloaded on first use).
-     * Used by the RemoteControlActivity to decide whether to show the toggle at all —
-     * we want it visible whenever there's a path to enabling it, even if it requires
-     * a one-time download.
+     * Gates the Lazy 3D step in the stereo-mode cycle (and with it the remote's toggle).
      */
     fun isLazy3dSupported(): Boolean {
+        if (!hasLazy3dDisplay()) return false
         val hasDepthModel = DepthModelManager(applicationContext).isAvailable()
         val hasNetwork = isOnAnyNetwork()
         return hasDepthModel || hasNetwork
     }
+
+    /**
+     * Lazy 3D synthesizes an SBS pair, so it needs a display that can actually SHOW one: the
+     * glasses' external Presentation, or an ultrawide main display (glasses as the primary
+     * screen, e.g. a Beam-style box — the same case duplicate-mono targets). On a normal phone
+     * screen an SBS split is just a useless double picture, so the mode isn't offered there.
+     */
+    private fun hasLazy3dDisplay(): Boolean = presentation != null || activeDisplayIsUltrawide()
 
     private fun isOnAnyNetwork(): Boolean = try {
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
