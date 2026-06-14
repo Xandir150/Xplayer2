@@ -1,5 +1,4 @@
 • Mail.ru Cloud: paste or share a public link (cloud.mail.ru) to browse a folder or play a file.
-• YouTube: paste or share a video link and it just plays.
 • Lazy 3D (2D→3D): much cleaner depth with far fewer artifacts, plus reliability fixes — now offered only where 3D can actually be shown (glasses or an ultrawide screen).
 • RayNeo Air glasses: detected, with a 2D/3D hint and auto-restore on reconnect.
 • Louder, clearer sound on online videos.
