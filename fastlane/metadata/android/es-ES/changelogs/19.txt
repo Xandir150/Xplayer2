@@ -1,0 +1,5 @@
+• Mail.ru Cloud: pega o comparte un enlace público (cloud.mail.ru) para abrir una carpeta o reproducir un archivo.
+• YouTube: pega o comparte un enlace de vídeo y se reproduce.
+• Lazy 3D (2D→3D): más limpio, menos artefactos y más fiable; ahora solo donde se puede ver 3D (gafas o pantalla ultrapanorámica).
+• Gafas RayNeo Air: detectadas, aviso 2D/3D y restauración automática al reconectar.
+• Sonido más alto y claro en vídeos en línea.
