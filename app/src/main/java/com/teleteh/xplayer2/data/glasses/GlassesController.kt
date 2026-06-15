@@ -428,8 +428,16 @@ class GlassesController(private val appContext: Context) {
 
     private fun releaseConnection() {
         stopImuTelemetry()
-        viture?.release()
+        // VITURE's ArManager.release() does blocking native USB/teardown work. releaseConnection()
+        // runs on the MAIN thread (onStop / USB-detach), and on hosts that sandbox the app so the
+        // SDK's USB / netlink-uevent access is SELinux-denied (e.g. a RayNeo Pocket TV / SEI
+        // Android-TV box) that native teardown blocks or spins — which froze the UI into a
+        // black-screen ANR ("Application does not have a focused window") when leaving for the file
+        // picker. Hand it off to a detached thread, mirroring the off-main init() in startViture(),
+        // so the main thread never waits on it (a wedged SDK thread leaks, but the UI stays alive).
+        val vc = viture
         viture = null
+        if (vc != null) Thread({ try { vc.release() } catch (_: Throwable) {} }, "VitureRelease").start()
         vitureModeApplied = false
         vitureStarting = false
         mainHandler.removeCallbacksAndMessages(null)
