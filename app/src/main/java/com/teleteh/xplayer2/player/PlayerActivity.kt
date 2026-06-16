@@ -175,6 +175,8 @@ class PlayerActivity : AppCompatActivity() {
     // state so the remote's button can't stay disabled forever if startup stalls.
     @Volatile private var lazy3dEnabledAtNanos: Long = 0L
     private val lazy3dStartupGraceMs = 4000L
+    // Model-download progress (0..99) shown on the Lazy-3D button; -1 when not downloading.
+    @Volatile private var lazy3dDownloadPct: Int = -1
 
     /** Coarse Lazy-3D lifecycle for the remote UI: off / spinning up / live. */
     enum class Lazy3dStatus { Off, Starting, Active }
@@ -2022,6 +2024,9 @@ class PlayerActivity : AppCompatActivity() {
     private fun applySbsButtonVisual(btn: MaterialButton) {
         // Reflect the 4-state mode (2D / Lazy 3D / OU→SBS / SBS): label + filled (active) vs 2D outline.
         btn.text = getStereoModeLabel()
+        // While Lazy 3D is downloading the model / warming up, lock the button so testers wait
+        // (and watch the % on the caption) instead of re-tapping — a re-tap would cancel + cycle.
+        btn.isEnabled = !isLazy3dBusy()
         val active = lazy3dEnabled || stereoMode != StereoMode.Off
         btn.isChecked = active
         applyToggleButtonVisual(btn, active)
@@ -2118,10 +2123,20 @@ class PlayerActivity : AppCompatActivity() {
 
     /** Current stereo-mode label for the remote ("2D" / "OU→SBS" / "SBS"). */
     fun getStereoModeLabel(): String = when {
-        lazy3dEnabled -> "Lazy 3D ⚠️"
+        lazy3dEnabled -> lazy3dBusyLabel() ?: "Lazy 3D ⚠️"
         stereoMode == StereoMode.Ou -> "OU→SBS"
         stereoMode == StereoMode.Sbs -> "SBS"
         else -> "2D"
+    }
+
+    /** True while Lazy 3D is downloading its model or warming up — taps should be ignored. */
+    fun isLazy3dBusy(): Boolean = lazy3dEnabled && (depthDownloadJob != null || depthStarting)
+
+    /** Button caption during the busy phase ("Lazy 3D… 37%" download / "Lazy 3D…" warm-up), else null. */
+    private fun lazy3dBusyLabel(): String? = when {
+        lazy3dDownloadPct in 0..99 -> "Lazy 3D… ${lazy3dDownloadPct}%"
+        isLazy3dBusy() -> "Lazy 3D…"
+        else -> null
     }
 
     fun isShiftEnabled(): Boolean = sbsShiftEnabled
@@ -2158,6 +2173,9 @@ class PlayerActivity : AppCompatActivity() {
     fun lazy3dStatus(): Lazy3dStatus {
         if (!lazy3dEnabled) return Lazy3dStatus.Off
         if (depthEstimator?.isReady() == true) return Lazy3dStatus.Active
+        // Still downloading the model or warming up → keep reporting Starting (the ~99 MB DA-V2
+        // download can outlast the grace window; don't flip to Active while there's no estimator).
+        if (depthDownloadJob != null || depthStarting) return Lazy3dStatus.Starting
         // Don't keep the remote's toggle locked forever if startup stalls — after a short grace
         // window report Active so the button becomes tappable again (debug line shows the truth).
         val elapsedMs = (System.nanoTime() - lazy3dEnabledAtNanos) / 1_000_000L
@@ -2219,20 +2237,27 @@ class PlayerActivity : AppCompatActivity() {
                 startLazy3dDepth()
             } else {
                 // Fetch the depth model in the background and light up depth synthesis once it lands.
+                // Show the % on the button + lock it so testers wait through the (up to ~99 MB) fetch.
                 Toast.makeText(this, R.string.lazy3d_downloading, Toast.LENGTH_SHORT).show()
+                lazy3dDownloadPct = 0
+                btnSbsRef?.let { applySbsButtonVisual(it) }
+                RemoteControlActivity.currentInstance?.syncControls()
                 depthDownloadJob?.cancel()
                 depthDownloadJob = lifecycleScope.launch {
-                    var lastPercent = -1
+                    var lastShown = -1
                     val ok = mgr.ensureAvailable { bytes, total ->
                         if (total > 0) {
-                            val pct = (bytes * 100 / total).toInt()
-                            if (pct != lastPercent && pct % 10 == 0) {
-                                lastPercent = pct
-                                android.util.Log.i("XPlayer2", "Lazy 3D model: $pct% ($bytes/$total)")
+                            val pct = (bytes * 100 / total).toInt().coerceIn(0, 99)
+                            if (pct != lastShown && pct % 5 == 0) {
+                                lastShown = pct
+                                lazy3dDownloadPct = pct   // @Volatile; callback runs on the IO thread
+                                runOnUiThread { btnSbsRef?.let { applySbsButtonVisual(it) } }
                             }
                         }
                     }
+                    lazy3dDownloadPct = -1
                     depthDownloadJob = null
+                    btnSbsRef?.let { applySbsButtonVisual(it) }
                     if (!lazy3dEnabled) return@launch // user toggled off while downloading
                     if (ok) {
                         Toast.makeText(this@PlayerActivity, R.string.lazy3d_downloaded, Toast.LENGTH_SHORT).show()
@@ -2285,6 +2310,9 @@ class PlayerActivity : AppCompatActivity() {
     private fun startLazy3dDepth() {
         if (depthEstimator != null || depthStarting) return
         depthStarting = true
+        lazy3dDownloadPct = -1   // download done (if any) — now warming up
+        btnSbsRef?.let { applySbsButtonVisual(it) }   // show "Lazy 3D…" + keep locked during warm-up
+        RemoteControlActivity.currentInstance?.syncControls()
         val gen = lazy3dGen
         lifecycleScope.launch {
           try {
@@ -2331,6 +2359,9 @@ class PlayerActivity : AppCompatActivity() {
                 worker.submit(pixels, w, h, ts)
             }
             startDepthTick(worker, estimator)
+            // Warm-up done → unlock the button and show the active label.
+            btnSbsRef?.let { applySbsButtonVisual(it) }
+            RemoteControlActivity.currentInstance?.syncControls()
             android.util.Log.i("XPlayer2", "Lazy 3D: depth synthesis started on ${estimator.backend} (avg inference will appear in logs)")
             // No GPU/NNAPI here → depth runs on CPU; warn that it may be heavy on this device.
             if (estimator.backend?.startsWith("CPU") == true) {
