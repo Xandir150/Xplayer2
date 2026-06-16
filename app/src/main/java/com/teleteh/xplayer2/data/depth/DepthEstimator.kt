@@ -100,14 +100,34 @@ class DepthEstimator(
         //    fails fast and falls through to the GPU instead of silently emulating on the CPU.
         //    NNAPI is deprecated (Android 15) but still functional through Android 16; it stays the
         //    portable NPU path until LiteRT's per-vendor NPU accelerators cover our API floor.
-        if (tryInit(buffer) { o ->
+        // A Java-level NNAPI failure is already handled (tryInit catches it → we fall through to GPU).
+        // The unguarded case is a NATIVE crash (SIGSEGV) inside the vendor NNAPI HAL during init,
+        // which try/catch CANNOT catch (same hazard as the GPU delegate, which we gate with
+        // CompatibilityList — NNAPI offers no such probe). Guard it with a persisted CANARY that
+        // survives a process crash: arm a flag on disk immediately before the native init and disarm
+        // it immediately after. If a later launch finds the flag still armed, the previous attempt
+        // took the process down → permanently ban NNAPI on this device and go straight to the GPU.
+        // One crash maximum per device, then self-healed.
+        val prefs = context.getSharedPreferences(DELEGATE_PREFS, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_NNAPI_BANNED, false)) {
+            Log.i(TAG, "Lazy 3D: NNAPI banned on this device (prior native crash) — using GPU/CPU")
+        } else if (prefs.getBoolean(KEY_NNAPI_PROBING, false)) {
+            // Flag left armed by a previous run = NNAPI native-crashed during init last time.
+            prefs.edit().putBoolean(KEY_NNAPI_BANNED, true).putBoolean(KEY_NNAPI_PROBING, false).commit()
+            Log.w(TAG, "Lazy 3D: NNAPI crashed on a previous launch — banning it on this device")
+        } else {
+            prefs.edit().putBoolean(KEY_NNAPI_PROBING, true).commit()   // must hit disk BEFORE the native call
+            val ok = tryInit(buffer) { o ->
                 val opts = NnApiDelegate.Options().apply {
                     setExecutionPreference(NnApiDelegate.Options.EXECUTION_PREFERENCE_SUSTAINED_SPEED)
                     setAllowFp16(true)
                     setUseNnapiCpu(false)   // hardware accelerator only — no CPU reference fallback
                 }
                 val d = NnApiDelegate(opts); nnApiDelegate = d; o.addDelegate(d); "NNAPI"
-            }) return true
+            }
+            prefs.edit().putBoolean(KEY_NNAPI_PROBING, false).commit()
+            if (ok) return true
+        }
         // 2) GPU (Adreno / Mali / Xclipse / PowerVR) — portable fallback. Gated by CompatibilityList:
         //    on some GPUs/drivers constructing the GPU delegate crashes NATIVELY (SIGSEGV), which the
         //    try/catch in tryInit CANNOT recover from, so only attempt it when TFLite says it's safe.
@@ -271,5 +291,9 @@ class DepthEstimator(
 
     companion object {
         private const val TAG = "DepthEstimator"
+        // Canary prefs guarding the (uncatchable) native NNAPI-init crash — see init().
+        private const val DELEGATE_PREFS = "lazy3d_delegate"
+        private const val KEY_NNAPI_PROBING = "nnapi_probing"
+        private const val KEY_NNAPI_BANNED = "nnapi_banned"
     }
 }
