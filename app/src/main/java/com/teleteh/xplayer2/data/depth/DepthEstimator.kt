@@ -25,9 +25,9 @@ import java.nio.channels.FileChannel
  * Output is min/max-normalised to 0..1 (1 = nearest) so the GL stereo shader can use
  * it as a unit disparity multiplier without knowing model-specific scaling.
  *
- * Inference is dispatched on the NNAPI delegate when available (NPU on Tensor G3 /
- * Snapdragon 8 Gen 2+) — falls back to multi-thread CPU otherwise. GPU delegate is
- * available as an opt-in for devices whose NPU implementation rejects this graph.
+ * Inference uses an NPU-first delegate ladder for energy efficiency: NNAPI (the OS routes to the
+ * device NPU on ANY vendor — Hexagon / APU / Exynos / Tensor — configured hardware-accelerator-only)
+ * → GPU delegate (portable) → multi-thread CPU. See [init].
  */
 class DepthEstimator(
     val inputSize: Int = 256,
@@ -90,11 +90,27 @@ class DepthEstimator(
             ?: loadModelFile(DepthModelManager(context).cachedFile)
             ?: return false
 
-        // For an FP32 CNN like MiDaS, the GPU (Adreno/Mali) delegate is usually much faster than
-        // NNAPI. Try GPU first, then NNAPI, then plain multi-thread CPU — BUT only attempt the GPU
-        // delegate when TFLite reports it's safe on this device. On some GPUs/drivers (reported on
-        // ZTE) constructing the GPU delegate crashes NATIVELY (SIGSEGV), which the try/catch below
-        // CANNOT recover from — so we gate it with CompatibilityList and fall back to NNAPI/CPU.
+        // Delegate ladder, NPU-FIRST for energy efficiency: the device NPU is the most power-
+        // efficient path for per-frame depth, so we try it first, then GPU, then CPU.
+        //
+        // 1) NNAPI — the only VENDOR-AGNOSTIC OS route to the NPU across API 29..36: the OS routes
+        //    to whatever accelerator the device's NNAPI HAL exposes (Qualcomm Hexagon, MediaTek APU,
+        //    Samsung Exynos NPU, Google Tensor TPU). We bundle NO vendor .so for this. Configured to
+        //    use ONLY a hardware accelerator (setUseNnapiCpu(false)) so a device with no usable NPU
+        //    fails fast and falls through to the GPU instead of silently emulating on the CPU.
+        //    NNAPI is deprecated (Android 15) but still functional through Android 16; it stays the
+        //    portable NPU path until LiteRT's per-vendor NPU accelerators cover our API floor.
+        if (tryInit(buffer) { o ->
+                val opts = NnApiDelegate.Options().apply {
+                    setExecutionPreference(NnApiDelegate.Options.EXECUTION_PREFERENCE_SUSTAINED_SPEED)
+                    setAllowFp16(true)
+                    setUseNnapiCpu(false)   // hardware accelerator only — no CPU reference fallback
+                }
+                val d = NnApiDelegate(opts); nnApiDelegate = d; o.addDelegate(d); "NNAPI"
+            }) return true
+        // 2) GPU (Adreno / Mali / Xclipse / PowerVR) — portable fallback. Gated by CompatibilityList:
+        //    on some GPUs/drivers constructing the GPU delegate crashes NATIVELY (SIGSEGV), which the
+        //    try/catch in tryInit CANNOT recover from, so only attempt it when TFLite says it's safe.
         val gpuSupported = try {
             CompatibilityList().isDelegateSupportedOnThisDevice
         } catch (e: Throwable) {
@@ -104,9 +120,7 @@ class DepthEstimator(
         if (gpuSupported && tryInit(buffer) { o ->
                 val d = GpuDelegate(); gpuDelegate = d; o.addDelegate(d); "GPU"
             }) return true
-        if (tryInit(buffer) { o ->
-                val d = NnApiDelegate(); nnApiDelegate = d; o.addDelegate(d); "NNAPI"
-            }) return true
+        // 3) Multi-thread CPU — universal last resort.
         return tryInit(buffer) { o -> o.setNumThreads(4); "CPU x4" }
     }
 
