@@ -13,22 +13,42 @@ import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Manages the on-device location of the depth-estimation model used by [DepthEstimator].
+ * Manages the on-device depth model used by [DepthEstimator]. Supports MORE THAN ONE model so the
+ * beta can A/B them (see [DepthModel]); the active one is a user choice persisted in prefs and
+ * resolved per-instance. Each model resolves to its own cache file + download URL + input geometry.
  *
- * Resolution order:
- *   1. Bundled in `app/src/main/assets/midas_v21_small.tflite` — preferred for offline builds
- *      or developers who manually drop the file in.
- *   2. Downloaded into `context.filesDir/midas_v21_small.tflite` from [MODEL_URL] — happens on
- *      first Lazy 3D enable, with progress reported through the [ensureAvailable] callback.
- *
- * Updates are handled via a cheap Content-Length comparison on a HEAD request — if the
- * remote file is a different size than the local one we re-download.
- *
- * Hosting note: [MODEL_URL] points at a GitHub Release asset on this repo. Upload a fresh
- * TFLite export there (release tag `models-v1` or newer; see [REMOTE_VERSION]) and bump
- * [REMOTE_VERSION] when the binary changes so existing installs pick the new model up.
+ * Resolution order per model: bundled asset (if shipped) → cached download (`filesDir/<filename>`)
+ * from its GitHub-release URL, fetched on first use. Downloads are validated (Content-Length match
+ * + TFLite "TFL3" magic) and single-flighted; a model that fails to load is invalidated and re-fetched.
  */
-class DepthModelManager(private val appContext: Context) {
+class DepthModelManager(
+    private val appContext: Context,
+    val model: DepthModel = activeModel(appContext),
+) {
+
+    /**
+     * A selectable depth model. TEMPORARY beta A/B: we ship two and let testers pick the one that
+     * looks best; once we know, this collapses back to a single model.
+     *  - [inputSize]  the model's square input (and output) resolution.
+     *  - [gpuSafe]    false → never run on the TFLite GPU delegate (e.g. DA-V2's ViT outputs constant
+     *                 garbage on Adreno GPU, TF #93476) — NPU(NNAPI)/CPU only.
+     */
+    enum class DepthModel(
+        val filename: String,
+        val url: String,
+        val inputSize: Int,
+        val gpuSafe: Boolean,
+        val uiLabel: String,
+    ) {
+        MIDAS(
+            "midas_v21_small.tflite", "$REL/midas_v21_small.tflite",
+            256, true, "MiDaS small — fast (current default)"
+        ),
+        DAV2(
+            "depth_anything_v2_small.tflite", "$REL/depth_anything_v2_small.tflite",
+            518, false, "Depth Anything V2 — sharper, NPU only, ~99 MB"
+        );
+    }
 
     enum class State { Missing, BundledInAssets, Cached, Downloading, Failed }
 
@@ -37,10 +57,10 @@ class DepthModelManager(private val appContext: Context) {
         fun onProgress(bytesRead: Long, total: Long)
     }
 
-    val cachedFile: File get() = File(appContext.filesDir, MODEL_FILENAME)
+    val cachedFile: File get() = File(appContext.filesDir, model.filename)
 
     fun isBundled(): Boolean = try {
-        appContext.assets.openFd(MODEL_FILENAME).close(); true
+        appContext.assets.openFd(model.filename).close(); true
     } catch (_: Throwable) { false }
 
     fun isCached(): Boolean =
@@ -56,7 +76,7 @@ class DepthModelManager(private val appContext: Context) {
      */
     fun invalidateCache() {
         if (cachedFile.exists()) {
-            Log.w(TAG, "Invalidating cached depth model (${cachedFile.length()} bytes) — failed to load")
+            Log.w(TAG, "Invalidating cached depth model ${model.filename} (${cachedFile.length()} bytes) — failed to load")
             cachedFile.delete()
         }
     }
@@ -69,15 +89,13 @@ class DepthModelManager(private val appContext: Context) {
 
     /**
      * Ensure the model is present locally — does nothing if it is, otherwise downloads from
-     * [MODEL_URL] into the cache file. Network blocking work happens on Dispatchers.IO.
+     * [DepthModel.url] into the cache file. Network blocking work happens on Dispatchers.IO.
      * Returns true on success / already-present, false if download failed.
      */
     suspend fun ensureAvailable(progress: ProgressListener? = null): Boolean {
         if (isAvailable()) return true
-        // Single-flight: the on-demand enable, the MainActivity prefetch and the update check used
-        // to download CONCURRENTLY into the same .part file, each opening it with O_TRUNC — the
-        // interleaved writes could land a full-size corrupt model (which then bricked Lazy 3D, see
-        // invalidateCache). Late acquirers re-check: the winner downloaded the file for everyone.
+        // Single-flight per file: the on-demand enable, the MainActivity prefetch and the update
+        // check used to download CONCURRENTLY into the same .part file, each opening it with O_TRUNC.
         return downloadMutex.withLock {
             if (isAvailable()) true else downloadInternal(progress)
         }
@@ -85,14 +103,13 @@ class DepthModelManager(private val appContext: Context) {
 
     /**
      * Check whether the remote file is a different size than our cached copy. Returns
-     * true if an update is available (or if the user has no copy at all). HEAD request,
-     * no body transfer.
+     * true if an update is available (or if the user has no copy at all). HEAD request.
      */
     suspend fun isUpdateAvailable(): Boolean = withContext(Dispatchers.IO) {
         if (isBundled()) return@withContext false // we trust the bundled copy
         if (!isCached()) return@withContext true
         try {
-            val conn = URL(MODEL_URL).openConnection() as HttpURLConnection
+            val conn = URL(model.url).openConnection() as HttpURLConnection
             conn.requestMethod = "HEAD"
             conn.connectTimeout = 5_000
             conn.readTimeout = 5_000
@@ -118,7 +135,7 @@ class DepthModelManager(private val appContext: Context) {
         val tmp = File(target.parentFile, target.name + ".part")
         var success = false
         try {
-            val conn = URL(MODEL_URL).openConnection() as HttpURLConnection
+            val conn = URL(model.url).openConnection() as HttpURLConnection
             conn.requestMethod = "GET"
             conn.connectTimeout = 10_000
             conn.readTimeout = 30_000
@@ -127,7 +144,7 @@ class DepthModelManager(private val appContext: Context) {
             try {
                 val code = conn.responseCode
                 if (code !in 200..299) {
-                    Log.w(TAG, "Download HTTP $code for $MODEL_URL")
+                    Log.w(TAG, "Download HTTP $code for ${model.url}")
                     return@withContext false
                 }
                 val total = conn.contentLengthLong
@@ -142,7 +159,6 @@ class DepthModelManager(private val appContext: Context) {
                             if (n < 0) break
                             out.write(buf, 0, n)
                             sent += n
-                            // Throttle progress callbacks to every 64 KB
                             if (sent - lastReport > 64 * 1024) {
                                 lastReport = sent
                                 progress?.onProgress(sent, total)
@@ -159,8 +175,8 @@ class DepthModelManager(private val appContext: Context) {
                 tmp.delete()
                 return@withContext false
             }
-            // A truncated body (connection-close mid-transfer) or an HTML interstitial from a
-            // proxy/captive portal can exceed 1 MB — never let either replace a working model.
+            // A truncated body or an HTML interstitial from a proxy can exceed 1 MB — never let
+            // either replace a working model.
             if (expected > 0 && tmp.length() != expected) {
                 Log.w(TAG, "Downloaded ${tmp.length()} of $expected bytes (truncated), discarding")
                 tmp.delete()
@@ -177,7 +193,7 @@ class DepthModelManager(private val appContext: Context) {
                 Log.w(TAG, "Failed to rename ${tmp.path} -> ${target.path}")
                 tmp.delete()
             } else {
-                Log.i(TAG, "Depth model downloaded: ${target.length()} bytes")
+                Log.i(TAG, "Depth model downloaded: ${model.filename} ${target.length()} bytes")
             }
         } catch (e: Throwable) {
             Log.e(TAG, "Download failed", e)
@@ -188,18 +204,37 @@ class DepthModelManager(private val appContext: Context) {
 
     companion object {
         private const val TAG = "DepthModelManager"
+        private const val REMOTE_VERSION = "models-v1"
+        private const val REL =
+            "https://github.com/Xandir150/Xplayer2/releases/download/$REMOTE_VERSION"
+
+        /** Bundled-asset filename for the default model (kept for the assets-resolution path). */
+        const val MODEL_FILENAME = "midas_v21_small.tflite"
+
+        private const val MODEL_PREFS = "lazy3d_model"
+        private const val KEY_ACTIVE = "active"
+
+        /** The model the user picked (TEMPORARY beta switch). Defaults to the fast MiDaS. */
+        fun activeModel(context: Context): DepthModel {
+            val name = context.getSharedPreferences(MODEL_PREFS, Context.MODE_PRIVATE)
+                .getString(KEY_ACTIVE, null)
+            return DepthModel.values().firstOrNull { it.name == name } ?: DepthModel.MIDAS
+        }
+
+        fun setActiveModel(context: Context, m: DepthModel) {
+            context.getSharedPreferences(MODEL_PREFS, Context.MODE_PRIVATE)
+                .edit().putString(KEY_ACTIVE, m.name).apply()
+        }
 
         /** Serializes ALL model downloads process-wide (instances are created ad hoc everywhere). */
         private val downloadMutex = Mutex()
 
         private val updateCheckClaimed = AtomicBoolean(false)
 
-        /** Claim the once-per-process update check — true for the first caller only. Keeps every
-         *  Lazy-3D toggle from re-HEADing GitHub (and from racing a re-download mid-session). */
+        /** Claim the once-per-process update check — true for the first caller only. */
         fun claimUpdateCheck(): Boolean = updateCheckClaimed.compareAndSet(false, true)
 
-        /** TFLite flatbuffers carry the "TFL3" file identifier at bytes 4..7 — an 8-byte read that
-         *  rejects HTML error pages and zero-filled garbage masquerading as a model. */
+        /** TFLite flatbuffers carry the "TFL3" file identifier at bytes 4..7. */
         private fun hasTfliteMagic(f: File): Boolean = try {
             RandomAccessFile(f, "r").use { raf ->
                 raf.seek(4)
@@ -211,14 +246,5 @@ class DepthModelManager(private val appContext: Context) {
         } catch (_: Throwable) {
             false
         }
-
-        // MiDaS v2.1 small (256x256, FP32). Clean float NHWC I/O that matches DepthEstimator.
-        // To upgrade the model later (e.g. to a Depth-Anything-V2 export), just publish the
-        // new .tflite under a new release tag and bump REMOTE_VERSION — clients pick it up
-        // automatically on the next update check (size mismatch triggers re-download).
-        const val MODEL_FILENAME = "midas_v21_small.tflite"
-        const val REMOTE_VERSION = "models-v1"
-        const val MODEL_URL =
-            "https://github.com/Xandir150/Xplayer2/releases/download/$REMOTE_VERSION/$MODEL_FILENAME"
     }
 }

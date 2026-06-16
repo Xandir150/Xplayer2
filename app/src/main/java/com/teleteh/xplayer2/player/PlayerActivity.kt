@@ -74,6 +74,7 @@ import com.teleteh.xplayer2.MainActivity
 import com.teleteh.xplayer2.R
 import com.teleteh.xplayer2.data.RecentEntry
 import com.teleteh.xplayer2.data.RecentStore
+import androidx.appcompat.app.AlertDialog
 import com.teleteh.xplayer2.data.depth.DepthEstimator
 import com.teleteh.xplayer2.data.depth.DepthFrameWorker
 import com.teleteh.xplayer2.data.depth.DepthModelManager
@@ -1924,16 +1925,24 @@ class PlayerActivity : AppCompatActivity() {
     private fun cycleStereoMode() {
         // One button, four states: 2D → Lazy 3D → OU→SBS → SBS → 2D. Lazy 3D is folded into this
         // cycle (it used to be a separate button) and is skipped on devices that can't run it.
+        // TEMPORARY beta A/B: entering Lazy 3D asks which depth model to use; the dialog callback
+        // finishes the enable + UI refresh, so we return early here.
+        if (stereoMode == StereoMode.Off && !lazy3dEnabled && isLazy3dSupported()) {
+            promptDepthModelThenEnableLazy3d()
+            return
+        }
         when {
             stereoMode == StereoMode.Off && lazy3dEnabled -> {
                 setLazy3dEnabled(false); stereoMode = StereoMode.Ou        // Lazy 3D → OU→SBS
             }
-            stereoMode == StereoMode.Off && isLazy3dSupported() ->
-                setLazy3dEnabled(true)                                     // 2D → Lazy 3D
             stereoMode == StereoMode.Off -> stereoMode = StereoMode.Ou     // 2D → OU→SBS (no Lazy 3D)
             stereoMode == StereoMode.Ou -> stereoMode = StereoMode.Sbs     // OU→SBS → SBS
             else -> stereoMode = StereoMode.Off                            // SBS → 2D
         }
+        finishStereoModeChange()
+    }
+
+    private fun finishStereoModeChange() {
         sbsExplicitlyConfigured = true
         Toast.makeText(this, getStereoModeLabel(), Toast.LENGTH_SHORT).show()
         applyRenderMode()
@@ -1942,6 +1951,28 @@ class PlayerActivity : AppCompatActivity() {
         btnSbsRef?.let { applySbsButtonVisual(it) }
         RemoteControlActivity.currentInstance?.syncControls()
         saveProgress()
+    }
+
+    /**
+     * TEMPORARY beta: ask which depth model to use before turning Lazy 3D on, so testers can A/B
+     * MiDaS vs Depth-Anything-V2. The choice is persisted and applied on the next Lazy 3D start
+     * (this one). Dialog is navigable by touch (phone) or the remote d-pad (glasses). Remove this
+     * prompt once we know which model wins.
+     */
+    private fun promptDepthModelThenEnableLazy3d() {
+        val models = DepthModelManager.DepthModel.values()
+        val labels = models.map { it.uiLabel }.toTypedArray()
+        val checked = models.indexOf(DepthModelManager.activeModel(this)).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle("Lazy 3D — depth model (beta test)")
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                DepthModelManager.setActiveModel(this, models[which])
+                dialog.dismiss()
+                setLazy3dEnabled(true)
+                finishStereoModeChange()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun toggleStereoMode() = cycleStereoMode()
@@ -2260,7 +2291,8 @@ class PlayerActivity : AppCompatActivity() {
             // Loading the TFLite model + GPU init takes a couple of seconds — do it off the
             // main thread so the toggle doesn't freeze. GL wiring happens back on the main thread.
             val estimator = withContext(Dispatchers.IO) {
-                DepthEstimator().apply { if (!init(applicationContext)) close() }
+                val m = DepthModelManager.activeModel(applicationContext)
+                DepthEstimator(m.inputSize, m.gpuSafe).apply { if (!init(applicationContext)) close() }
             }
             if (gen != lazy3dGen) {
                 // stopLazy3d() ran while we were loading (toggle-off, or an off→on restart whose

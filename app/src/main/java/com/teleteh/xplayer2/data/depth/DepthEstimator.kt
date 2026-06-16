@@ -31,6 +31,9 @@ import java.nio.channels.FileChannel
  */
 class DepthEstimator(
     val inputSize: Int = 256,
+    // false → never try the GPU delegate (e.g. DA-V2's ViT returns constant garbage on Adreno GPU,
+    // TF #93476) — NPU(NNAPI)/CPU only. The active model's gpuSafe drives this.
+    private val allowGpu: Boolean = true,
 ) {
     private var interpreter: Interpreter? = null
     private var nnApiDelegate: NnApiDelegate? = null
@@ -84,10 +87,11 @@ class DepthEstimator(
      * Returns false if neither location has the file or the runtime can't construct an
      * interpreter (e.g. NNAPI rejected the graph).
      */
-    fun init(context: Context, assetPath: String = DepthModelManager.MODEL_FILENAME): Boolean {
+    fun init(context: Context): Boolean {
         if (interpreter != null) return true
-        val buffer = loadModelAsset(context, assetPath)
-            ?: loadModelFile(DepthModelManager(context).cachedFile)
+        val mgr = DepthModelManager(context)   // resolves the active (user-selected) model
+        val buffer = loadModelAsset(context, mgr.model.filename)
+            ?: loadModelFile(mgr.cachedFile)
             ?: return false
 
         // Delegate ladder, NPU-FIRST for energy efficiency: the device NPU is the most power-
@@ -128,18 +132,22 @@ class DepthEstimator(
             prefs.edit().putBoolean(KEY_NNAPI_PROBING, false).commit()
             if (ok) return true
         }
-        // 2) GPU (Adreno / Mali / Xclipse / PowerVR) — portable fallback. Gated by CompatibilityList:
-        //    on some GPUs/drivers constructing the GPU delegate crashes NATIVELY (SIGSEGV), which the
-        //    try/catch in tryInit CANNOT recover from, so only attempt it when TFLite says it's safe.
-        val gpuSupported = try {
-            CompatibilityList().isDelegateSupportedOnThisDevice
-        } catch (e: Throwable) {
-            Log.w(TAG, "Lazy 3D: GPU compatibility probe failed (${e.message}); skipping GPU")
-            false
+        // 2) GPU (Adreno / Mali / Xclipse / PowerVR) — portable fallback, but only for gpu-safe
+        //    models: DA-V2's ViT returns constant garbage on the Adreno GPU delegate (TF #93476),
+        //    so that model skips straight to CPU. Gated by CompatibilityList: on some GPUs/drivers
+        //    constructing the GPU delegate crashes NATIVELY (SIGSEGV), uncatchable by tryInit's
+        //    try/catch, so only attempt it when TFLite says it's safe.
+        if (allowGpu) {
+            val gpuSupported = try {
+                CompatibilityList().isDelegateSupportedOnThisDevice
+            } catch (e: Throwable) {
+                Log.w(TAG, "Lazy 3D: GPU compatibility probe failed (${e.message}); skipping GPU")
+                false
+            }
+            if (gpuSupported && tryInit(buffer) { o ->
+                    val d = GpuDelegate(); gpuDelegate = d; o.addDelegate(d); "GPU"
+                }) return true
         }
-        if (gpuSupported && tryInit(buffer) { o ->
-                val d = GpuDelegate(); gpuDelegate = d; o.addDelegate(d); "GPU"
-            }) return true
         // 3) Multi-thread CPU — universal last resort.
         return tryInit(buffer) { o -> o.setNumThreads(4); "CPU x4" }
     }
