@@ -1604,7 +1604,8 @@ class PlayerActivity : AppCompatActivity() {
             val wasShowing = presentation != null
             tryShowExternalPresentation()
             if (presentation != null && !wasShowing) {
-                MainActivity.glassesControllerForPlayback?.reapplySavedMode()
+                // No longer force a remembered glasses mode here (it sometimes restored the wrong one);
+                // the panel keeps its current mode and the picker reflects it.
                 showRemoteControlFront()
             }
         } else if (presentation != null) {

@@ -44,6 +44,7 @@
     <!-- Glasses -->
     <string name="glasses_mode">Режим очков</string>
     <string name="glasses_mode_title">Режим отображения очков</string>
+    <string name="glasses_mode_current">Сейчас: %1$s — нажмите для смены</string>
     <string name="glasses_disabled_while_playing">Поставьте на паузу для смены режима очков</string>
     <string name="glasses_needs_permission">Требуется разрешение USB для очков</string>
     <string name="glasses_send_failed">Не удалось переключить режим очков</string>

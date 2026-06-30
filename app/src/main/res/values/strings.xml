@@ -54,6 +54,7 @@
     <!-- Glasses -->
     <string name="glasses_mode">Glasses mode</string>
     <string name="glasses_mode_title">Glasses display mode</string>
+    <string name="glasses_mode_current">Current: %1$s — tap to switch</string>
     <string name="glasses_mode_2d">2D %1$dHz</string>
     <string name="glasses_mode_3d_sbs">3D SBS %1$dHz</string>
     <!-- VITURE: plain 2D/3D (no Hz variants) -->

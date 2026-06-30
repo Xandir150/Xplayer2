@@ -699,11 +699,13 @@ class MainActivity : AppCompatActivity() {
         // Highlight the mode the user last chose. The controller persists it and re-asserts it
         // on the glasses on every (re)connect, so the picker and the hardware stay in sync
         // instead of snapping back to the 2D power-on default after unplug/replug.
-        val current = glasses.lastMode()
-        val checked = items.indexOfFirst { it.first == current }.coerceAtLeast(0)
+        // Title shows the CURRENT mode; the list items just send commands — no per-item selection
+        // dots (some glasses lack certain modes, and we don't keep a remembered selection any more).
+        val currentLabel = items.firstOrNull { it.first == glasses.lastMode() }?.second
         AlertDialog.Builder(this)
-            .setTitle(R.string.glasses_mode_title)
-            .setSingleChoiceItems(labels, checked) { dialog, which ->
+            .setTitle(currentLabel?.let { getString(R.string.glasses_mode_current, it) }
+                ?: getString(R.string.glasses_mode_title))
+            .setItems(labels) { dialog, which ->
                 val (mode, label) = items[which]
                 if (glasses.setDisplayMode(mode)) {
                     Toast.makeText(this, label, Toast.LENGTH_SHORT).show()

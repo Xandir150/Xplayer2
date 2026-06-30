@@ -78,8 +78,13 @@ class GlassesController(private val appContext: Context) {
     private var viture: VitureController? = null
     private var vitureModeApplied = false
     @Volatile private var vitureStarting = false
-    // The user's chosen display mode is sticky: seeded from persisted prefs, not the hardware.
-    private var lastReportedMode: Int = savedMode()
+    // Best-known CURRENT glasses mode (in-memory only — we no longer persist or force a remembered
+    // mode). For VITURE the live SDK state is the truth (see lastMode()); for the others this tracks
+    // the last mode we sent THIS session, defaulting to 2D (the panel's power-on state).
+    private var lastReportedMode: Int = GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60
+    // A mode the user EXPLICITLY picked while the device was still opening (RayNeo lazy-open): applied
+    // once on connect, then cleared. NOT a remembered/persisted preference.
+    private var pendingMode: Int? = null
     // Interfaces we successfully claimed — we only ever release what we actually took.
     private val claimedInterfaces: MutableList<UsbInterface> = mutableListOf()
 
@@ -239,9 +244,7 @@ class GlassesController(private val appContext: Context) {
             else -> false
         }
         if (ok) {
-            lastReportedMode = mode
-            // Remember the choice so we can re-assert it on the next (re)connect.
-            prefs.edit().putInt(KEY_DISPLAY_MODE, mode).apply()
+            lastReportedMode = mode   // in-memory only — reflects what we just sent; not persisted
             notifyState()
         }
         return ok
@@ -254,17 +257,6 @@ class GlassesController(private val appContext: Context) {
         else -> lastReportedMode
     }
 
-    /** The display mode the user last selected (persisted), or the 2D default if none. */
-    private fun savedMode(): Int =
-        prefs.getInt(KEY_DISPLAY_MODE, GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60)
-
-    /**
-     * Re-send the persisted display mode to the connected glasses so the panel returns to the
-     * mode the user chose. Called automatically a beat after every (re)connect, and can be
-     * called when the external panel powers back on (proximity sensor) without a full USB
-     * re-enumeration. No-op if disconnected or the brand isn't remotely switchable.
-     */
-    fun reapplySavedMode(): Boolean = setDisplayMode(savedMode())
 
     /**
      * Hand the live USB connection + device to a feature that needs to read from a
@@ -338,7 +330,7 @@ class GlassesController(private val appContext: Context) {
     fun requestRayneoControl(mode: Int): Boolean {
         if (!rayneoToggleCapable()) return false
         val dev = device ?: findAttachedGlasses() ?: return false
-        prefs.edit().putInt(KEY_DISPLAY_MODE, mode).apply()
+        pendingMode = mode        // apply this exact pick once the device opens (no persistence)
         lastReportedMode = mode
         if (usbManager.hasPermission(dev)) openDevice(dev) else requestUsbPermission(dev)
         return true
@@ -377,16 +369,17 @@ class GlassesController(private val appContext: Context) {
         }
         device = dev
         connection = conn
-        // The chosen display mode is sticky across reconnects: the picker remembers the user's
-        // choice rather than reading the hardware, and we actively push that mode to the glasses
-        // a beat after enumeration so they switch to it on their own. This covers both
-        // unplug/replug and the proximity sensor re-powering the panel when the goggles are put
-        // back on. (We can't read the mode back reliably across all firmware, hence push-not-poll.)
-        lastReportedMode = savedMode()
-        Log.i(TAG, "Glasses connected: ${dev.deviceName}, ${claimedInterfaces.size} HID interface(s) claimed; restoring saved mode 0x${lastReportedMode.toString(16)}")
+        // We no longer force a remembered mode on connect — it sometimes restored the WRONG mode.
+        // The panel powers on in 2D, so reflect that; apply ONLY a mode the user explicitly picked
+        // while the device was still opening (RayNeo lazy-open), then forget it.
+        lastReportedMode = GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60
+        Log.i(TAG, "Glasses connected: ${dev.deviceName}, ${claimedInterfaces.size} HID interface(s) claimed")
         notifyState()
         mainHandler.removeCallbacksAndMessages(null)
-        mainHandler.postDelayed({ reapplySavedMode() }, MODE_PUSH_DELAY_MS)
+        pendingMode?.let { m ->
+            pendingMode = null
+            mainHandler.postDelayed({ setDisplayMode(m) }, MODE_PUSH_DELAY_MS)
+        }
         // IMU is started on demand (setImuStreaming) only while the head-gesture menu is shown,
         // so it doesn't burn power streaming continuously while connected.
     }
@@ -417,13 +410,11 @@ class GlassesController(private val appContext: Context) {
         }, "VitureInit").start()
     }
 
-    /** Runs on the main thread when VITURE init/3D state changes: refresh UI, apply saved mode once. */
+    /** Runs on the main thread when VITURE init/3D state changes: just refresh UI. We no longer force
+     *  a remembered mode — the panel keeps its current state and lastMode() reads the live SDK 3D
+     *  state, so the picker title reflects reality; the user switches from the menu. */
     private fun onVitureStateChanged(vc: VitureController) {
         notifyState()
-        if (vc.isReady() && !vitureModeApplied) {
-            vitureModeApplied = true
-            reapplySavedMode()
-        }
     }
 
     private fun releaseConnection() {
