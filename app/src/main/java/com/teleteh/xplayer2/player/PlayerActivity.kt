@@ -1930,7 +1930,12 @@ class PlayerActivity : AppCompatActivity() {
         // cycle (it used to be a separate button) and is skipped on devices that can't run it.
         // TEMPORARY beta A/B: entering Lazy 3D asks which depth model to use; the dialog callback
         // finishes the enable + UI refresh, so we return early here.
-        if (stereoMode == StereoMode.Off && !lazy3dEnabled && isLazy3dSupported()) {
+        // Offer the 2D→3D step ONLY for a genuine 2D (mono) source — not for SBS/OU films, which are
+        // already stereo: there you just want the 2D↔SBS toggle, and a Lazy 3D prompt would hijack it
+        // (the tester's "after SBS→2D I can't get back to SBS"). Source layout comes from the stream
+        // metadata / aspect ratio — reliable, and independent of glasses detection.
+        if (stereoMode == StereoMode.Off && !lazy3dEnabled && isLazy3dSupported() &&
+            detectSourceLayout() == SourceLayout.Mono) {
             promptDepthModelThenEnableLazy3d()
             return
         }
@@ -2208,17 +2213,18 @@ class PlayerActivity : AppCompatActivity() {
     fun isLazy3dApplicable(): Boolean = stereoMode == StereoMode.Off
 
     /**
-     * Whether Lazy 3D can run now or could obtain what it needs:
-     *  - somewhere to SHOW a stereo pair (see [hasLazy3dDisplay]), AND
-     *  - depth model bundled in assets / already cached locally, OR
-     *  - device has any network capability (model can be downloaded on first use).
-     * Gates the Lazy 3D step in the stereo-mode cycle (and with it the remote's toggle).
+     * Whether Lazy 3D can run now or could obtain what it needs: the depth model is bundled / cached,
+     * OR the device has network to download it.
+     *
+     * NO display/glasses gate any more. Both gates we tried proved unreliable and kept HIDING the
+     * 2D→3D option from real glasses users: a glasses panel reports 16:9 in 2D (only 32:9 in 3D),
+     * mirror setups create no external Presentation, and new models (e.g. RayNeo 4Pro) aren't in any
+     * VID/PID list. So we just offer it whenever a model is available; on a device with nowhere to
+     * show a stereo pair it's a harmless no-op the user won't pick.
      */
     fun isLazy3dSupported(): Boolean {
-        if (!hasLazy3dDisplay()) return false
         val hasDepthModel = DepthModelManager(applicationContext).isAvailable()
-        val hasNetwork = isOnAnyNetwork()
-        return hasDepthModel || hasNetwork
+        return hasDepthModel || isOnAnyNetwork()
     }
 
     /**
