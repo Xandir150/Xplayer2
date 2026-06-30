@@ -2207,14 +2207,19 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * Lazy 3D synthesizes an SBS pair, so it's only offered where one can actually be shown: an
-     * external Presentation (phone + glasses over DP), or an ultrawide (~32:9) active display.
-     * The ultrawide check also covers a glasses box where the glasses are the primary screen: that
-     * panel reports 16:9 in 2D and switches to 32:9 once the glasses go into 3D (SBS) mode — and a
-     * 16:9 panel physically can't split an SBS pair across the two eyes, so offering Lazy 3D there
-     * (or on a normal phone screen) would just be a useless double picture.
+     * Lazy 3D synthesizes an SBS pair, so it's offered where one can be shown: supported XR glasses
+     * attached over USB, an external Presentation, or an ultrawide (~32:9) active display.
+     *
+     * The glasses-attached check is the RELIABLE signal. Geometry alone misses real setups: a glasses
+     * panel reports 16:9 in 2D and only becomes 32:9 once switched to 3D, so gating on "currently
+     * ultrawide" hid the option exactly when the user wanted to turn it on from 2D (chicken-and-egg)
+     * — that's why many users couldn't find it. A bare phone with no glasses has none of the three,
+     * so an SBS split — useless there — still isn't offered.
      */
-    private fun hasLazy3dDisplay(): Boolean = presentation != null || activeDisplayIsUltrawide()
+    private fun hasLazy3dDisplay(): Boolean =
+        MainActivity.glassesControllerForPlayback?.isGlassesAttached() == true ||
+            presentation != null ||
+            activeDisplayIsUltrawide()
 
     private fun isOnAnyNetwork(): Boolean = try {
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
