@@ -1963,19 +1963,34 @@ class PlayerActivity : AppCompatActivity() {
      * prompt once we know which model wins.
      */
     private fun promptDepthModelThenEnableLazy3d() {
-        val models = DepthModelManager.DepthModel.values()
-        val labels = models.map { it.uiLabel }.toTypedArray()
-        val checked = models.indexOf(DepthModelManager.activeModel(this)).coerceAtLeast(0)
-        AlertDialog.Builder(this)
-            .setTitle("Lazy 3D — depth model (beta test)")
-            .setSingleChoiceItems(labels, checked) { dialog, which ->
-                DepthModelManager.setActiveModel(this, models[which])
+        // Remote-styled custom dialog (dark rc_card + RemoteRow buttons) — see dialog_depth_model.xml.
+        // Navigable by touch (phone) or the remote d-pad (glasses-only boxes). Cancel (back/outside)
+        // leaves Lazy 3D off. TEMPORARY beta A/B picker.
+        val view = layoutInflater.inflate(R.layout.dialog_depth_model, null)
+        val container = view.findViewById<android.widget.LinearLayout>(R.id.modelContainer)
+        val dialog = android.app.Dialog(this)
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        dialog.setContentView(view)
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        dialog.window?.setLayout(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+        )
+        val active = DepthModelManager.activeModel(this)
+        for (m in DepthModelManager.DepthModel.values()) {
+            val btn = layoutInflater.inflate(R.layout.item_depth_model_button, container, false)
+                    as com.google.android.material.button.MaterialButton
+            btn.text = m.uiLabel
+            btn.isChecked = (m == active)   // filled accent marks the current model (remote style)
+            btn.setOnClickListener {
+                DepthModelManager.setActiveModel(this, m)
                 dialog.dismiss()
                 setLazy3dEnabled(true)
                 finishStereoModeChange()
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            container.addView(btn)
+        }
+        dialog.show()
     }
 
     private fun toggleStereoMode() = cycleStereoMode()
@@ -2217,7 +2232,7 @@ class PlayerActivity : AppCompatActivity() {
      * so an SBS split — useless there — still isn't offered.
      */
     private fun hasLazy3dDisplay(): Boolean =
-        MainActivity.glassesControllerForPlayback?.isGlassesAttached() == true ||
+        GlassesController.anyAttached(this) ||   // static USB scan — works even without the main screen
             presentation != null ||
             activeDisplayIsUltrawide()
 

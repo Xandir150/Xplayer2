@@ -632,6 +632,18 @@ class GlassesController(private val appContext: Context) {
         // come up so the command isn't dropped on the floor right after attach.
         private const val MODE_PUSH_DELAY_MS = 700L
 
+        /**
+         * Static "are any supported XR glasses plugged in?" USB scan — needs NO controller instance,
+         * so PlayerActivity can use it even when reached directly via a shared link (before the main
+         * screen created its controller). Used to decide whether to offer Lazy 3D.
+         */
+        fun anyAttached(context: Context): Boolean = try {
+            val usb = context.getSystemService(Context.USB_SERVICE) as UsbManager
+            usb.deviceList.values.any { d ->
+                SUPPORTED_DEVICES.any { it.vid == d.vendorId && it.pid == d.productId }
+            }
+        } catch (_: Throwable) { false }
+
         // VID/PID list mirrored from wheaney/XRLinuxDriver (covers every model that ships at the time
         // of writing). Brand identification is exposed via [currentBrand]; remote 2D/3D switching is
         // implemented for XREAL (HID MCU) and VITURE (bundled VITURE One SDK — see VitureController).
