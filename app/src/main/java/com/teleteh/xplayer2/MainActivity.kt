@@ -186,7 +186,9 @@ class MainActivity : AppCompatActivity() {
     private fun prefetchDepthModelIfNeeded() {
         val mgr = DepthModelManager(applicationContext)
         if (mgr.isAvailable()) return
-        if (!isUnmeteredNetwork()) return
+        // Download the depth model in the background on launch (any network) so 2D→3D is ready when
+        // the user wants it — the button is always shown, so the model should be on its way already.
+        // ensureAvailable() fails gracefully if there's no connection.
         lifecycleScope.launch(Dispatchers.IO) {
             try {
                 if (!mgr.isAvailable()) {

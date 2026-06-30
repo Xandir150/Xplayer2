@@ -56,6 +56,7 @@
     <string name="lazy3d_downloading">Загрузка модели Lazy 3D (~65 МБ)…</string>
     <string name="lazy3d_downloaded">Модель Lazy 3D готова</string>
     <string name="lazy3d_download_failed">Не удалось загрузить модель Lazy 3D</string>
+    <string name="lazy3d_download_failed_host">Не удалось скачать модель 3D с %1$s — проверьте соединение</string>
 
     <!-- Network -->
     <string name="network_enter_url">Вставьте ссылку (http, https, msf, content)</string>

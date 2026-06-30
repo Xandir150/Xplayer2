@@ -71,6 +71,7 @@
     <string name="lazy3d_downloading">Downloading Lazy 3D depth model (~65 MB)…</string>
     <string name="lazy3d_downloaded">Lazy 3D depth model ready</string>
     <string name="lazy3d_download_failed">Failed to download Lazy 3D depth model</string>
+    <string name="lazy3d_download_failed_host">Couldn\'t download the 3D model from %1$s — check your connection</string>
     <!-- Lazy 3D startup outcomes (English-only is fine per request) -->
     <string name="lazy3d_slow_cpu">Lazy 3D has no GPU support on this device — it may run slowly.</string>
     <string name="lazy3d_unsupported">Lazy 3D couldn\'t load on this device.</string>

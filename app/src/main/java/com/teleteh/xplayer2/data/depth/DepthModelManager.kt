@@ -59,6 +59,9 @@ class DepthModelManager(
 
     val cachedFile: File get() = File(appContext.filesDir, model.filename)
 
+    /** Host the active model downloads from — for surfacing a network error to the user. */
+    fun downloadHost(): String = runCatching { URL(model.url).host }.getOrNull() ?: "the server"
+
     fun isBundled(): Boolean = try {
         appContext.assets.openFd(model.filename).close(); true
     } catch (_: Throwable) { false }

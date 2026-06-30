@@ -2213,19 +2213,17 @@ class PlayerActivity : AppCompatActivity() {
     fun isLazy3dApplicable(): Boolean = stereoMode == StereoMode.Off
 
     /**
-     * Whether Lazy 3D can run now or could obtain what it needs: the depth model is bundled / cached,
-     * OR the device has network to download it.
+     * ALWAYS true: the 2D→3D step is offered on every plain-2D film regardless of glasses, display,
+     * network, or whether the model is downloaded yet (the cycle still requires a MONO source, so
+     * SBS/OU films keep the plain 2D↔SBS toggle). If the model isn't present, enabling it kicks off
+     * the download — the button shows progress and surfaces a network error (with the host) if it
+     * can't fetch — but the option is always there (matches iOS).
      *
-     * NO display/glasses gate any more. Both gates we tried proved unreliable and kept HIDING the
-     * 2D→3D option from real glasses users: a glasses panel reports 16:9 in 2D (only 32:9 in 3D),
-     * mirror setups create no external Presentation, and new models (e.g. RayNeo 4Pro) aren't in any
-     * VID/PID list. So we just offer it whenever a model is available; on a device with nowhere to
-     * show a stereo pair it's a harmless no-op the user won't pick.
+     * Every display/glasses gate we tried proved unreliable and kept HIDING the option from real
+     * users (a glasses panel is 16:9 in 2D, mirror setups make no Presentation, new models like
+     * RayNeo 4Pro aren't in any VID/PID list), so we stopped gating entirely.
      */
-    fun isLazy3dSupported(): Boolean {
-        val hasDepthModel = DepthModelManager(applicationContext).isAvailable()
-        return hasDepthModel || isOnAnyNetwork()
-    }
+    fun isLazy3dSupported(): Boolean = true
 
     /**
      * Lazy 3D synthesizes an SBS pair, so it's offered where one can be shown: supported XR glasses
@@ -2241,12 +2239,6 @@ class PlayerActivity : AppCompatActivity() {
         GlassesController.anyAttached(this) ||   // static USB scan — works even without the main screen
             presentation != null ||
             activeDisplayIsUltrawide()
-
-    private fun isOnAnyNetwork(): Boolean = try {
-        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val net = cm.activeNetwork ?: return false
-        cm.getNetworkCapabilities(net)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
-    } catch (_: Throwable) { false }
 
     /**
      * Turn the Lazy-3D feature on or off. Starting it downloads the depth-estimation TFLite model
@@ -2292,7 +2284,7 @@ class PlayerActivity : AppCompatActivity() {
                     } else {
                         // Download failed — drop the toggle so the button/status don't claim an
                         // "active" Lazy 3D that will never come, and so the user can simply retry.
-                        Toast.makeText(this@PlayerActivity, R.string.lazy3d_download_failed, Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@PlayerActivity, getString(R.string.lazy3d_download_failed_host, mgr.downloadHost()), Toast.LENGTH_LONG).show()
                         lazy3dEnabled = false
                         applyVideoPipeline()
                         btnSbsRef?.let { applySbsButtonVisual(it) }
