@@ -1,6 +1,7 @@
 package com.teleteh.xplayer2.data.depth
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.CompatibilityList
@@ -303,5 +304,42 @@ class DepthEstimator(
         private const val DELEGATE_PREFS = "lazy3d_delegate"
         private const val KEY_NNAPI_PROBING = "nnapi_probing"
         private const val KEY_NNAPI_BANNED = "nnapi_banned"
+
+        /** Device SoC label ("Samsung Exynos 2400" / "Qualcomm SM8550") for the Lazy-3D debug
+         *  overlay — API 31+ only; falls back to the board codename ([Build.HARDWARE]) below that
+         *  or if the OEM leaves the SOC_* fields blank. Static/cached — doesn't change at runtime. */
+        val socLabel: String by lazy {
+            val mfr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MANUFACTURER else null
+            val model = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MODEL else null
+            listOfNotNull(mfr, model).joinToString(" ").ifBlank { Build.HARDWARE }
+        }
+
+        // Overall-CPU-load sampling state (device-wide, not per-estimator — hence static). There's
+        // no public API for per-backend (NPU/GPU) utilization on Android, so this is the closest
+        // proxy the debug overlay can show; it's total system CPU, not just this process.
+        @Volatile private var lastCpuTotal = 0L
+        @Volatile private var lastCpuIdle = 0L
+
+        /**
+         * Best-effort overall CPU load % (delta since the last call) from /proc/stat's aggregate
+         * "cpu" line, which — unlike /proc/[pid]/stat for other processes — third-party apps can
+         * still read on stock Android. Returns null on the first call (no delta yet), if the file
+         * is unreadable on this OEM/SELinux policy, or on any parse error.
+         */
+        fun sampleCpuLoadPercent(): Int? = try {
+            val line = java.io.RandomAccessFile("/proc/stat", "r").use { it.readLine() }
+            val fields = line.trim().split(Regex("\\s+")).drop(1).mapNotNull { it.toLongOrNull() }
+            if (fields.size < 4) return null
+            val idle = fields[3] + fields.getOrElse(4) { 0L }   // idle + iowait
+            val total = fields.sum()
+            val (prevTotal, prevIdle) = lastCpuTotal to lastCpuIdle
+            lastCpuTotal = total; lastCpuIdle = idle
+            val dTotal = total - prevTotal
+            val dIdle = idle - prevIdle
+            if (prevTotal == 0L || dTotal <= 0) null
+            else (100 * (dTotal - dIdle) / dTotal).toInt().coerceIn(0, 100)
+        } catch (_: Throwable) {
+            null
+        }
     }
 }
