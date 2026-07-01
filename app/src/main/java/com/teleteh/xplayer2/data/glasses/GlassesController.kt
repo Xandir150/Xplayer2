@@ -223,31 +223,43 @@ class GlassesController(private val appContext: Context) {
         currentBrand() == Brand.XREAL || currentBrand() == Brand.VITURE || rayneoToggleCapable()
 
     /**
-     * Send a `Write display mode` MCU command to the connected glasses.
+     * Send a `Write display mode` MCU/SDK command to the connected glasses.
      *
-     * No-op (returns false) if either:
-     *   - no glasses are connected, or
-     *   - the connected glasses' brand isn't supported for remote switching yet.
+     * Does blocking USB I/O (XREAL/RayNeo: `bulkTransfer`/`controlTransfer` with up to ~1000ms
+     * timeouts) or calls into a closed-source SDK whose blocking behaviour we don't control
+     * (VITURE) — so the actual work runs on a background thread; [callback] (if given) fires on
+     * the main thread once it's done. This used to run synchronously on the CALLER's thread,
+     * which for a menu click meant blocking the UI thread for up to ~1s right inside input
+     * dispatch — a plausible contributor to "Input dispatching timed out" ANRs, worse on slow
+     * devices (this app also targets Android TV boxes) or a repeated tap before the UI caught up.
      *
-     * The caller is expected to gate UI on [currentState] and [supportsRemoteSwitch] first.
+     * No-op (callback invoked with false, nothing sent) if either no glasses are connected, or
+     * the connected glasses' brand isn't supported for remote switching yet. The caller is
+     * expected to gate UI on [currentState] and [supportsRemoteSwitch] first.
      */
-    fun setDisplayMode(mode: Int): Boolean {
-        val ok = when (currentBrand()) {
-            // XREAL: HID MCU "write display mode".
-            Brand.XREAL -> sendMcuCommand(GlassesProtocol.MCU_MSG_W_DISP_MODE, byteArrayOf(mode.toByte()))
-            // VITURE: SDK binary 2D/3D toggle — any SBS mode means "3D on".
-            Brand.VITURE -> viture?.set3d(GlassesProtocol.is3DMode(mode)) ?: false
-            // RayNeo (verified models only): reverse-engineered HID 2D/3D toggle — any SBS mode = 3D.
-            // Only send once we've actually opened the device (via requestRayneoControl from the picker);
-            // automatic re-applies while still passive are a no-op so they never trigger a USB prompt.
-            Brand.RAYNEO -> if (connection != null) sendRayneoDisplayMode(GlassesProtocol.is3DMode(mode)) else false
-            else -> false
-        }
-        if (ok) {
-            lastReportedMode = mode   // in-memory only — reflects what we just sent; not persisted
-            notifyState()
-        }
-        return ok
+    fun setDisplayMode(mode: Int, callback: ((Boolean) -> Unit)? = null) {
+        val brand = currentBrand()
+        Thread({
+            val ok = when (brand) {
+                // XREAL: HID MCU "write display mode".
+                Brand.XREAL -> sendMcuCommand(GlassesProtocol.MCU_MSG_W_DISP_MODE, byteArrayOf(mode.toByte()))
+                // VITURE: SDK binary 2D/3D toggle — any SBS mode means "3D on".
+                Brand.VITURE -> viture?.set3d(GlassesProtocol.is3DMode(mode)) ?: false
+                // RayNeo (verified models only): reverse-engineered HID 2D/3D toggle — any SBS mode = 3D.
+                // Only send once we've actually opened the device (via requestRayneoControl from the
+                // picker); automatic re-applies while still passive are a no-op so they never trigger
+                // a USB prompt.
+                Brand.RAYNEO -> if (connection != null) sendRayneoDisplayMode(GlassesProtocol.is3DMode(mode)) else false
+                else -> false
+            }
+            mainHandler.post {
+                if (ok) {
+                    lastReportedMode = mode   // in-memory only — reflects what we just sent; not persisted
+                    notifyState()
+                }
+                callback?.invoke(ok)
+            }
+        }, "GlassesSetMode").start()
     }
 
     fun lastMode(): Int = when (currentBrand()) {
@@ -450,11 +462,13 @@ class GlassesController(private val appContext: Context) {
         val pending = pendingMode
         pendingMode = null
         mainHandler.postDelayed({
-            if (pending != null) setDisplayMode(pending)
             // Confirm the panel's ACTUAL mode once the MCU has had time to come up — a write can
             // silently fail to take, or the panel could already be in a different mode than our
-            // 2D power-on assumption above (e.g. it never actually powered off).
-            refreshDisplayMode()
+            // 2D power-on assumption above (e.g. it never actually powered off). setDisplayMode is
+            // async now, so chain the refresh through its callback rather than firing both at once
+            // (which could read back before the write actually lands).
+            if (pending != null) setDisplayMode(pending) { refreshDisplayMode() }
+            else refreshDisplayMode()
         }, MODE_PUSH_DELAY_MS)
         // IMU is started on demand (setImuStreaming) only while the head-gesture menu is shown,
         // so it doesn't burn power streaming continuously while connected.

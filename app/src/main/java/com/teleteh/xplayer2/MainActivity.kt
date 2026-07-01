@@ -724,23 +724,28 @@ class MainActivity : AppCompatActivity() {
                 ?: getString(R.string.glasses_mode_title))
             .setItems(labels) { dialog, which ->
                 val (mode, label) = items[which]
-                if (glasses.setDisplayMode(mode)) {
-                    Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
-                    // The write can silently fail to take on the panel — re-query the ACTUAL mode
-                    // shortly after so the toolbar chip reflects reality, not just what we sent.
-                    android.os.Handler(mainLooper).postDelayed({ glasses.refreshDisplayMode() }, 400)
-                } else if (glasses.currentBrand() == GlassesController.Brand.RAYNEO &&
-                    glasses.requestRayneoControl(mode)) {
-                    // RayNeo opens lazily: this is the first switch, so we ask for USB access now and
-                    // the chosen mode is applied once it's granted. (Plugging the glasses in stays
-                    // silent — no auto-prompt — by design.)
-                    Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
-                } else if (glasses.currentBrand() == GlassesController.Brand.RAYNEO) {
-                    // USB toggle unavailable (e.g. Android won't surface the HID interface while DP
-                    // video is active) — fall back to the physical temple-button way, which always works.
-                    Toast.makeText(this, R.string.glasses_rayneo_manual, Toast.LENGTH_LONG).show()
-                } else {
-                    Toast.makeText(this, R.string.glasses_send_failed, Toast.LENGTH_SHORT).show()
+                // setDisplayMode is async (does blocking USB I/O off the main thread — see its
+                // doc) — dismiss the picker right away and let the Toast land whenever the result
+                // callback fires, instead of blocking this click handler on the USB round-trip.
+                glasses.setDisplayMode(mode) { ok ->
+                    if (ok) {
+                        Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
+                        // The write can silently fail to take on the panel — re-query the ACTUAL mode
+                        // shortly after so the toolbar chip reflects reality, not just what we sent.
+                        android.os.Handler(mainLooper).postDelayed({ glasses.refreshDisplayMode() }, 400)
+                    } else if (glasses.currentBrand() == GlassesController.Brand.RAYNEO &&
+                        glasses.requestRayneoControl(mode)) {
+                        // RayNeo opens lazily: this is the first switch, so we ask for USB access now and
+                        // the chosen mode is applied once it's granted. (Plugging the glasses in stays
+                        // silent — no auto-prompt — by design.)
+                        Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
+                    } else if (glasses.currentBrand() == GlassesController.Brand.RAYNEO) {
+                        // USB toggle unavailable (e.g. Android won't surface the HID interface while DP
+                        // video is active) — fall back to the physical temple-button way, which always works.
+                        Toast.makeText(this, R.string.glasses_rayneo_manual, Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this, R.string.glasses_send_failed, Toast.LENGTH_SHORT).show()
+                    }
                 }
                 dialog.dismiss()
             }
