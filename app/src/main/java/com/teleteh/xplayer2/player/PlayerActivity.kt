@@ -34,6 +34,7 @@ import android.view.ViewGroup
 import android.view.Display
 import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
@@ -1170,8 +1171,22 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
         val intent = Intent(this, PlaybackService::class.java)
-        startService(intent)
-        bindService(intent, serviceConnection, BIND_AUTO_CREATE)
+        try {
+            // ContextCompat routes to startForegroundService() on API 26+ (PlaybackService
+            // promotes itself via startForeground() the moment the bind connects, well inside
+            // the 5s window) — plain startService() here used to throw
+            // BackgroundServiceStartNotAllowedException / "app is in background" because this is
+            // called from onPause()/onStop() (see updatePlaybackService()), i.e. exactly when the
+            // OS may no longer count the app as foreground. Still guarded: even
+            // startForegroundService() can be refused in rare states (API 31+
+            // ForegroundServiceStartNotAllowedException) — if so, playback on the external
+            // display continues regardless (the service only owns the persistent notification,
+            // not the ExoPlayer instance), we just skip the notification rather than crash.
+            ContextCompat.startForegroundService(this, intent)
+            bindService(intent, serviceConnection, BIND_AUTO_CREATE)
+        } catch (e: Exception) {
+            android.util.Log.w("XPlayer2", "Failed to start PlaybackService (external playback continues without it)", e)
+        }
     }
 
     private fun stopPlaybackService() {
