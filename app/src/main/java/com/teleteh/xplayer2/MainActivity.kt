@@ -62,9 +62,17 @@ class MainActivity : AppCompatActivity() {
     private var glassesRows: List<MenuMirrorPresentation.Row> = emptyList()
     private var glassesTab = -1
     private val displayListener = object : DisplayManager.DisplayListener {
-        override fun onDisplayAdded(displayId: Int) = reconcileGlassesMenu()
+        override fun onDisplayAdded(displayId: Int) { reconcileGlassesMenu(); glasses.refreshDisplayMode() }
         override fun onDisplayRemoved(displayId: Int) = reconcileGlassesMenu()
-        override fun onDisplayChanged(displayId: Int) = reconcileGlassesMenu()
+        override fun onDisplayChanged(displayId: Int) {
+            reconcileGlassesMenu()
+            // The panel just renegotiated its mode (this fires on the exact "external display
+            // connected/changed" event, e.g. right after a manual switch causes it to re-EDID) —
+            // the toolbar chip was otherwise only catching up on the NEXT onResume/onStart, so a
+            // switch could sit stale until the user backgrounded and returned. Small delay: the
+            // MCU needs a moment after a mode change before it answers a read query correctly.
+            android.os.Handler(mainLooper).postDelayed({ glasses.refreshDisplayMode() }, 300)
+        }
     }
     private val glassesFocusListener =
         android.view.ViewTreeObserver.OnGlobalFocusChangeListener { _, _ -> pushGlassesMenu() }
@@ -409,6 +417,9 @@ class MainActivity : AppCompatActivity() {
         super.onStart()
         glasses.setListener { _, _ -> updateGlassesMenu() }
         glasses.register()
+        // Ask the panel what mode it's ACTUALLY in (not what we last remember sending) — covers
+        // app restart and this screen being (re)entered while already connected.
+        glasses.refreshDisplayMode()
         // Show our menu on the glasses while we're the foreground (browsing) screen, and react to
         // the goggles being plugged/unplugged, tab switches, and focus moves (to keep it in sync).
         displayManager?.registerDisplayListener(displayListener, null)
@@ -434,6 +445,10 @@ class MainActivity : AppCompatActivity() {
         // PlayerActivity might have come and gone in the background; re-evaluate enabled state.
         updateGlassesMenu()
         refreshGlassesMenu()
+        // Re-query the panel's actual mode every time this screen becomes visible again — e.g. the
+        // user switched via the head-gesture menu or PlayerActivity while we were backgrounded, or
+        // the glasses were unplugged/replugged (which resets the panel to 2D).
+        glasses.refreshDisplayMode()
     }
 
     /**
@@ -711,6 +726,9 @@ class MainActivity : AppCompatActivity() {
                 val (mode, label) = items[which]
                 if (glasses.setDisplayMode(mode)) {
                     Toast.makeText(this, label, Toast.LENGTH_SHORT).show()
+                    // The write can silently fail to take on the panel — re-query the ACTUAL mode
+                    // shortly after so the toolbar chip reflects reality, not just what we sent.
+                    android.os.Handler(mainLooper).postDelayed({ glasses.refreshDisplayMode() }, 400)
                 } else if (glasses.currentBrand() == GlassesController.Brand.RAYNEO &&
                     glasses.requestRayneoControl(mode)) {
                     // RayNeo opens lazily: this is the first switch, so we ask for USB access now and

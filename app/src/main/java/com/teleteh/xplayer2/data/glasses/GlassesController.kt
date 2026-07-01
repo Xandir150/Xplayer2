@@ -257,6 +257,77 @@ class GlassesController(private val appContext: Context) {
         else -> lastReportedMode
     }
 
+    /**
+     * Ask the XREAL panel what display mode it's ACTUALLY in right now (MCU "read display mode"),
+     * instead of trusting [lastReportedMode] — which only reflects the last write WE sent and can
+     * drift from reality (a write can silently fail to take on the panel, or the mode changed via
+     * the glasses' own temple-button menu). Does blocking USB I/O, so it runs off the main thread;
+     * [lastReportedMode] and the [Listener] update on the main thread once the reply lands (or not,
+     * if the panel doesn't answer — some firmwares don't implement the read command).
+     * No-op for VITURE (whose [lastMode] already reads the live SDK state) and RayNeo (no read
+     * command reverse-engineered — see [sendRayneoDisplayMode]).
+     */
+    fun refreshDisplayMode() {
+        if (currentBrand() != Brand.XREAL) return
+        val conn = connection ?: return
+        val dev = device ?: return
+        Thread({
+            // One retry: right after a mode switch the MCU can be mid-negotiation and miss the
+            // first read (times out / doesn't answer yet) — a short pause + second try catches it
+            // without the caller needing its own retry logic.
+            var mode = queryDisplayModeBlocking(dev, conn)
+            if (mode == null) {
+                try { Thread.sleep(250) } catch (_: InterruptedException) {}
+                mode = queryDisplayModeBlocking(dev, conn)
+            }
+            if (mode != null) {
+                mainHandler.post {
+                    if (mode != lastReportedMode) {
+                        Log.i(TAG, "Glasses display mode refresh: 0x${lastReportedMode.toString(16)} -> 0x${mode.toString(16)}")
+                    }
+                    lastReportedMode = mode
+                    notifyState()
+                }
+            }
+        }, "GlassesModeQuery").start()
+    }
+
+    /**
+     * Send the MCU "read display mode" request and read back one reply packet on the MCU
+     * interface's IN endpoint. Returns the parsed mode byte, or null if the panel didn't answer
+     * in time / the reply didn't parse (unknown firmware reply shape — logged for diagnosis).
+     */
+    private fun queryDisplayModeBlocking(dev: UsbDevice, conn: UsbDeviceConnection): Int? {
+        if (!sendMcuCommand(GlassesProtocol.MCU_MSG_R_DISP_MODE, ByteArray(0))) return null
+        for (i in 0 until dev.interfaceCount) {
+            if (i != GlassesProtocol.MCU_INTERFACE_ID && i != 4) continue
+            val intf = dev.getInterface(i)
+            for (j in 0 until intf.endpointCount) {
+                val ep = intf.getEndpoint(j)
+                if (ep.direction == UsbConstants.USB_DIR_IN && ep.type == UsbConstants.USB_ENDPOINT_XFER_INT) {
+                    val buf = ByteArray(GlassesProtocol.MCU_PACKET_SIZE)
+                    val read = try { conn.bulkTransfer(ep, buf, buf.size, MCU_READ_TIMEOUT_MS) } catch (_: Throwable) { -1 }
+                    if (read <= 0) continue
+                    Log.i(TAG, "MCU disp-mode reply (iface $i, $read bytes): " +
+                        buf.copyOfRange(0, read).joinToString(" ") { "%02x".format(it) })
+                    // Mirrors the write layout (see sendMcuCommand): head(1) checksum(4) len(2)
+                    // timestamp(8) msgid(2) reserved(5) data(<=42), data starting at offset 22.
+                    // EMPIRICALLY (logged on-device): the data field's shape varies — sometimes a
+                    // single byte (the mode itself), sometimes a longer field where the mode sits
+                    // one byte in (e.g. "00 09 00 00 00" for mode 0x09) — so hunt the data bytes
+                    // for the first one that's a KNOWN mode value rather than trust a fixed offset.
+                    val packetLen = (buf[5].toInt() and 0xFF) or ((buf[6].toInt() and 0xFF) shl 8)
+                    val dataLen = (packetLen - 17).coerceIn(0, (read - 22).coerceAtLeast(0))
+                    for (k in 0 until dataLen) {
+                        val b = buf[22 + k].toInt() and 0xFF
+                        if (b in KNOWN_DISPLAY_MODES) return b
+                    }
+                }
+            }
+        }
+        return null
+    }
+
 
     /**
      * Hand the live USB connection + device to a feature that needs to read from a
@@ -376,10 +447,15 @@ class GlassesController(private val appContext: Context) {
         Log.i(TAG, "Glasses connected: ${dev.deviceName}, ${claimedInterfaces.size} HID interface(s) claimed")
         notifyState()
         mainHandler.removeCallbacksAndMessages(null)
-        pendingMode?.let { m ->
-            pendingMode = null
-            mainHandler.postDelayed({ setDisplayMode(m) }, MODE_PUSH_DELAY_MS)
-        }
+        val pending = pendingMode
+        pendingMode = null
+        mainHandler.postDelayed({
+            if (pending != null) setDisplayMode(pending)
+            // Confirm the panel's ACTUAL mode once the MCU has had time to come up — a write can
+            // silently fail to take, or the panel could already be in a different mode than our
+            // 2D power-on assumption above (e.g. it never actually powered off).
+            refreshDisplayMode()
+        }, MODE_PUSH_DELAY_MS)
         // IMU is started on demand (setImuStreaming) only while the head-gesture menu is shown,
         // so it doesn't burn power streaming continuously while connected.
     }
@@ -631,6 +707,20 @@ class GlassesController(private val appContext: Context) {
         // Small delay after enumeration before pushing the saved mode — gives the MCU time to
         // come up so the command isn't dropped on the floor right after attach.
         private const val MODE_PUSH_DELAY_MS = 700L
+        // Short: this blocks a background thread and the caller (menu/UI open) is waiting on it.
+        private const val MCU_READ_TIMEOUT_MS = 300
+        // Every value GlassesProtocol.MCU_DISPLAY_MODE_* defines — used to pick the mode byte out
+        // of a "read display mode" reply whose data field's shape isn't fixed (see queryDisplayModeBlocking).
+        private val KNOWN_DISPLAY_MODES = setOf(
+            GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60,
+            GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_60_SBS,
+            GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_72_SBS,
+            GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_72,
+            GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60_SBS,
+            GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_90_SBS,
+            GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_90,
+            GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_120,
+        )
 
         /**
          * Static "are any supported XR glasses plugged in?" USB scan — needs NO controller instance,
