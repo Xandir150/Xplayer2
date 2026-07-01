@@ -1936,7 +1936,7 @@ class PlayerActivity : AppCompatActivity() {
         // metadata / aspect ratio — reliable, and independent of glasses detection.
         if (stereoMode == StereoMode.Off && !lazy3dEnabled && isLazy3dSupported() &&
             detectSourceLayout() == SourceLayout.Mono) {
-            promptDepthModelThenEnableLazy3d()
+            offerDepthModelPicker()
             return
         }
         when {
@@ -1959,6 +1959,24 @@ class PlayerActivity : AppCompatActivity() {
         btnSbsRef?.let { applySbsButtonVisual(it) }
         RemoteControlActivity.currentInstance?.syncControls()
         saveProgress()
+    }
+
+    /**
+     * Show the depth-model picker on whichever screen is actually in front. When the picture is
+     * on the glasses, [showRemoteControlFront] has pushed [RemoteControlActivity] in front of
+     * this activity on the phone — a Dialog built with THIS (backgrounded) activity as context
+     * doesn't show/isn't interactable, which used to make the stereo-mode cycle button appear
+     * stuck on 2D (it bailed into the dialog call every press and never reached the mode switch
+     * below). So delegate to the activity that's actually foreground; fall back to showing it
+     * here directly when there's no external presentation (phone-only playback).
+     */
+    private fun offerDepthModelPicker() {
+        val remote = RemoteControlActivity.currentInstance
+        if (presentation != null && remote != null) {
+            remote.showDepthModelDialog()
+        } else {
+            promptDepthModelThenEnableLazy3d()
+        }
     }
 
     /**
@@ -1988,14 +2006,19 @@ class PlayerActivity : AppCompatActivity() {
             btn.text = m.uiLabel
             btn.isChecked = (m == active)   // filled accent marks the current model (remote style)
             btn.setOnClickListener {
-                DepthModelManager.setActiveModel(this, m)
                 dialog.dismiss()
-                setLazy3dEnabled(true)
-                finishStereoModeChange()
+                applyChosenDepthModel(m)
             }
             container.addView(btn)
         }
         dialog.show()
+    }
+
+    /** Shared by [promptDepthModelThenEnableLazy3d] and RemoteControlActivity's mirrored dialog. */
+    fun applyChosenDepthModel(model: DepthModelManager.DepthModel) {
+        DepthModelManager.setActiveModel(this, model)
+        setLazy3dEnabled(true)
+        finishStereoModeChange()
     }
 
     private fun toggleStereoMode() = cycleStereoMode()
@@ -2177,12 +2200,18 @@ class PlayerActivity : AppCompatActivity() {
     /**
      * Live telemetry for the remote's temporary Lazy-3D debug overlay, or null when Lazy 3D is
      * off / nothing to report (so the remote hides the row). Shows the depth-synthesis inference
-     * time. Remove the overlay once tuning is done.
+     * time, which backend it's actually running on (NNAPI/GPU/CPU — see DepthEstimator.init's
+     * delegate ladder) and the SoC, plus a best-effort overall CPU load % (there's no public
+     * Android API for per-NPU/GPU utilization, so this is the closest available proxy — it's
+     * total system load, not just this process/backend). Remove the overlay once tuning is done.
      */
     fun lazy3dDebugLine(): String? {
         if (!lazy3dEnabled) return null
         val est = depthEstimator
-        return if (est?.isReady() == true) "depth ${"%.0f".format(est.avgInferenceMs)}ms" else null
+        if (est?.isReady() != true) return null
+        val backend = est.backend ?: "?"
+        val cpuLoad = DepthEstimator.sampleCpuLoadPercent()?.let { " · CPU load ${it}%" } ?: ""
+        return "depth ${"%.0f".format(est.avgInferenceMs)}ms · $backend · ${DepthEstimator.socLabel}$cpuLoad"
     }
 
     /**

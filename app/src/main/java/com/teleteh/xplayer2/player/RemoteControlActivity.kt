@@ -479,6 +479,40 @@ class RemoteControlActivity : AppCompatActivity() {
         else String.format("%d:%02d", m, s)
     }
     
+    /**
+     * Mirrors PlayerActivity's depth-model picker, shown HERE instead: when the picture is on the
+     * glasses, this activity (not PlayerActivity, which sits behind it) is what's actually in
+     * front on the phone, so a Dialog needs this activity's context to show/be interactable.
+     * See PlayerActivity.offerDepthModelPicker.
+     */
+    fun showDepthModelDialog() {
+        val player = PlayerActivity.currentInstance ?: return
+        val view = layoutInflater.inflate(R.layout.dialog_depth_model, null)
+        val container = view.findViewById<android.widget.LinearLayout>(R.id.modelContainer)
+        val dialog = android.app.Dialog(this)
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        dialog.setContentView(view)
+        dialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+        dialog.window?.setLayout(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+        )
+        val active = com.teleteh.xplayer2.data.depth.DepthModelManager.activeModel(this)
+        for (m in com.teleteh.xplayer2.data.depth.DepthModelManager.DepthModel.values()) {
+            val btn = layoutInflater.inflate(R.layout.item_depth_model_button, container, false)
+                    as MaterialButton
+            btn.text = m.uiLabel
+            btn.isChecked = (m == active)
+            btn.setOnClickListener {
+                dialog.dismiss()
+                player.applyChosenDepthModel(m)
+                updateButtons()
+            }
+            container.addView(btn)
+        }
+        dialog.show()
+    }
+
     private fun showQualityDialog() {
         val player = PlayerActivity.currentInstance ?: return
         val labels = player.getQualityVariants()
