@@ -44,9 +44,14 @@ class DepthModelManager(
             "midas_v21_small.tflite", "$REL/midas_v21_small.tflite",
             256, true, "MiDaS small — fast (current default)"
         ),
-        DAV2(
-            "depth_anything_v2_small.tflite", "$REL/depth_anything_v2_small.tflite",
-            518, false, "Depth Anything V2 — sharper, NPU only, ~99 MB"
+        // Our own distillation off DA-V2 (in-house student, NOT upstream DA-V2-Small): much
+        // smaller/faster than DAV2 (14 MB vs ~99 MB, 448² vs 518² input) since DAV2 was too slow
+        // in practice. Backbone lineage is still uncertain (may retain DA-V2's ViT), so gpuSafe
+        // stays false until verified on-device not to hit the same Adreno constant-garbage bug
+        // (TF #93476) that DAV2 has.
+        V_MODEL(
+            "v_model_fp16.tflite", "$REL/v_model_fp16.tflite",
+            448, false, "V-Model — our DA-V2 distillation (beta)"
         );
     }
 
