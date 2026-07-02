@@ -162,6 +162,9 @@ class PlayerActivity : AppCompatActivity() {
     private val poseUiHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var depthEstimator: DepthEstimator? = null
     private var depthWorker: DepthFrameWorker? = null
+    // Effective stereo divergence for the current Lazy-3D session: the base LAZY3D_DIVERGENCE
+    // scaled by the active model's divergenceScale (set when the estimator loads).
+    private var lazy3dDivergence = LAZY3D_DIVERGENCE
     private var pendingDepthTick: Runnable? = null
     private var depthDownloadJob: kotlinx.coroutines.Job? = null
     // Startup runs off the main thread (GPU model load is slow), so this flags the in-flight
@@ -222,6 +225,14 @@ class PlayerActivity : AppCompatActivity() {
     // Foreground service for external playback
     private var playbackService: PlaybackService? = null
     private var serviceBound = false
+    // True after a successful bindService() call, even before (or without) onServiceConnected —
+    // the unbind obligation starts at the request, not at the connect.
+    private var serviceBindRequested = false
+    // True after a successful startForegroundService() call — the stop obligation exists even if
+    // the companion bindService() failed outright (see stopPlaybackService's stopService fallback).
+    private var serviceStartRequested = false
+    // The exact GlassesController instance onCreate registered on (null if none existed then).
+    private var acquiredGlasses: GlassesController? = null
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             playbackService = (binder as? PlaybackService.LocalBinder)?.getService()
@@ -373,7 +384,13 @@ class PlayerActivity : AppCompatActivity() {
         // the player owns the goggles, so without this its onStop() would release the connection
         // and features that read from USB (the Lazy-3D head-tracking IMU) would have no link.
         // Ref-counted in GlassesController, so this composes with MainActivity's own acquire.
-        MainActivity.glassesControllerForPlayback?.register()
+        // Remember the exact instance we registered on: the static can be null NOW (player
+        // launched directly from a share/VIEW intent, MainActivity never created) yet non-null
+        // by onDestroy (back-navigation starts MainActivity first) — unregistering an instance
+        // we never registered on steals MainActivity's live acquire and kills its USB link;
+        // and if MainActivity is recreated mid-playback, the OLD controller would leak its
+        // claimed connection forever.
+        acquiredGlasses = MainActivity.glassesControllerForPlayback?.also { it.register() }
 
         // Resolve and start playback from the launching intent.
         loadFromIntent(intent)
@@ -769,6 +786,10 @@ class PlayerActivity : AppCompatActivity() {
                 btnSbsRef?.let { applySbsButtonVisual(it) }
                 applyVideoPipeline()
                 exo.play()
+                // If the foreground service already connected while the player was still null
+                // (e.g. stream extraction outlived the bind), its notification is the placeholder
+                // without a MediaSession — hand it the real player now that one exists.
+                updatePlaybackService()
                 // Listen for metadata/title updates to reflect in UI and Recent
                 exo.addListener(object : Player.Listener {
                     override fun onAudioSessionIdChanged(audioSessionId: Int) {
@@ -1045,7 +1066,9 @@ class PlayerActivity : AppCompatActivity() {
         unregisterDisplayListener()
         // Release our hold on the glasses USB link (ref-counted; MainActivity keeps it alive if
         // it's in the foreground). Done after stopLazy3d() so the IMU stream is halted first.
-        MainActivity.glassesControllerForPlayback?.unregister()
+        // Strictly the same instance onCreate registered on — see the comment there.
+        acquiredGlasses?.unregister()
+        acquiredGlasses = null
         releaseLoudnessEnhancer()
         player?.release()
         player = null
@@ -1173,8 +1196,8 @@ class PlayerActivity : AppCompatActivity() {
         val intent = Intent(this, PlaybackService::class.java)
         try {
             // ContextCompat routes to startForegroundService() on API 26+ (PlaybackService
-            // promotes itself via startForeground() the moment the bind connects, well inside
-            // the 5s window) — plain startService() here used to throw
+            // promotes ITSELF in onStartCommand, inside the 5s window, even if this bind never
+            // connects) — plain startService() here used to throw
             // BackgroundServiceStartNotAllowedException / "app is in background" because this is
             // called from onPause()/onStop() (see updatePlaybackService()), i.e. exactly when the
             // OS may no longer count the app as foreground. Still guarded: even
@@ -1183,19 +1206,32 @@ class PlayerActivity : AppCompatActivity() {
             // display continues regardless (the service only owns the persistent notification,
             // not the ExoPlayer instance), we just skip the notification rather than crash.
             ContextCompat.startForegroundService(this, intent)
-            bindService(intent, serviceConnection, BIND_AUTO_CREATE)
+            serviceStartRequested = true
+            // Track the bind REQUEST, not just the connect: unbinding must happen for any
+            // successful bindService() call even if onServiceConnected never fired (activity
+            // left before the connect landed) — otherwise the ServiceConnection leaks.
+            serviceBindRequested = bindService(intent, serviceConnection, BIND_AUTO_CREATE)
         } catch (e: Exception) {
             android.util.Log.w("XPlayer2", "Failed to start PlaybackService (external playback continues without it)", e)
         }
     }
 
     private fun stopPlaybackService() {
-        if (serviceBound) {
-            playbackService?.stopForegroundPlayback()
+        if (!serviceStartRequested && !serviceBindRequested && !serviceBound) return
+        playbackService?.stopForegroundPlayback()
+        if (serviceBindRequested || serviceBound) {
             try { unbindService(serviceConnection) } catch (_: Throwable) { }
-            serviceBound = false
-            playbackService = null
         }
+        if (playbackService == null && serviceStartRequested) {
+            // We started the (now-foreground) service but never got a binder to stopSelf()
+            // through — covers both "bind still pending" and "bindService returned false".
+            // Without this the service and its notification would outlive the player.
+            try { stopService(Intent(this, PlaybackService::class.java)) } catch (_: Throwable) { }
+        }
+        serviceStartRequested = false
+        serviceBindRequested = false
+        serviceBound = false
+        playbackService = null
     }
 
     // --- Custom Track Menu (SBS-aware) — used for audio and subtitle selection ---
@@ -2180,9 +2216,10 @@ class PlayerActivity : AppCompatActivity() {
     /** Remote-control entry point: cycle 2D → OU→SBS → SBS. */
     fun toggleStereoSbs() = cycleStereoMode()
 
-    /** Current stereo-mode label for the remote ("2D" / "OU→SBS" / "SBS"). */
+    /** Current stereo-mode label for the remote ("2D" / "2D→3D" / "OU→SBS" / "SBS"). */
     fun getStereoModeLabel(): String = when {
-        lazy3dEnabled -> lazy3dBusyLabel() ?: "Lazy 3D ⚠️"
+        // "2D→3D" (not the internal "Lazy 3D" codename) — this is what the mode button shows.
+        lazy3dEnabled -> lazy3dBusyLabel() ?: "2D→3D"
         stereoMode == StereoMode.Ou -> "OU→SBS"
         stereoMode == StereoMode.Sbs -> "SBS"
         else -> "2D"
@@ -2191,10 +2228,10 @@ class PlayerActivity : AppCompatActivity() {
     /** True while Lazy 3D is downloading its model or warming up — taps should be ignored. */
     fun isLazy3dBusy(): Boolean = lazy3dEnabled && (depthDownloadJob != null || depthStarting)
 
-    /** Button caption during the busy phase ("Lazy 3D… 37%" download / "Lazy 3D…" warm-up), else null. */
+    /** Button caption during the busy phase ("2D→3D… 37%" download / "2D→3D…" warm-up), else null. */
     private fun lazy3dBusyLabel(): String? = when {
-        lazy3dDownloadPct in 0..99 -> "Lazy 3D… ${lazy3dDownloadPct}%"
-        isLazy3dBusy() -> "Lazy 3D…"
+        lazy3dDownloadPct in 0..99 -> "2D→3D… ${lazy3dDownloadPct}%"
+        isLazy3dBusy() -> "2D→3D…"
         else -> null
     }
 
@@ -2383,7 +2420,9 @@ class PlayerActivity : AppCompatActivity() {
             // main thread so the toggle doesn't freeze. GL wiring happens back on the main thread.
             val estimator = withContext(Dispatchers.IO) {
                 val m = DepthModelManager.activeModel(applicationContext)
-                DepthEstimator(m.inputSize, m.gpuSafe).apply { if (!init(applicationContext)) close() }
+                lazy3dDivergence = LAZY3D_DIVERGENCE * m.divergenceScale
+                DepthEstimator(m.inputSize, m.gpuSafe, m::mapDepth, m.convergencePct)
+                    .apply { if (!init(applicationContext)) close() }
             }
             if (gen != lazy3dGen) {
                 // stopLazy3d() ran while we were loading (toggle-off, or an off→on restart whose
@@ -2416,7 +2455,7 @@ class PlayerActivity : AppCompatActivity() {
             val worker = DepthFrameWorker(estimator).also { it.start() }
             depthWorker = worker
             activeGlView()?.setLazy3dStereoEnabled(true)
-            activeGlView()?.setStereoParams(divergence = LAZY3D_DIVERGENCE, convergence = 0.5f)
+            activeGlView()?.setStereoParams(divergence = lazy3dDivergence, convergence = estimator.dynamicConvergence)
             activeGlView()?.setOnFrameReadbackListener { pixels, w, h, ts ->
                 // Called on the GL thread when a fresh source snapshot is ready.
                 worker.submit(pixels, w, h, ts)
@@ -2464,6 +2503,9 @@ class PlayerActivity : AppCompatActivity() {
                         bytes[i] = (depth[i].coerceIn(0f, 1f) * 255f).toInt().toByte()
                     }
                     activeGlView()?.setDepthMap(bytes, estimator.inputSize, estimator.inputSize)
+                    // Follow the dynamic convergence (slow-EMA'd subject depth) so the screen
+                    // plane stays locked to the subject as scenes change. Two float stores — cheap.
+                    activeGlView()?.setStereoParams(lazy3dDivergence, estimator.dynamicConvergence)
                 }
                 if (++ticks % 60 == 0) {
                     android.util.Log.i("XPlayer2", "Lazy 3D: avg depth inference ${"%.1f".format(estimator.avgInferenceMs)} ms")
@@ -2525,7 +2567,7 @@ class PlayerActivity : AppCompatActivity() {
         val worker = depthWorker
         if (depthEstimator?.isReady() == true && worker != null) {
             v.setLazy3dStereoEnabled(true)
-            v.setStereoParams(divergence = LAZY3D_DIVERGENCE, convergence = 0.5f)
+            v.setStereoParams(divergence = lazy3dDivergence, convergence = depthEstimator?.dynamicConvergence ?: 0.5f)
             v.setOnFrameReadbackListener { pixels, w, h, ts -> worker.submit(pixels, w, h, ts) }
         }
     }
