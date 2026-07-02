@@ -415,6 +415,9 @@ class RemoteControlActivity : AppCompatActivity() {
         // mode; filled (active) for anything but plain 2D (Lazy 3D counts as active).
         val active = player.isLazy3dEnabled() || player.isStereoSbsEnabled()
         btnSbs.text = player.getStereoModeLabel()
+        // Same busy-lock as the phone overlay's button: a tap during the model download/warm-up
+        // would cancel the fetch and jump the cycle — lock it here too (label shows the %).
+        btnSbs.isEnabled = !player.isLazy3dBusy()
         btnSbs.isChecked = active
         applyButtonStyle(btnSbs, active)
 

@@ -85,6 +85,16 @@ class GlassesController(private val appContext: Context) {
     // A mode the user EXPLICITLY picked while the device was still opening (RayNeo lazy-open): applied
     // once on connect, then cleared. NOT a remembered/persisted preference.
     private var pendingMode: Int? = null
+    // The deferred connect-time mode-push posted by openDevice(). Tracked so releaseConnection()/
+    // a re-open can cancel exactly THIS post — a blanket removeCallbacksAndMessages(null) also
+    // killed unrelated pending posts (setDisplayMode result callbacks, VITURE state updates),
+    // silently swallowing their callbacks.
+    private var pendingModePush: Runnable? = null
+    // Bumped (main thread) after every successful mode WRITE; an async refreshDisplayMode() read
+    // only applies its result if no write landed while it was reading (see refreshDisplayMode).
+    private var modeWriteSeq = 0
+    // Single-flight latch for refreshDisplayMode's reader thread.
+    private val refreshInFlight = java.util.concurrent.atomic.AtomicBoolean(false)
     // Interfaces we successfully claimed — we only ever release what we actually took.
     private val claimedInterfaces: MutableList<UsbInterface> = mutableListOf()
 
@@ -254,6 +264,9 @@ class GlassesController(private val appContext: Context) {
             }
             mainHandler.post {
                 if (ok) {
+                    // Bump the write sequence so an in-flight refreshDisplayMode() read that
+                    // STARTED before this write can't post its stale pre-write mode over us.
+                    modeWriteSeq++
                     lastReportedMode = mode   // in-memory only — reflects what we just sent; not persisted
                     notifyState()
                 }
@@ -283,23 +296,41 @@ class GlassesController(private val appContext: Context) {
         if (currentBrand() != Brand.XREAL) return
         val conn = connection ?: return
         val dev = device ?: return
+        // Single-flight: onStart + onResume + display-change events fire back-to-back and each
+        // used to spawn its own reader thread; concurrent readers on the same IN endpoint eat
+        // each other's replies (wasted retries). One in-flight query serves them all.
+        if (!refreshInFlight.compareAndSet(false, true)) return
+        val seqAtStart = modeWriteSeq
         Thread({
-            // One retry: right after a mode switch the MCU can be mid-negotiation and miss the
-            // first read (times out / doesn't answer yet) — a short pause + second try catches it
-            // without the caller needing its own retry logic.
-            var mode = queryDisplayModeBlocking(dev, conn)
-            if (mode == null) {
-                try { Thread.sleep(250) } catch (_: InterruptedException) {}
-                mode = queryDisplayModeBlocking(dev, conn)
-            }
-            if (mode != null) {
-                mainHandler.post {
-                    if (mode != lastReportedMode) {
-                        Log.i(TAG, "Glasses display mode refresh: 0x${lastReportedMode.toString(16)} -> 0x${mode.toString(16)}")
-                    }
-                    lastReportedMode = mode
-                    notifyState()
+            try {
+                // One retry: right after a mode switch the MCU can be mid-negotiation and miss the
+                // first read (times out / doesn't answer yet) — a short pause + second try catches
+                // it without the caller needing its own retry logic.
+                var mode = queryDisplayModeBlocking(dev, conn)
+                if (mode == null) {
+                    try { Thread.sleep(250) } catch (_: InterruptedException) {}
+                    mode = queryDisplayModeBlocking(dev, conn)
                 }
+                if (mode != null) {
+                    mainHandler.post {
+                        // A write that landed while we were reading is newer than what we read —
+                        // don't clobber it with the pre-write panel state. Re-query instead: the
+                        // caller's own post-write refresh may have been swallowed by the
+                        // single-flight latch while THIS read was still in flight, so without the
+                        // re-query nobody would ever read back the post-write panel state.
+                        if (modeWriteSeq != seqAtStart) {
+                            mainHandler.postDelayed({ refreshDisplayMode() }, 150)
+                            return@post
+                        }
+                        if (mode != lastReportedMode) {
+                            Log.i(TAG, "Glasses display mode refresh: 0x${lastReportedMode.toString(16)} -> 0x${mode.toString(16)}")
+                        }
+                        lastReportedMode = mode
+                        notifyState()
+                    }
+                }
+            } finally {
+                refreshInFlight.set(false)
             }
         }, "GlassesModeQuery").start()
     }
@@ -458,10 +489,11 @@ class GlassesController(private val appContext: Context) {
         lastReportedMode = GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60
         Log.i(TAG, "Glasses connected: ${dev.deviceName}, ${claimedInterfaces.size} HID interface(s) claimed")
         notifyState()
-        mainHandler.removeCallbacksAndMessages(null)
+        pendingModePush?.let { mainHandler.removeCallbacks(it) }
         val pending = pendingMode
         pendingMode = null
-        mainHandler.postDelayed({
+        val push = Runnable {
+            pendingModePush = null
             // Confirm the panel's ACTUAL mode once the MCU has had time to come up — a write can
             // silently fail to take, or the panel could already be in a different mode than our
             // 2D power-on assumption above (e.g. it never actually powered off). setDisplayMode is
@@ -469,7 +501,9 @@ class GlassesController(private val appContext: Context) {
             // (which could read back before the write actually lands).
             if (pending != null) setDisplayMode(pending) { refreshDisplayMode() }
             else refreshDisplayMode()
-        }, MODE_PUSH_DELAY_MS)
+        }
+        pendingModePush = push
+        mainHandler.postDelayed(push, MODE_PUSH_DELAY_MS)
         // IMU is started on demand (setImuStreaming) only while the head-gesture menu is shown,
         // so it doesn't burn power streaming continuously while connected.
     }
@@ -521,7 +555,11 @@ class GlassesController(private val appContext: Context) {
         if (vc != null) Thread({ try { vc.release() } catch (_: Throwable) {} }, "VitureRelease").start()
         vitureModeApplied = false
         vitureStarting = false
-        mainHandler.removeCallbacksAndMessages(null)
+        // Cancel only OUR deferred connect-time mode push. A blanket
+        // removeCallbacksAndMessages(null) here used to also delete pending setDisplayMode
+        // result posts (their callbacks silently never fired) and VITURE state updates.
+        pendingModePush?.let { mainHandler.removeCallbacks(it) }
+        pendingModePush = null
         val c = connection
         if (c != null) {
             for (intf in claimedInterfaces) {
@@ -621,7 +659,14 @@ class GlassesController(private val appContext: Context) {
                 val ep = intf.getEndpoint(j)
                 if (ep.direction == UsbConstants.USB_DIR_OUT &&
                     ep.type == UsbConstants.USB_ENDPOINT_XFER_INT) {
-                    val sent = conn.bulkTransfer(ep, packet, GlassesProtocol.MCU_PACKET_SIZE, 1000)
+                    // try/catch: this now runs on background threads that can race a USB detach —
+                    // some OEM stacks throw (rather than return -1) on a connection closed mid-call,
+                    // and an uncaught throw on a bare Thread takes down the whole process.
+                    val sent = try {
+                        conn.bulkTransfer(ep, packet, GlassesProtocol.MCU_PACKET_SIZE, 1000)
+                    } catch (t: Throwable) {
+                        Log.w(TAG, "MCU command send threw: ${t.message}"); -1
+                    }
                     if (sent == GlassesProtocol.MCU_PACKET_SIZE) {
                         Log.i(TAG, "MCU command 0x${msgId.toString(16)} sent via interface $i")
                         return true
