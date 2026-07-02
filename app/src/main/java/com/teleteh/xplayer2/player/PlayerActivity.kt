@@ -1719,9 +1719,13 @@ class PlayerActivity : AppCompatActivity() {
      * aspect fallback (which is safer than filename parsing — filenames are arbitrary).
      *
      * Aspect thresholds:
-     *   - aspect ≥ 1.95 → SBS source (wider than mono 16:9 = 1.78; covers 2:1, 21:9 cinema-SBS,
-     *     32:9 Half-SBS). Anything close to but not quite 16:9 is treated as mono since pure
-     *     16:9 frames are ambiguous with Full-SBS / Full-OU encoded into the same canvas.
+     *   - aspect ≥ 2.6 → SBS source (2.67 = Full-SBS of two 4:3 halves, 3.55 = 32:9 Full-SBS of
+     *     two 16:9 halves). The old 1.95 threshold misclassified EVERY ordinary cinemascope 2D
+     *     film (2:1, 21:9 = 2.33, 2.35:1, 2.40:1 — i.e. most downloaded movies) as SBS: the
+     *     picture auto-split in half on open, and the mode cycle skipped its 2D→3D step (which
+     *     is gated on Mono), so those files could never reach Lazy 3D at all. Real mono cinema
+     *     tops out around 2.40 (rare 2.55/2.76 anamorphics are accepted collateral); real SBS by
+     *     aspect starts at 2.67.
      *   - aspect ≤ 1.05 → OU source (1:1 stacked, 8:9 Half-OU).
      *   - otherwise   → mono (ambiguous Full-* formats fall here and need a manual SBS toggle).
      */
@@ -1736,7 +1740,7 @@ class PlayerActivity : AppCompatActivity() {
         if (w <= 0 || h <= 0) return SourceLayout.Mono
         val aspect = w.toFloat() / h.toFloat()
         return when {
-            aspect >= 1.95f -> SourceLayout.Sbs
+            aspect >= 2.6f -> SourceLayout.Sbs
             aspect <= 1.05f -> SourceLayout.Ou
             else -> SourceLayout.Mono
         }
