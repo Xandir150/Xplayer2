@@ -131,7 +131,15 @@ class GlassesController(private val appContext: Context) {
                     val dev = intent.usbDevice() ?: return
                     val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
                     if (granted) {
-                        openDevice(dev)
+                        if (dev.matchedDevice()?.brand == Brand.VITURE) {
+                            // VITURE: never open/claim the device ourselves — the SDK owns it.
+                            // Now that the grant exists, (re)init the SDK.
+                            device = dev
+                            startViture()
+                            notifyState()
+                        } else {
+                            openDevice(dev)
+                        }
                     } else {
                         Log.w(TAG, "USB permission denied for ${dev.deviceName}")
                         notifyState()
@@ -195,6 +203,37 @@ class GlassesController(private val appContext: Context) {
 
     /** Returns true if at least one supported pair of glasses is plugged in (independent of permission). */
     fun isGlassesAttached(): Boolean = findAttachedGlasses() != null
+
+    /**
+     * Quiet re-probe (call on resume): finish bringing up an attached device we ALREADY have
+     * permission for — e.g. the grant landed while the activity was paused, or a VITURE SDK init
+     * failed transiently and never retried. Never prompts, so it's safe to call every onResume.
+     */
+    fun reprobeIfPermitted() {
+        if (hostDrivesGlasses) return
+        val dev = device ?: findAttachedGlasses() ?: return
+        val matched = dev.matchedDevice() ?: return
+        if (!usbManager.hasPermission(dev)) return
+        when (matched.brand) {
+            Brand.VITURE -> if (viture?.isReady() != true) {
+                device = dev
+                startViture()
+            }
+            Brand.RAYNEO -> Unit   // lazy by design — only opens from an explicit mode switch
+            else -> if (connection == null) openDevice(dev)
+        }
+    }
+
+    /**
+     * Re-fire the system USB permission prompt for the attached glasses — the user's recovery
+     * path when the chip is stuck on "needs permission" (e.g. they dismissed the first prompt).
+     * No-op when there's nothing attached or permission already exists (then [reprobeIfPermitted]
+     * is the right call — the picker does both).
+     */
+    fun requestPermissionAgain() {
+        val dev = device ?: findAttachedGlasses() ?: return
+        if (!usbManager.hasPermission(dev)) requestUsbPermission(dev) else reprobeIfPermitted()
+    }
 
     fun currentState(): ConnectionState = when {
         currentBrand() == Brand.VITURE -> when {
@@ -392,8 +431,13 @@ class GlassesController(private val appContext: Context) {
         device = dev
         val matched = dev.matchedDevice()
         if (matched?.brand == Brand.VITURE) {
-            // VITURE: the SDK owns the USB device + permission prompt — don't claim HID ourselves.
-            startViture()
+            // VITURE: the SDK owns the USB device (we never claim HID ourselves), but we drive
+            // the PERMISSION through our own machinery. Relying on the SDK's internal prompt +
+            // self-re-init proved unreliable in the field (Samsung Fold3/Flip6: the user grants
+            // the dialog, the SDK never re-inits, and the app sits in NeedsPermission forever) —
+            // so init the SDK only once the grant actually exists; the grant broadcast below
+            // re-enters here via startViture().
+            if (usbManager.hasPermission(dev)) startViture() else requestUsbPermission(dev)
             notifyState()
             return
         }

@@ -449,6 +449,9 @@ class MainActivity : AppCompatActivity() {
         // user switched via the head-gesture menu or PlayerActivity while we were backgrounded, or
         // the glasses were unplugged/replugged (which resets the panel to 2D).
         glasses.refreshDisplayMode()
+        // And finish any half-done bring-up we already have permission for (e.g. the VITURE SDK
+        // grant landed while we were paused behind the system dialog). Never prompts.
+        glasses.reprobeIfPermitted()
     }
 
     /**
@@ -665,6 +668,9 @@ class MainActivity : AppCompatActivity() {
     private fun showGlassesModePicker() {
         when (glasses.currentState()) {
             GlassesController.ConnectionState.NeedsPermission -> {
+                // Don't leave the user at a dead toast: re-fire the system permission prompt
+                // (or, if the grant actually exists already, finish the SDK bring-up).
+                glasses.requestPermissionAgain()
                 Toast.makeText(this, R.string.glasses_needs_permission, Toast.LENGTH_SHORT).show()
                 return
             }
