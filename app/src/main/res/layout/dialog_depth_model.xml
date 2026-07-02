@@ -28,7 +28,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Lazy 3D — depth model"
+                android:text="2D→3D — depth model"
                 android:textColor="@color/rc_on_surface"
                 android:textSize="19sp"
                 android:textStyle="bold" />

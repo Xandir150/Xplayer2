@@ -36,8 +36,8 @@
     <string name="remote_now_playing">Воспроизводится</string>
     <string name="remote_3d_mode">3D режим</string>
     <string name="remote_shift">Сдвиг</string>
-    <string name="remote_lazy3d">Lazy 3D</string>
-    <string name="remote_lazy3d_starting">Lazy 3D — запуск…</string>
+    <string name="remote_lazy3d">2D→3D</string>
+    <string name="remote_lazy3d_starting">2D→3D — запуск…</string>
     <string name="remote_audio_track">Аудиодорожка</string>
     <string name="remote_stop_playback">Остановить</string>
 
@@ -53,9 +53,9 @@
     <string name="glasses_not_connected">Поддерживаемые XR-очки не обнаружены. Подключите очки (XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S) и разрешите доступ USB.</string>
 
     <!-- Lazy 3D -->
-    <string name="lazy3d_downloading">Загрузка модели Lazy 3D (~65 МБ)…</string>
-    <string name="lazy3d_downloaded">Модель Lazy 3D готова</string>
-    <string name="lazy3d_download_failed">Не удалось загрузить модель Lazy 3D</string>
+    <string name="lazy3d_downloading">Загрузка модели 2D→3D (~65 МБ)…</string>
+    <string name="lazy3d_downloaded">Модель 2D→3D готова</string>
+    <string name="lazy3d_download_failed">Не удалось загрузить модель 2D→3D</string>
     <string name="lazy3d_download_failed_host">Не удалось скачать модель 3D с %1$s — проверьте соединение</string>
 
     <!-- Network -->

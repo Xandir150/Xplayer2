@@ -36,8 +36,8 @@
     <string name="remote_now_playing">正在播放</string>
     <string name="remote_3d_mode">3D模式</string>
     <string name="remote_shift">偏移</string>
-    <string name="remote_lazy3d">Lazy 3D（头部跟踪）</string>
-    <string name="remote_lazy3d_starting">Lazy 3D — 启动中…</string>
+    <string name="remote_lazy3d">2D→3D（头部跟踪）</string>
+    <string name="remote_lazy3d_starting">2D→3D — 启动中…</string>
     <string name="remote_audio_track">音轨</string>
     <string name="remote_stop_playback">停止播放</string>
 
@@ -52,9 +52,9 @@
     <string name="glasses_not_connected">未在USB上检测到支持的XR眼镜。请连接眼镜（XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S）并授予USB权限。</string>
 
     <!-- Lazy 3D -->
-    <string name="lazy3d_downloading">正在下载Lazy 3D深度模型（约65 MB）…</string>
-    <string name="lazy3d_downloaded">Lazy 3D深度模型已就绪</string>
-    <string name="lazy3d_download_failed">下载Lazy 3D深度模型失败</string>
+    <string name="lazy3d_downloading">正在下载2D→3D深度模型（约65 MB）…</string>
+    <string name="lazy3d_downloaded">2D→3D深度模型已就绪</string>
+    <string name="lazy3d_download_failed">下载2D→3D深度模型失败</string>
 
     <!-- Network -->
     <string name="network_enter_url">粘贴链接（http、https、msf、content）</string>

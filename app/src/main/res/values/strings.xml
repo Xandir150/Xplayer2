@@ -46,8 +46,8 @@
     <string name="remote_ou_to_sbs">OU→SBS</string>
     <string name="remote_auto">Auto</string>
     <string name="remote_shift">Shift</string>
-    <string name="remote_lazy3d">Lazy 3D</string>
-    <string name="remote_lazy3d_starting">Lazy 3D — starting…</string>
+    <string name="remote_lazy3d">2D→3D</string>
+    <string name="remote_lazy3d_starting">2D→3D — starting…</string>
     <string name="remote_audio_track">Audio Track</string>
     <string name="remote_stop_playback">Stop Playback</string>
 
@@ -68,15 +68,15 @@
     <string name="glasses_not_connected">No supported XR glasses detected on USB. Plug the goggles in (XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S) and grant USB permission when prompted.</string>
 
     <!-- Lazy 3D -->
-    <string name="lazy3d_downloading">Downloading Lazy 3D depth model (~65 MB)…</string>
-    <string name="lazy3d_downloaded">Lazy 3D depth model ready</string>
-    <string name="lazy3d_download_failed">Failed to download Lazy 3D depth model</string>
+    <string name="lazy3d_downloading">Downloading 2D→3D depth model (~65 MB)…</string>
+    <string name="lazy3d_downloaded">2D→3D depth model ready</string>
+    <string name="lazy3d_download_failed">Failed to download 2D→3D depth model</string>
     <string name="lazy3d_download_failed_host">Couldn\'t download the 3D model from %1$s — check your connection</string>
     <!-- Lazy 3D startup outcomes (English-only is fine per request) -->
-    <string name="lazy3d_slow_cpu">Lazy 3D has no GPU support on this device — it may run slowly.</string>
-    <string name="lazy3d_unsupported">Lazy 3D couldn\'t load on this device.</string>
-    <string name="lazy3d_failed">Lazy 3D couldn\'t start on this device.</string>
-    <string name="lazy3d_low_memory">Not enough memory for Lazy 3D on this device.</string>
+    <string name="lazy3d_slow_cpu">2D→3D has no GPU support on this device — it may run slowly.</string>
+    <string name="lazy3d_unsupported">2D→3D couldn\'t load on this device.</string>
+    <string name="lazy3d_failed">2D→3D couldn\'t start on this device.</string>
+    <string name="lazy3d_low_memory">Not enough memory for 2D→3D on this device.</string>
 
     <!-- Network -->
     <string name="network_enter_url">Paste URL (http, https, msf, content)</string>
