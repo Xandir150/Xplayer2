@@ -32,17 +32,25 @@ class DepthModelManager(
      *  - [inputSize]  the model's square input (and output) resolution.
      *  - [gpuSafe]    false → never run on the TFLite GPU delegate (e.g. DA-V2's ViT outputs constant
      *                 garbage on Adreno GPU, TF #93476) — NPU(NNAPI)/CPU only.
+     *  - [divergenceScale] multiplier on the base stereo divergence — models whose depth histogram
+     *                 is inherently flatter (DA-V2 family: "foreground looks slightly flat", per
+     *                 iw3's own README) need a stronger warp for the same perceived 3D.
+     *  - [convergencePct] percentile of the final depth map that the dynamic convergence tracks —
+     *                 the "screen plane" locks onto the main subject (iw3 --convergence-mode /
+     *                 Apple spatial-photo style): subject at the window, scene recedes behind it.
      */
     enum class DepthModel(
         val filename: String,
         val url: String,
         val inputSize: Int,
         val gpuSafe: Boolean,
+        val divergenceScale: Float,
+        val convergencePct: Float,
         val uiLabel: String,
     ) {
         MIDAS(
             "midas_v21_small.tflite", "$REL/midas_v21_small.tflite",
-            256, true, "MiDaS small — fast (current default)"
+            256, true, 1.0f, 0.90f, "MiDaS small — fast (current default)"
         ),
         // Our own distillation off DA-V2 (in-house student, NOT upstream DA-V2-Small): much
         // smaller/faster than DAV2 (14 MB vs ~99 MB, 448² vs 518² input) since DAV2 was too slow
@@ -51,8 +59,27 @@ class DepthModelManager(
         // (TF #93476) that DAV2 has.
         V_MODEL(
             "v_model_fp16.tflite", "$REL/v_model_fp16.tflite",
-            448, false, "V-Model — our DA-V2 distillation (beta)"
+            448, false, 1.5f, 0.85f, "V-Model — our DA-V2 distillation (beta)"
         );
+
+        /**
+         * Per-model depth "mapper" (iw3 terminology) applied to normalised inverse depth
+         * (0 = far, 1 = near) before it feeds the stereo warp. DepthEstimator bakes this into
+         * a LUT, so the shape here can be arbitrary math.
+         */
+        fun mapDepth(d: Float): Float = when (this) {
+            // MiDaS: pow(d, 0.7) — slope at the near end equals 0.7, so within-object relief
+            // errors ("the head pops out of the jacket") shrink, while the far end — which MiDaS
+            // estimates well — gains separation. ≈ iw3's foreground-scale −1 (inv_mul_1).
+            MIDAS -> Math.pow(d.toDouble(), 0.7).toFloat()
+            // V-Model: iw3's mul_1 softplus (bias 0.343, scale 12) — expands the foreground's
+            // share of the disparity range and flattens the far background, countering the
+            // DA-V2-family's compressed near-field histogram (the "3D looks weak" complaint).
+            V_MODEL -> {
+                val y = Math.log1p(Math.exp(((d - 0.343f) * 12f).toDouble())).toFloat()
+                ((y - SOFTPLUS_MUL1_MIN) / (SOFTPLUS_MUL1_MAX - SOFTPLUS_MUL1_MIN)).coerceIn(0f, 1f)
+            }
+        }
     }
 
     enum class State { Missing, BundledInAssets, Cached, Downloading, Failed }
@@ -212,6 +239,10 @@ class DepthModelManager(
 
     companion object {
         private const val TAG = "DepthModelManager"
+        // softplus((0−0.343)·12) and softplus((1−0.343)·12) — the normalisation ends of the
+        // iw3 mul_1 mapper above, precomputed.
+        private val SOFTPLUS_MUL1_MIN = Math.log1p(Math.exp(-0.343 * 12.0)).toFloat()
+        private val SOFTPLUS_MUL1_MAX = Math.log1p(Math.exp(0.657 * 12.0)).toFloat()
         private const val REMOTE_VERSION = "models-v1"
         private const val REL =
             "https://github.com/Xandir150/Xplayer2/releases/download/$REMOTE_VERSION"

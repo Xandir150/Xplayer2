@@ -1047,8 +1047,10 @@ void main() {
   // far-focus glasses AND opens the widest disocclusions, so compress it relative to pop-out.
   if (dn < 0.0) dn *= 0.7;
   float disparity = dn * uDivergence * uEyeSign;
-  // Hard safety clamp on per-eye shift (fraction of width) so a depth outlier can't tear the image.
-  disparity = clamp(disparity, -0.03, 0.03);
+  // Hard safety clamp on per-eye shift (fraction of width) so a depth outlier can't tear the
+  // image. ±0.045 leaves headroom for the boosted per-model divergence (V-Model runs at
+  // ~0.02 divergence; the old ±0.03 would have silently eaten part of that gain).
+  disparity = clamp(disparity, -0.045, 0.045);
   vec2 sampleUv = tcSrc + vec2(disparity, 0.0);
   vec3 col = texture2D(uSource, sampleUv).rgb;
   gl_FragColor = vec4(col + ditherTPDF(gl_FragCoord.xy) * uDitherAmp, 1.0);

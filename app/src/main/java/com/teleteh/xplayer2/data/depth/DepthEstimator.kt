@@ -35,6 +35,12 @@ class DepthEstimator(
     // false → never try the GPU delegate (e.g. DA-V2's ViT returns constant garbage on Adreno GPU,
     // TF #93476) — NPU(NNAPI)/CPU only. The active model's gpuSafe drives this.
     private val allowGpu: Boolean = true,
+    // Per-model depth "mapper" (iw3 terms) applied to normalised inverse depth (1 = nearest)
+    // before the stereo warp — e.g. DepthModel.mapDepth. Baked into a LUT once; null = identity.
+    depthMapper: ((Float) -> Float)? = null,
+    // Percentile of the final depth map that the dynamic convergence tracks (see
+    // [dynamicConvergence]); 0 disables dynamic convergence (stays at the 0.5 screen-middle).
+    private val convergencePercentile: Float = 0f,
 ) {
     private var interpreter: Interpreter? = null
     private var nnApiDelegate: NnApiDelegate? = null
@@ -46,6 +52,15 @@ class DepthEstimator(
     private val outputBuf: ByteBuffer = ByteBuffer
         .allocateDirect(inputSize * inputSize * 4)
         .order(ByteOrder.nativeOrder())
+
+    // Mapper as a 257-entry LUT (linear-interp not needed at 8-bit depth-texture precision) —
+    // ~200k transcendental calls per inference at 30 Hz would be measurable on the v7a TV boxes.
+    private val mapperLut: FloatArray? = depthMapper?.let { f ->
+        FloatArray(MAPPER_LUT_SIZE + 1) { i -> f(i.toFloat() / MAPPER_LUT_SIZE).coerceIn(0f, 1f) }
+    }
+
+    // Histogram scratch for the percentile range scan — reused across frames (worker thread only).
+    private val histBins = IntArray(HIST_BINS)
 
     // --- Temporal smoothing (Lazy 3D: kills depth flicker + scale "breathing") ---
     // MiDaS normalises each frame by its OWN min/max, so the same physical depth maps to different
@@ -61,6 +76,14 @@ class DepthEstimator(
     private var emaDepth: FloatArray? = null
     private var temporalSeeded = false
 
+    /**
+     * Smoothed screen-plane depth for the warp shader's convergence uniform (0.2..0.8; 0.5 until
+     * the first inference lands or when dynamic convergence is disabled). Polled from the depth
+     * tick on the main thread — volatile, updated under [temporalLock] on the worker thread.
+     */
+    @Volatile var dynamicConvergence: Float = 0.5f
+        private set
+
     /** Clear temporal-smoothing state so a new clip/session starts clean (no stale depth bleed). */
     fun resetTemporal() {
         synchronized(temporalLock) {
@@ -68,6 +91,7 @@ class DepthEstimator(
             emaMin = 0f
             emaMax = 0f
             emaDepth = null
+            dynamicConvergence = 0.5f
         }
     }
 
@@ -228,6 +252,16 @@ class DepthEstimator(
             if (v < min) min = v
             if (v > max) max = v
         }
+        // Robust range: normalise to the p02..p98 percentiles instead of the absolute min/max.
+        // A handful of outlier pixels (specular highlight the net reads as "very near", a dark
+        // corner read as "very far") used to own the whole 0..1 range, compressing the real scene
+        // into a narrow band — the main reason V-Model's depth looked flat and MiDaS's occasional
+        // near-spikes exaggerated pop-out. Clipped pixels saturate to 0/1, which is what we want.
+        if (max > min) {
+            val p = percentileRange(out, min, max)
+            min = p.first
+            max = p.second
+        }
         // Temporally-stable normalisation + per-pixel EMA. Guarded so a concurrent resetTemporal()
         // can't null/realloc the buffer mid-flight (see [temporalLock]).
         synchronized(temporalLock) {
@@ -251,14 +285,69 @@ class DepthEstimator(
             }
             val range = (emaMax - emaMin).coerceAtLeast(1e-6f)
             if (ema == null || ema.size != out.size) { ema = FloatArray(out.size); emaDepth = ema }
+            val lut = mapperLut
             for (i in out.indices) {
-                val norm = ((out[i] - emaMin) / range).coerceIn(0f, 1f)
+                var norm = ((out[i] - emaMin) / range).coerceIn(0f, 1f)
+                // Per-model mapper (see DepthModel.mapDepth) — LUT lookup, applied before the EMA
+                // so the temporal smoothing operates on the same curve the shader will consume.
+                if (lut != null) norm = lut[(norm * MAPPER_LUT_SIZE).toInt()]
                 ema[i] = if (seed) norm else a * ema[i] + (1f - a) * norm
                 out[i] = ema[i]
             }
             temporalSeeded = true
+            updateDynamicConvergence(out, seed)
         }
         return out
+    }
+
+    /**
+     * Dynamic convergence (iw3 --convergence-mode / Apple spatial-photo style): track the
+     * [convergencePercentile] of the FINAL depth map with a slow EMA, so the stereo screen plane
+     * locks onto the main subject — the subject sits at the display "window" and the rest of the
+     * scene recedes behind it, which reads as distinct layers and keeps pop-out comfortable.
+     * Runs under [temporalLock]; snaps on seed/scene-cut like the rest of the temporal state.
+     */
+    private fun updateDynamicConvergence(depth: FloatArray, seed: Boolean) {
+        if (convergencePercentile <= 0f) return
+        val bins = histBins
+        java.util.Arrays.fill(bins, 0)
+        for (v in depth) bins[(v * (HIST_BINS - 1)).toInt().coerceIn(0, HIST_BINS - 1)]++
+        val target = (depth.size * convergencePercentile).toInt()
+        var acc = 0
+        var bin = HIST_BINS - 1
+        for (b in 0 until HIST_BINS) {
+            acc += bins[b]
+            if (acc >= target) { bin = b; break }
+        }
+        val value = (bin.toFloat() / (HIST_BINS - 1)).coerceIn(0.2f, 0.8f)
+        dynamicConvergence = if (seed) value
+        else CONVERGENCE_ALPHA * dynamicConvergence + (1f - CONVERGENCE_ALPHA) * value
+    }
+
+    /**
+     * Low/high percentile values of [out] via a [HIST_BINS]-bin histogram over [rawMin, rawMax] —
+     * one O(n) pass + a 256-entry scan, negligible next to the ~30 ms inference. Returns the
+     * (p02, p98) sample values, degenerating to the raw extremes for near-constant maps.
+     */
+    private fun percentileRange(out: FloatArray, rawMin: Float, rawMax: Float): Pair<Float, Float> {
+        val bins = histBins
+        java.util.Arrays.fill(bins, 0)
+        val scale = (HIST_BINS - 1) / (rawMax - rawMin)
+        for (v in out) bins[((v - rawMin) * scale).toInt().coerceIn(0, HIST_BINS - 1)]++
+        val loTarget = (out.size * PCT_CLIP).toInt()
+        val hiTarget = (out.size * (1f - PCT_CLIP)).toInt()
+        var acc = 0
+        var loBin = 0
+        var hiBin = HIST_BINS - 1
+        for (b in 0 until HIST_BINS) {
+            acc += bins[b]
+            if (acc <= loTarget) loBin = b
+            if (acc < hiTarget) hiBin = b else break
+        }
+        if (hiBin <= loBin) return rawMin to rawMax   // near-constant map — don't fabricate range
+        val lo = rawMin + loBin / scale
+        val hi = rawMin + (hiBin + 1) / scale
+        return lo to hi
     }
 
     fun close() {
@@ -304,6 +393,12 @@ class DepthEstimator(
         private const val DELEGATE_PREFS = "lazy3d_delegate"
         private const val KEY_NNAPI_PROBING = "nnapi_probing"
         private const val KEY_NNAPI_BANNED = "nnapi_banned"
+        // Robust-normalisation parameters (see estimate/percentileRange).
+        private const val HIST_BINS = 256
+        private const val PCT_CLIP = 0.02f   // clip 2% at each end of the depth histogram
+        private const val MAPPER_LUT_SIZE = 256
+        // Slow EMA for the dynamic convergence — the screen plane must not visibly "swim".
+        private const val CONVERGENCE_ALPHA = 0.95f
 
         /** Device SoC label ("Samsung Exynos 2400" / "Qualcomm SM8550") for the Lazy-3D debug
          *  overlay — API 31+ only; falls back to the board codename ([Build.HARDWARE]) below that
