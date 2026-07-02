@@ -50,7 +50,29 @@ class PlaybackService : Service() {
             stopPlayback()
             return START_NOT_STICKY
         }
+        // We're started via startForegroundService(), which puts a hard ~5 s deadline on calling
+        // startForeground() — miss it and the OS kills the whole app with
+        // ForegroundServiceDidNotStartInTimeException. Promotion used to happen only in
+        // startForegroundPlayback() (i.e. after the activity's bind connects AND it has a live
+        // player), so a slow start — e.g. a VK/OK link still in stream extraction, player == null
+        // — blew the deadline. Promote immediately with a placeholder notification instead;
+        // startForegroundPlayback() re-issues it with the MediaSession once playback is real.
+        promoteToForeground(buildNotification(null))
         return START_STICKY
+    }
+
+    /** startForeground with the right FGS type for this API level. Safe to call repeatedly. */
+    private fun promoteToForeground(notification: Notification) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     private fun createNotificationChannel() {
@@ -71,25 +93,14 @@ class PlaybackService : Service() {
     fun startForegroundPlayback(player: Player, title: String?) {
         // Release existing session before creating new one
         mediaSession?.release()
-        
+
         // Create MediaSession for system integration with unique ID
         mediaSession = MediaSession.Builder(this, player)
             .setId("XPlayer2_${System.currentTimeMillis()}")
             .build()
 
-        val notification = buildNotification(title)
-        
-        // Start foreground with proper type for Android 14+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ServiceCompat.startForeground(
-                this,
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
+        // Re-issues the placeholder notification from onStartCommand, now with the MediaSession.
+        promoteToForeground(buildNotification(title))
     }
 
     fun updateNotification(title: String?) {
