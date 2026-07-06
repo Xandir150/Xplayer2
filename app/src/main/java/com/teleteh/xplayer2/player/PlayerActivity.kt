@@ -55,6 +55,8 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -233,6 +235,33 @@ class PlayerActivity : AppCompatActivity() {
     private var serviceStartRequested = false
     // The exact GlassesController instance onCreate registered on (null if none existed then).
     private var acquiredGlasses: GlassesController? = null
+
+    // --- Audio-route watcher for the 5.1→stereo fold-down (see StereoFolddownAudioProcessor) ---
+    // The processor decides downmix-vs-passthrough once per sink configure(); if the set of
+    // multichannel-capable outputs changes MID-clip (dock/HDMI/USB-DAC plugged or pulled), that
+    // decision is stale — briefly toggle the audio renderer so the sink reconfigures and the
+    // processor re-decides for the new route. ~100 ms of silence on a plug event is fine.
+    private var lastMultichannelSink = false
+    private val audioDeviceCallback = object : android.media.AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(added: Array<out android.media.AudioDeviceInfo>) = onAudioRouteMaybeChanged()
+        override fun onAudioDevicesRemoved(removed: Array<out android.media.AudioDeviceInfo>) = onAudioRouteMaybeChanged()
+    }
+
+    private fun onAudioRouteMaybeChanged() {
+        val mc = StereoFolddownAudioProcessor.multichannelSinkAvailable(applicationContext)
+        if (mc == lastMultichannelSink) return
+        lastMultichannelSink = mc
+        val exo = player ?: return
+        val params = exo.trackSelectionParameters
+        exo.trackSelectionParameters =
+            params.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true).build()
+        Handler(mainLooper).postDelayed({
+            player?.let { p ->
+                p.trackSelectionParameters =
+                    p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false).build()
+            }
+        }, 100)
+    }
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             playbackService = (binder as? PlaybackService.LocalBinder)?.getService()
@@ -379,6 +408,12 @@ class PlayerActivity : AppCompatActivity() {
 
         // React to the goggles' external panel powering on/off (proximity sensor).
         registerDisplayListener()
+
+        // Watch audio outputs so the 5.1→stereo fold-down re-decides when a multichannel
+        // sink (dock/HDMI/USB-DAC) comes or goes mid-playback.
+        lastMultichannelSink = StereoFolddownAudioProcessor.multichannelSinkAvailable(applicationContext)
+        getSystemService(android.media.AudioManager::class.java)
+            ?.registerAudioDeviceCallback(audioDeviceCallback, Handler(mainLooper))
 
         // Hold the glasses' USB link open for our whole session. MainActivity is stopped while
         // the player owns the goggles, so without this its onStop() would release the connection
@@ -627,7 +662,29 @@ class PlayerActivity : AppCompatActivity() {
         // when the platform doesn't support a codec. MODE_PREFER forced FFmpeg even for
         // plain stereo AAC, which on some devices fights with the AudioTrack downmix path
         // and can produce no audio at all when the output is a USB-stereo sink (XREAL Air).
-        val renderersFactory = DefaultRenderersFactory(this)
+        val renderersFactory = object : DefaultRenderersFactory(this) {
+            // Wire the in-app 5.1/7.1→stereo fold-down into the sink's processor chain. It
+            // self-activates per configure(): only for 6/8-ch PCM with no multichannel-capable
+            // output attached — see StereoFolddownAudioProcessor for the full why (platform
+            // fold-down loses/attenuates dialogue on several OEM builds; VLC-style self-mix
+            // doesn't). With a real surround sink attached it stays inactive and the untouched
+            // multichannel stream flows exactly as before.
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioOutputPlaybackParams: Boolean,
+            ): AudioSink? = DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+                .setAudioProcessorChain(
+                    DefaultAudioSink.DefaultAudioProcessorChain(
+                        StereoFolddownAudioProcessor {
+                            StereoFolddownAudioProcessor.multichannelSinkAvailable(applicationContext)
+                        }
+                    )
+                )
+                .build()
+        }
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
             .setEnableDecoderFallback(true)
         val isLocalUri = uri.scheme?.lowercase() in setOf("file", "content")
@@ -1064,6 +1121,8 @@ class PlayerActivity : AppCompatActivity() {
         saveProgress()
         if (lazy3dEnabled) stopLazy3d()
         unregisterDisplayListener()
+        getSystemService(android.media.AudioManager::class.java)
+            ?.unregisterAudioDeviceCallback(audioDeviceCallback)
         // Release our hold on the glasses USB link (ref-counted; MainActivity keeps it alive if
         // it's in the foreground). Done after stopLazy3d() so the IMU stream is halted first.
         // Strictly the same instance onCreate registered on — see the comment there.
