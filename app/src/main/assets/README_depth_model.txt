@@ -6,16 +6,20 @@ monocular-depth network per frame. The model is NOT bundled in the APK — it is
 auto-downloaded at runtime (first time Lazy 3D is enabled, or pre-fetched in the
 background on Wi-Fi at first launch) from the project's GitHub release.
 
-Model: MiDaS v2.1 small, 256x256, FP32 (~65 MB) — downloaded at runtime, not bundled.
+Model: MiDaS v2.1 small, 256x256, FP32 (~65 MB) — downloaded at runtime, DELIBERATELY not
+  bundled: a bundled copy takes priority over the cache AND disables the update check
+  (isBundled() short-circuits isUpdateAvailable()), which would freeze the model forever.
+  Keeping it remote lets us publish a tuned/updated .tflite and have every install pick it
+  up automatically (size-change check, once per process, see PlayerActivity's update path).
   input  : float32 [1,256,256,3] RGB, ImageNet-normalised
   output : float32 [1,256,256,1] inverse depth (higher = nearer)
 
-Model: V-Model, our own DA-V2 distillation, 448x448, FP16 (~14 MB) — BUNDLED in this
-  assets/ folder (v_model_fp16.tflite), so it works fully offline. Same I/O contract as
-  above (ImageNet-normalised RGB in, inverse depth out) — DepthEstimator's pre/post-
-  processing is shared across all models. gpuSafe=false until verified on-device: its
-  backbone lineage (possible ViT remnant from DA-V2) means it may hit the same Adreno
-  GPU-delegate bug as DAV2 used to (TF #93476) — test before flipping gpuSafe to true.
+Model: V-Model (our own DA-V2 distillation, 448x448) — DORMANT since 1.0.10b5: lost the
+  beta A/B to the tuned MiDaS, its asset was removed from the APK (−14 MB) and its enum
+  entry is selectable=false. To re-test a retrained version: flip selectable in
+  DepthModelManager.DepthModel.V_MODEL and either bundle the new .tflite here or publish
+  it at the entry's URL. Same I/O contract as MiDaS (ImageNet-normalised RGB in, inverse
+  depth out); gpuSafe was never verified (possible DA-V2 ViT remnant, TF #93476).
 
 Download URL and filename for the downloaded models are defined in DepthModelManager
 (release tag `models-v1`).

@@ -27,8 +27,7 @@ class DepthModelManager(
 ) {
 
     /**
-     * A selectable depth model. TEMPORARY beta A/B: we ship two and let testers pick the one that
-     * looks best; once we know, this collapses back to a single model.
+     * A depth model the app can run.
      *  - [inputSize]  the model's square input (and output) resolution.
      *  - [gpuSafe]    false → never run on the TFLite GPU delegate (e.g. DA-V2's ViT outputs constant
      *                 garbage on Adreno GPU, TF #93476) — NPU(NNAPI)/CPU only.
@@ -38,6 +37,9 @@ class DepthModelManager(
      *  - [convergencePct] percentile of the final depth map that the dynamic convergence tracks —
      *                 the "screen plane" locks onto the main subject (iw3 --convergence-mode /
      *                 Apple spatial-photo style): subject at the window, scene recedes behind it.
+     *  - [selectable] false → a dormant stub: hidden from the model picker and never resolved by
+     *                 [activeModel] (a persisted pick of it silently falls back to MIDAS). Keeps
+     *                 the whole multi-model machinery compiled and one flag away from a re-test.
      */
     enum class DepthModel(
         val filename: String,
@@ -47,19 +49,21 @@ class DepthModelManager(
         val divergenceScale: Float,
         val convergencePct: Float,
         val uiLabel: String,
+        val selectable: Boolean = true,
     ) {
         MIDAS(
             "midas_v21_small.tflite", "$REL/midas_v21_small.tflite",
             256, true, 1.0f, 0.90f, "MiDaS small — fast (current default)"
         ),
-        // Our own distillation off DA-V2 (in-house student, NOT upstream DA-V2-Small): much
-        // smaller/faster than DAV2 (14 MB vs ~99 MB, 448² vs 518² input) since DAV2 was too slow
-        // in practice. Backbone lineage is still uncertain (may retain DA-V2's ViT), so gpuSafe
-        // stays false until verified on-device not to hit the same Adreno constant-garbage bug
-        // (TF #93476) that DAV2 has.
+        // DORMANT (selectable=false, asset no longer bundled): our own DA-V2 distillation lost
+        // the beta A/B to the tuned MiDaS (weak 3D even after the mul_1 mapper boost) and was
+        // pulled from builds in 1.0.10b5. The entry stays as the re-test hook for a future
+        // retrained version: flip selectable, drop the new .tflite into assets (or publish it at
+        // [url]), done. gpuSafe was never verified (possible DA-V2 ViT remnant, TF #93476).
         V_MODEL(
             "v_model_fp16.tflite", "$REL/v_model_fp16.tflite",
-            448, false, 1.5f, 0.85f, "V-Model — our DA-V2 distillation (beta)"
+            448, false, 1.5f, 0.85f, "V-Model — our DA-V2 distillation (beta)",
+            selectable = false,
         );
 
         /**
@@ -257,7 +261,10 @@ class DepthModelManager(
         fun activeModel(context: Context): DepthModel {
             val name = context.getSharedPreferences(MODEL_PREFS, Context.MODE_PRIVATE)
                 .getString(KEY_ACTIVE, null)
-            return DepthModel.values().firstOrNull { it.name == name } ?: DepthModel.MIDAS
+            // selectable filter: a persisted pick of a since-retired model (e.g. V_MODEL after
+            // 1.0.10b5) silently falls back to MIDAS instead of resurrecting the stub.
+            return DepthModel.values().firstOrNull { it.name == name && it.selectable }
+                ?: DepthModel.MIDAS
         }
 
         fun setActiveModel(context: Context, m: DepthModel) {

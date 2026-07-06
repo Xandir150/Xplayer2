@@ -2085,6 +2085,13 @@ class PlayerActivity : AppCompatActivity() {
      * here directly when there's no external presentation (phone-only playback).
      */
     private fun offerDepthModelPicker() {
+        // With a single selectable model there's nothing to A/B — enable it directly, no dialog.
+        // (The picker below stays wired for the day a second model becomes selectable again.)
+        val selectable = DepthModelManager.DepthModel.values().filter { it.selectable }
+        if (selectable.size == 1) {
+            applyChosenDepthModel(selectable.single())
+            return
+        }
         val remote = RemoteControlActivity.currentInstance
         if (presentation != null && remote != null) {
             remote.showDepthModelDialog()
@@ -2114,7 +2121,7 @@ class PlayerActivity : AppCompatActivity() {
             android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
         )
         val active = DepthModelManager.activeModel(this)
-        for (m in DepthModelManager.DepthModel.values()) {
+        for (m in DepthModelManager.DepthModel.values().filter { it.selectable }) {
             val btn = layoutInflater.inflate(R.layout.item_depth_model_button, container, false)
                     as com.google.android.material.button.MaterialButton
             btn.text = m.uiLabel
