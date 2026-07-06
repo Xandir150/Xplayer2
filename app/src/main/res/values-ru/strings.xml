@@ -57,6 +57,8 @@
     <string name="lazy3d_downloaded">Модель 2D→3D готова</string>
     <string name="lazy3d_download_failed">Не удалось загрузить модель 2D→3D</string>
     <string name="lazy3d_download_failed_host">Не удалось скачать модель 3D с %1$s — проверьте соединение</string>
+    <string name="lazy3d_thermal_reduced">Качество 2D→3D снижено — устройство нагрелось</string>
+    <string name="lazy3d_thermal_paused">Обновление глубины 2D→3D приостановлено, чтобы устройство остыло</string>
 
     <!-- Network -->
     <string name="network_enter_url">Вставьте ссылку (http, https, msf, content)</string>

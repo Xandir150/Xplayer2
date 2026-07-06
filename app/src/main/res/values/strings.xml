@@ -77,6 +77,9 @@
     <string name="lazy3d_unsupported">2D→3D couldn\'t load on this device.</string>
     <string name="lazy3d_failed">2D→3D couldn\'t start on this device.</string>
     <string name="lazy3d_low_memory">Not enough memory for 2D→3D on this device.</string>
+    <!-- Lazy 3D thermal throttling (DepthThermalGovernor) -->
+    <string name="lazy3d_thermal_reduced">2D→3D quality reduced — the device is running hot</string>
+    <string name="lazy3d_thermal_paused">2D→3D depth updates paused to cool the device down</string>
 
     <!-- Network -->
     <string name="network_enter_url">Paste URL (http, https, msf, content)</string>

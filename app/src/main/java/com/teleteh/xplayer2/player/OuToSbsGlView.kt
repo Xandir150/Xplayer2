@@ -222,6 +222,18 @@ class OuToSbsGlView @JvmOverloads constructor(
         renderer.frameReadbackListener = listener
     }
 
+    /**
+     * Depth-readback pacing override: minimum interval between the source snapshots handed to
+     * the depth worker. The thermal governor lengthens this when the device heats up — fewer
+     * readbacks mean fewer NPU/GPU inferences (the worker is latest-only, so nothing queues),
+     * while video keeps rendering at full rate with the most recent depth map.
+     * [Long.MAX_VALUE] pauses readback entirely (last depth map stays frozen). Clamped so it
+     * can never run faster than the default ~30 Hz.
+     */
+    fun setDepthReadbackIntervalNanos(nanos: Long) {
+        renderer.readbackIntervalNanos = nanos.coerceAtLeast(READBACK_INTERVAL_NANOS)
+    }
+
     private inner class OuToSbsRenderer : Renderer, SurfaceTexture.OnFrameAvailableListener {
         private var textureId: Int = 0
         private var surfaceTexture: SurfaceTexture? = null
@@ -237,6 +249,9 @@ class OuToSbsGlView @JvmOverloads constructor(
         @Volatile var stereoDivergence: Float = 0.013f   // fallback; PlayerActivity sets LAZY3D_DIVERGENCE
         @Volatile var stereoConvergence: Float = 0.5f
         @Volatile var frameReadbackListener: ((IntArray, Int, Int, Long) -> Unit)? = null
+        // Current depth-readback pacing; the thermal governor raises it (up to MAX_VALUE =
+        // paused) to cool the device. Written from the main thread, read on the GL thread.
+        @Volatile var readbackIntervalNanos: Long = READBACK_INTERVAL_NANOS
 
         private var program = 0
         private var aPosLoc = 0
@@ -536,14 +551,15 @@ class OuToSbsGlView @JvmOverloads constructor(
         /**
          * Render the current SurfaceTexture frame into the small readback FBO, then
          * glReadPixels into a Java IntArray and hand it to the listener. Paced — at most
-         * one capture every [READBACK_INTERVAL_NANOS] (≈30 Hz). Called from onDrawFrame
-         * before the visible draw, so it never delays a real frame more than the readback
-         * itself takes (~1 ms at 256x256).
+         * one capture every [readbackIntervalNanos] (default ≈30 Hz; lengthened by the
+         * thermal governor when the device runs hot). Called from onDrawFrame before the
+         * visible draw, so it never delays a real frame more than the readback itself
+         * takes (~1 ms at 256x256).
          */
         private fun maybeReadbackFrame() {
             val listener = frameReadbackListener ?: return
             val now = System.nanoTime()
-            if (now - lastReadbackNanos < READBACK_INTERVAL_NANOS) return
+            if (now - lastReadbackNanos < readbackIntervalNanos) return
             lastReadbackNanos = now
 
             // Save the on-screen viewport: rendering into the readback FBO changes the (global)
@@ -1101,5 +1117,6 @@ void main() {
 """
 
 private const val READBACK_SIZE = 256
-// Target ~30 Hz readback. Cap pacing so depth model doesn't get starved at high FPS.
+// Default (and fastest) readback pacing, ~30 Hz. The runtime interval can only be lengthened
+// from here — see setDepthReadbackIntervalNanos (thermal throttling).
 private const val READBACK_INTERVAL_NANOS = 33_000_000L

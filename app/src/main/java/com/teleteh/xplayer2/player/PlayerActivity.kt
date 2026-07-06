@@ -81,6 +81,7 @@ import androidx.appcompat.app.AlertDialog
 import com.teleteh.xplayer2.data.depth.DepthEstimator
 import com.teleteh.xplayer2.data.depth.DepthFrameWorker
 import com.teleteh.xplayer2.data.depth.DepthModelManager
+import com.teleteh.xplayer2.data.depth.DepthThermalGovernor
 import com.teleteh.xplayer2.data.glasses.GlassesController
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import com.teleteh.xplayer2.BuildConfig
@@ -168,6 +169,16 @@ class PlayerActivity : AppCompatActivity() {
     // scaled by the active model's divergenceScale (set when the estimator loads).
     private var lazy3dDivergence = LAZY3D_DIVERGENCE
     private var pendingDepthTick: Runnable? = null
+    // Thermal-aware depth throttling (see DepthThermalGovernor): lives exactly as long as the
+    // depth worker; the depth tick polls it and applies the rate to the active GL view.
+    private var depthThermal: DepthThermalGovernor? = null
+    // Governor level last seen by the tick (escalation-edge detection for the user hint) and
+    // when the hint was last shown, so a bouncing thermal sensor can't spam toasts.
+    private var depthThermalSeen = DepthThermalGovernor.Level.FULL
+    private var depthThermalToastMs = 0L
+    // Timestamp of the depth map most recently pushed to the GL view by the depth tick. Reset on
+    // view switches so the (possibly thermally-frozen) latest map is re-sent to the new view.
+    private var depthTickLastTs = 0L
     private var depthDownloadJob: kotlinx.coroutines.Job? = null
     // Startup runs off the main thread (GPU model load is slow), so this flags the in-flight
     // phase and drives the remote's "starting…" indicator.
@@ -2333,7 +2344,10 @@ class PlayerActivity : AppCompatActivity() {
         if (est?.isReady() != true) return null
         val backend = est.backend ?: "?"
         val cpuLoad = DepthEstimator.sampleCpuLoadPercent()?.let { " · CPU load ${it}%" } ?: ""
-        return "depth ${"%.0f".format(est.avgInferenceMs)}ms · $backend · ${DepthEstimator.socLabel}$cpuLoad"
+        // Thermal throttle state, when active — lets testers see the governor doing its job.
+        val thermal = depthThermal?.level?.takeIf { it != DepthThermalGovernor.Level.FULL }
+            ?.let { " · hot→${it.label}" } ?: ""
+        return "depth ${"%.0f".format(est.avgInferenceMs)}ms · $backend · ${DepthEstimator.socLabel}$cpuLoad$thermal"
     }
 
     /**
@@ -2530,6 +2544,7 @@ class PlayerActivity : AppCompatActivity() {
                 // Called on the GL thread when a fresh source snapshot is ready.
                 worker.submit(pixels, w, h, ts)
             }
+            depthThermal = DepthThermalGovernor(applicationContext).also { it.start() }
             startDepthTick(worker, estimator)
             // Warm-up done → unlock the button and show the active label.
             btnSbsRef?.let { applySbsButtonVisual(it) }
@@ -2563,11 +2578,28 @@ class PlayerActivity : AppCompatActivity() {
     /** Pump fresh depth results into the active GL view every ~33 ms. */
     private fun startDepthTick(worker: DepthFrameWorker, estimator: DepthEstimator) {
         pendingDepthTick?.let { poseUiHandler.removeCallbacks(it) }
+        depthTickLastTs = 0L
         val depthTick = object : Runnable {
             private var ticks = 0
             override fun run() {
+                // Thermal governor → readback pacing. Applied every tick (one volatile store) so
+                // it also lands on whichever glView became active after a display switch. Pacing
+                // is the single throttle knob: fewer readbacks → fewer inferences (the worker is
+                // latest-only) → the NPU/GPU duty cycle drops; at PAUSED the readback stops and
+                // the warp keeps using the last depth map (frozen 3D beats a thermal kill).
+                val thermal = depthThermal?.tick() ?: DepthThermalGovernor.Level.FULL
+                activeGlView()?.setDepthReadbackIntervalNanos(thermal.readbackIntervalNanos)
+                maybeHintThermal(thermal)
+                // Push only NEW inferences (latestDepth is a slot, not a queue — it stays set):
+                // re-uploading the same map re-ran the GL bilateral refine pass at 30 Hz for
+                // nothing, and kept the readback→inference loop spinning even while the video
+                // was PAUSED. Gating on the timestamp lets the whole pipeline idle with playback.
+                // Timestamp is read BEFORE the depth: the worker publishes depth-then-ts, so this
+                // order can at worst re-push one map, never record a ts for a map it didn't push.
+                val depthTs = worker.latestDepthTimestampNanos
                 val depth = worker.pollLatestDepth()
-                if (depth != null) {
+                if (depth != null && depthTs != depthTickLastTs) {
+                    depthTickLastTs = depthTs
                     val bytes = ByteArray(depth.size)
                     for (i in depth.indices) {
                         bytes[i] = (depth[i].coerceIn(0f, 1f) * 255f).toInt().toByte()
@@ -2587,6 +2619,25 @@ class PlayerActivity : AppCompatActivity() {
         poseUiHandler.post(depthTick)
     }
 
+    /**
+     * One-shot "device is hot" hint on thermal escalation. Quiet for the 15 Hz step (visually
+     * indistinguishable); speaks up when depth drops to 7.5 Hz or freezes, at most once per
+     * 5 minutes so a sensor bouncing around a threshold can't spam.
+     */
+    private fun maybeHintThermal(level: DepthThermalGovernor.Level) {
+        val prev = depthThermalSeen
+        if (level == prev) return
+        depthThermalSeen = level
+        if (level < prev) return                                    // recovering — silent
+        if (level < DepthThermalGovernor.Level.QUARTER) return      // 15 Hz — not worth a toast
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - depthThermalToastMs < 300_000L) return
+        depthThermalToastMs = now
+        val msg = if (level == DepthThermalGovernor.Level.PAUSED) R.string.lazy3d_thermal_paused
+        else R.string.lazy3d_thermal_reduced
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+    }
+
     private fun stopLazy3d() {
         depthStarting = false
         // Invalidate any in-flight async startup: it compares its captured generation and discards
@@ -2598,6 +2649,8 @@ class PlayerActivity : AppCompatActivity() {
         // guarantees no tick is mid-flight or will fire again.
         pendingDepthTick?.let { poseUiHandler.removeCallbacks(it) }
         pendingDepthTick = null
+        depthThermal?.stop(); depthThermal = null
+        depthThermalSeen = DepthThermalGovernor.Level.FULL
         val worker = depthWorker; depthWorker = null
         val estimator = depthEstimator; depthEstimator = null
         // Clear lazy3d state on every possible render target (incl. the active one) so the depth
@@ -2639,6 +2692,13 @@ class PlayerActivity : AppCompatActivity() {
             v.setLazy3dStereoEnabled(true)
             v.setStereoParams(divergence = lazy3dDivergence, convergence = depthEstimator?.dynamicConvergence ?: 0.5f)
             v.setOnFrameReadbackListener { pixels, w, h, ts -> worker.submit(pixels, w, h, ts) }
+            // Carry the thermal pacing over (a fresh view defaults to full rate), and re-arm the
+            // tick to re-push the latest depth map — with inference throttled/paused there may be
+            // no new inference for a while, and the new view has no depth texture yet.
+            v.setDepthReadbackIntervalNanos(
+                (depthThermal?.level ?: DepthThermalGovernor.Level.FULL).readbackIntervalNanos
+            )
+            depthTickLastTs = 0L
         }
     }
 

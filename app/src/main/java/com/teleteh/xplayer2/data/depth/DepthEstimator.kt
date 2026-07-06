@@ -148,7 +148,13 @@ class DepthEstimator(
             prefs.edit().putBoolean(KEY_NNAPI_PROBING, true).commit()   // must hit disk BEFORE the native call
             val ok = tryInit(buffer) { o ->
                 val opts = NnApiDelegate.Options().apply {
-                    setExecutionPreference(NnApiDelegate.Options.EXECUTION_PREFERENCE_SUSTAINED_SPEED)
+                    // LOW_POWER, deliberately: depth runs continuously for the length of a movie,
+                    // and SUSTAINED_SPEED asks the driver to hold the NPU at high clocks — which
+                    // overheated phones within minutes (thermal warning → OS killed the app).
+                    // LOW_POWER trades some per-inference latency for temperature; the latest-only
+                    // worker absorbs that by just updating depth a little less often. Before/after
+                    // latency is visible as "depth Xms" in the remote's debug overlay.
+                    setExecutionPreference(NnApiDelegate.Options.EXECUTION_PREFERENCE_LOW_POWER)
                     setAllowFp16(true)
                     setUseNnapiCpu(false)   // hardware accelerator only — no CPU reference fallback
                 }
