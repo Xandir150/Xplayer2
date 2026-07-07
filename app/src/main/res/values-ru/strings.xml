@@ -47,6 +47,7 @@
     <string name="glasses_mode_current">Сейчас: %1$s — нажмите для смены</string>
     <string name="glasses_disabled_while_playing">Поставьте на паузу для смены режима очков</string>
     <string name="glasses_needs_permission">Требуется разрешение USB для очков</string>
+    <string name="glasses_not_3d_warning">Кажется, очки не в 3D-режиме — ничего не получится. Переключите очки в 3D-режим.</string>
     <string name="glasses_send_failed">Не удалось переключить режим очков</string>
     <string name="glasses_brand_unsupported">Смена режима очков требует проприетарного SDK %1$s, который не включён в поставку. Используйте физическое меню очков.</string>
     <string name="glasses_rayneo_manual">RayNeo Air переключает 2D/3D на самих очках: одновременно нажмите кнопку громкости (левая дужка) и кнопку яркости (правая дужка). При отключении 3D выключается автоматически.</string>

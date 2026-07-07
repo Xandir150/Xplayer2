@@ -46,6 +46,7 @@
     <string name="glasses_mode_title">Modo de pantalla de las gafas</string>
     <string name="glasses_disabled_while_playing">Pausa la reproducción para cambiar el modo de las gafas</string>
     <string name="glasses_needs_permission">Se requiere permiso USB para las gafas</string>
+    <string name="glasses_not_3d_warning">Parece que las gafas no están en modo 3D — la imagen no se verá bien. Cambie las gafas al modo 3D (SBS).</string>
     <string name="glasses_send_failed">Error al cambiar el modo de las gafas</string>
     <string name="glasses_brand_unsupported">El cambio de modo requiere el SDK propietario de %1$s, no incluido. Use el menú físico de las gafas.</string>
     <string name="glasses_rayneo_manual">RayNeo Air cambia 2D/3D en las propias gafas: pulsa a la vez el botón de Volumen (patilla izquierda) y el de Brillo (patilla derecha). El 3D se desactiva al desconectar.</string>

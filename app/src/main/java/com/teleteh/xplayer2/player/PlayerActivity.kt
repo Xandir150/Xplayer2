@@ -1910,6 +1910,47 @@ class PlayerActivity : AppCompatActivity() {
         RemoteControlActivity.currentInstance?.syncControls()
         applySbsShiftIfNeeded()
         applyVideoPipeline()
+        maybeWarnGlassesNot3d()
+    }
+
+    // Last time the "glasses aren't in 3D mode" warning was shown — applyRenderMode() runs on
+    // every mode/display/config change, so without this the dialog would restack itself.
+    private var glassesNot3dWarnedAtMs = 0L
+
+    /**
+     * Warn (don't block) when a stereo output mode is active but the goggles' panel is still in
+     * its 2D display mode: the SBS halves get squeezed into one 16:9 frame and "nothing works".
+     * Detection is by display geometry — in 3D mode the glasses present an ultrawide (32:9) panel,
+     * in 2D a 16:9 one — which is the ground truth regardless of brand or how the mode was
+     * changed (our button, the glasses' own button, or never at all). Deliberately ONLY a
+     * warning: auto-switching the panel here (or refusing stereo modes) is exactly what used to
+     * glitch madly, so the user stays in control. Dialog auto-dismisses after 5 s; shown on
+     * whichever activity is actually in front (the remote, when the picture is on the glasses).
+     */
+    private fun maybeWarnGlassesNot3d() {
+        if (!(getStereoSbs() || lazy3dEnabled)) return   // 2D output — nothing to warn about
+        if (presentation == null) return                  // picture not on the glasses
+        if (activeDisplayIsUltrawide()) return            // panel IS in 3D mode — all good
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - glassesNot3dWarnedAtMs < 30_000L) return
+        glassesNot3dWarnedAtMs = now
+        // Same foreground rule as the depth-model picker: with the picture on the glasses, the
+        // remote is what's in front on the phone — a dialog on the backgrounded player never shows.
+        val host: android.app.Activity = RemoteControlActivity.currentInstance ?: this
+        if (host.isFinishing || host.isDestroyed) return
+        try {
+            val dlg = AlertDialog.Builder(host)
+                .setMessage(R.string.glasses_not_3d_warning)
+                .setPositiveButton(android.R.string.ok, null)
+                .create()
+            dlg.show()
+            Handler(mainLooper).postDelayed({
+                try { if (dlg.isShowing) dlg.dismiss() } catch (_: Throwable) { }
+            }, 5_000L)
+        } catch (t: Throwable) {
+            // A dying host window must never take playback down with it.
+            android.util.Log.w("XPlayer2", "glasses-not-3D warning failed to show: ${t.message}")
+        }
     }
 
     /**

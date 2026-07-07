@@ -62,6 +62,7 @@
     <string name="glasses_mode_3d_plain">3D (SBS)</string>
     <string name="glasses_disabled_while_playing">Pause playback to change glasses mode</string>
     <string name="glasses_needs_permission">USB permission required for glasses</string>
+    <string name="glasses_not_3d_warning">Your glasses don\'t seem to be in 3D mode — the picture won\'t look right. Switch the glasses to 3D (SBS) mode.</string>
     <string name="glasses_send_failed">Failed to switch glasses mode</string>
     <string name="glasses_brand_unsupported">Switching glasses display mode requires the closed-source %1$s SDK, which is not bundled. Please use the glasses\' physical menu to change mode for now.</string>
     <string name="glasses_rayneo_manual">RayNeo Air switches 2D/3D on the glasses themselves: press the Volume button (left temple) and the Brightness button (right temple) at the same time. 3D turns off automatically when you disconnect.</string>

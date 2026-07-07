@@ -46,6 +46,7 @@
     <string name="glasses_mode_title">眼镜显示模式</string>
     <string name="glasses_disabled_while_playing">请暂停播放以更改眼镜模式</string>
     <string name="glasses_needs_permission">眼镜需要USB权限</string>
+    <string name="glasses_not_3d_warning">眼镜似乎未处于3D模式——画面将无法正常显示。请将眼镜切换到3D（SBS）模式。</string>
     <string name="glasses_send_failed">切换眼镜模式失败</string>
     <string name="glasses_brand_unsupported">切换眼镜显示模式需要 %1$s 的闭源SDK，该SDK未包含在应用中。请使用眼镜的物理菜单更改模式。</string>
     <string name="glasses_rayneo_manual">RayNeo Air 在眼镜上切换 2D/3D：同时按下音量键（左镜腿）和亮度键（右镜腿）。断开连接后 3D 会自动关闭。</string>
