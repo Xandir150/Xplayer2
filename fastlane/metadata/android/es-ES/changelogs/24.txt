@@ -1,0 +1,4 @@
+• 2D→3D: profundidad más fuerte y limpia (un solo modelo ajustado); menos calor, con protección térmica.
+• Rokid Air/Max: cambia las gafas entre 2D/3D directamente desde la app.
+• Aviso si las gafas siguen en 2D al reproducir 3D.
+• Corregido: audio bajo y diálogos inaudibles en películas con sonido 5.1; las películas panorámicas (21:9) se partían en dos — 2D→3D vuelve a funcionar; VITURE atascadas en «conceder permiso»; cierres al iniciar la reproducción; bloqueos ocasionales. App más ligera.

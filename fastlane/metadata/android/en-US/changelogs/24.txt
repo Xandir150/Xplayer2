@@ -1,0 +1,4 @@
+• 2D→3D: stronger, cleaner depth from a single tuned model; runs cooler, with thermal protection.
+• Rokid Air/Max: switch the glasses between 2D/3D right from the app.
+• A heads-up if the glasses are still in 2D when 3D plays.
+• Fixed: quiet audio and missing dialogue in movies with 5.1 sound; widescreen (21:9) films splitting in half — 2D→3D works for them again; VITURE stuck at "grant permission"; crashes at playback start; rare freezes. The app is smaller, too.
