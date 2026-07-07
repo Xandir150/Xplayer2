@@ -53,6 +53,31 @@ object GlassesProtocol {
     const val RAYNEO_CMD_DISPLAY_3D = 0x06.toByte() // kCmdDisplay3dMode → 3D SBS on
     const val RAYNEO_CMD_DISPLAY_2D = 0x07.toByte() // kCmdDisplay2dMode → 2D
 
+    // --- Rokid USB vendor-request protocol ---
+    // Unlike RayNeo's guessed HID frame, this is ROKID'S OWN documented vendor command set —
+    // confirmed by cross-referencing three independent sources: badicsalex/ar-drivers-rs
+    // (open, wire-level; verified working on real Rokid Air/Max hardware per its issue #3),
+    // wheaney/XRLinuxDriver's bundled official Rokid SDK header (same mode integers, called
+    // through their closed libGlassSDK.so), and neophack/rokidsdk's independent reimplementation.
+    // Plain EP0 control transfers (Recipient=Device) — NO HID report framing, NO interface claim
+    // needed, unlike every other brand here. See GlassesController.sendRokidDisplayMode /
+    // queryRokidDisplayModeBlocking.
+    //   SET mode: bmRequestType=0x40 (OUT|Vendor|Device), bRequest=0x01, wValue=<mode>,
+    //             wIndex=1, 1-byte zero payload.
+    //   GET mode: bmRequestType=0xC0 (IN|Vendor|Device),  bRequest=0x81, wValue=0, wIndex=1,
+    //             64-byte reply — mode is byte offset 1.
+    const val ROKID_REQTYPE_SET = 0x40
+    const val ROKID_REQTYPE_GET = 0xC0
+    const val ROKID_REQUEST_SET_MODE = 0x01
+    const val ROKID_REQUEST_GET_MODE = 0x81
+    const val ROKID_WINDEX = 1
+    const val ROKID_REPLY_SIZE = 64
+    const val ROKID_MODE_2D_1080P60 = 0
+    const val ROKID_MODE_3D_SBS_1080P60 = 1        // 3840x1080@60 — the mode we drive (Air/Max)
+    const val ROKID_MODE_2D_1080P120 = 3
+    const val ROKID_MODE_3D_SBS_1200P90 = 4        // 1200p-panel models (Max 2 family)
+    const val ROKID_MODE_3D_SBS_1200P60 = 5
+
     // CRC32 table (полная таблица 256 элементов)
     private val CRC32_TABLE = intArrayOf(
         0x00000000.toInt(), 0x77073096.toInt(), 0xEE0E612C.toInt(), 0x990951BA.toInt(),

@@ -654,9 +654,11 @@ class MainActivity : AppCompatActivity() {
         val connected = glasses.currentState() == GlassesController.ConnectionState.Connected &&
             glasses.supportsRemoteSwitch()
         if (connected) {
-            // VITURE and RayNeo are plain 2D/3D toggles (no Hz variants), so drop the frequency.
+            // VITURE, RayNeo and Rokid are plain 2D/3D toggles here (no Hz variants exposed), so
+            // drop the frequency.
             val brand = glasses.currentBrand()
-            tv.text = if (brand == GlassesController.Brand.VITURE || brand == GlassesController.Brand.RAYNEO)
+            tv.text = if (brand == GlassesController.Brand.VITURE || brand == GlassesController.Brand.RAYNEO ||
+                brand == GlassesController.Brand.ROKID)
                 (if (GlassesProtocol.is3DMode(glasses.lastMode())) "3D" else "2D")
             else GlassesProtocol.shortModeName(glasses.lastMode())
             tv.visibility = View.VISIBLE
@@ -702,8 +704,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         val brand = glasses.currentBrand()
-        val items = if (brand == GlassesController.Brand.VITURE || brand == GlassesController.Brand.RAYNEO) {
-            // VITURE and RayNeo switch 2D/3D as a binary toggle (no Hz variants).
+        val items = if (brand == GlassesController.Brand.VITURE || brand == GlassesController.Brand.RAYNEO ||
+            brand == GlassesController.Brand.ROKID) {
+            // VITURE, RayNeo and Rokid switch 2D/3D as a binary toggle here (Rokid has Hz/panel
+            // variants too, but we only ever drive its two confirmed-safe modes — see
+            // GlassesController.sendRokidDisplayMode).
             listOf(
                 GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60 to getString(R.string.glasses_mode_2d_plain),
                 GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_90_SBS to getString(R.string.glasses_mode_3d_plain),

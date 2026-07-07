@@ -35,7 +35,9 @@ import androidx.core.content.ContextCompat
  *     `set_3d` command id is only available through VITURE's closed-source
  *     libviture_one_sdk (Android: `com.viture.sdk.ArManager.set3D(boolean)`,
  *     distributed as an AAR from viture.com/developer).
- *   - TCL/RayNeo and Rokid: both ship closed-source SDKs only.
+ *   - Rokid: plain EP0 USB vendor control transfers — Rokid's own documented command set,
+ *     open (see [GlassesProtocol]'s Rokid section), no vendor SDK/interface claim needed.
+ *   - TCL/RayNeo: closed-source SDK; one model (Air 3s Pro) has a reverse-engineered HID toggle.
  *
  * To enable VITURE switching: drop `VITURE-SDK-x.y.z.aar` under `app/libs/`,
  * add it as a flavor-scoped dependency and wire a separate brand-specific
@@ -265,11 +267,13 @@ class GlassesController(private val appContext: Context) {
 
     /**
      * True only for brands/models whose 2D/3D switching we can actually drive: XREAL (HID MCU),
-     * VITURE (SDK), and a RayNeo model with a verified HID toggle. Every other RayNeo (and Rokid)
-     * is detected but self-managed via its own buttons, so it returns false here.
+     * VITURE (SDK), Rokid (open vendor control transfer), and a RayNeo model with a verified HID
+     * toggle. Every other RayNeo is detected but self-managed via its own buttons, so it returns
+     * false there.
      */
     fun supportsRemoteSwitch(): Boolean =
-        currentBrand() == Brand.XREAL || currentBrand() == Brand.VITURE || rayneoToggleCapable()
+        currentBrand() == Brand.XREAL || currentBrand() == Brand.VITURE ||
+            currentBrand() == Brand.ROKID || rayneoToggleCapable()
 
     /**
      * Send a `Write display mode` MCU/SDK command to the connected glasses.
@@ -299,6 +303,8 @@ class GlassesController(private val appContext: Context) {
                 // picker); automatic re-applies while still passive are a no-op so they never trigger
                 // a USB prompt.
                 Brand.RAYNEO -> if (connection != null) sendRayneoDisplayMode(GlassesProtocol.is3DMode(mode)) else false
+                // Rokid: open vendor control transfer — any SBS mode means "3D on".
+                Brand.ROKID -> sendRokidDisplayMode(GlassesProtocol.is3DMode(mode))
                 else -> false
             }
             mainHandler.post {
@@ -322,17 +328,18 @@ class GlassesController(private val appContext: Context) {
     }
 
     /**
-     * Ask the XREAL panel what display mode it's ACTUALLY in right now (MCU "read display mode"),
-     * instead of trusting [lastReportedMode] — which only reflects the last write WE sent and can
-     * drift from reality (a write can silently fail to take on the panel, or the mode changed via
-     * the glasses' own temple-button menu). Does blocking USB I/O, so it runs off the main thread;
-     * [lastReportedMode] and the [Listener] update on the main thread once the reply lands (or not,
-     * if the panel doesn't answer — some firmwares don't implement the read command).
+     * Ask the glasses what display mode they're ACTUALLY in right now (XREAL: MCU "read display
+     * mode"; Rokid: the GET vendor request), instead of trusting [lastReportedMode] — which only
+     * reflects the last write WE sent and can drift from reality (a write can silently fail to
+     * take on the panel, or the mode changed via the glasses' own button/menu). Does blocking USB
+     * I/O, so it runs off the main thread; [lastReportedMode] and the [Listener] update on the
+     * main thread once the reply lands (or not, if the panel doesn't answer).
      * No-op for VITURE (whose [lastMode] already reads the live SDK state) and RayNeo (no read
      * command reverse-engineered — see [sendRayneoDisplayMode]).
      */
     fun refreshDisplayMode() {
-        if (currentBrand() != Brand.XREAL) return
+        val brand = currentBrand()
+        if (brand != Brand.XREAL && brand != Brand.ROKID) return
         val conn = connection ?: return
         val dev = device ?: return
         // Single-flight: onStart + onResume + display-change events fire back-to-back and each
@@ -342,13 +349,13 @@ class GlassesController(private val appContext: Context) {
         val seqAtStart = modeWriteSeq
         Thread({
             try {
-                // One retry: right after a mode switch the MCU can be mid-negotiation and miss the
-                // first read (times out / doesn't answer yet) — a short pause + second try catches
-                // it without the caller needing its own retry logic.
-                var mode = queryDisplayModeBlocking(dev, conn)
+                // One retry: right after a mode switch the panel/MCU can be mid-negotiation and
+                // miss the first read (times out / doesn't answer yet) — a short pause + second
+                // try catches it without the caller needing its own retry logic.
+                var mode = queryActualModeBlocking(brand, dev, conn)
                 if (mode == null) {
                     try { Thread.sleep(250) } catch (_: InterruptedException) {}
-                    mode = queryDisplayModeBlocking(dev, conn)
+                    mode = queryActualModeBlocking(brand, dev, conn)
                 }
                 if (mode != null) {
                     mainHandler.post {
@@ -373,6 +380,21 @@ class GlassesController(private val appContext: Context) {
             }
         }, "GlassesModeQuery").start()
     }
+
+    /**
+     * Dispatches the brand-specific "read actual mode" query and maps its result into the
+     * canonical [GlassesProtocol.MCU_DISPLAY_MODE_*] space that [lastReportedMode] uses for every
+     * brand (XREAL's own consts double as that shared currency — see [lastMode]/[setDisplayMode]).
+     */
+    private fun queryActualModeBlocking(brand: Brand?, dev: UsbDevice, conn: UsbDeviceConnection): Int? =
+        when (brand) {
+            Brand.XREAL -> queryDisplayModeBlocking(dev, conn)
+            Brand.ROKID -> queryRokidDisplayModeBlocking(conn)?.let { raw ->
+                if (raw in ROKID_SBS_MODES) GlassesProtocol.MCU_DISPLAY_MODE_3840x1080_90_SBS
+                else GlassesProtocol.MCU_DISPLAY_MODE_1920x1080_60
+            }
+            else -> null
+        }
 
     /**
      * Send the MCU "read display mode" request and read back one reply packet on the MCU
@@ -776,6 +798,51 @@ class GlassesController(private val appContext: Context) {
         }
     }
 
+    /**
+     * Rokid 2D/3D switch — a plain EP0 vendor control transfer (Recipient=Device), Rokid's own
+     * documented command (see [GlassesProtocol]'s Rokid section for the three independent
+     * sources), not a per-model guess like RayNeo's — so unlike [sendRayneoDisplayMode] this is
+     * safe to send to every matched Rokid PID, no interface claim needed at all.
+     */
+    private fun sendRokidDisplayMode(on: Boolean): Boolean {
+        val conn = connection ?: return false
+        val mode = if (on) GlassesProtocol.ROKID_MODE_3D_SBS_1080P60 else GlassesProtocol.ROKID_MODE_2D_1080P60
+        return try {
+            val sent = conn.controlTransfer(
+                GlassesProtocol.ROKID_REQTYPE_SET, GlassesProtocol.ROKID_REQUEST_SET_MODE,
+                mode, GlassesProtocol.ROKID_WINDEX, byteArrayOf(0), 1, 250
+            )
+            if (sent == 1) {
+                Log.i(TAG, "Rokid display mode set to $mode (${if (on) "3D" else "2D"})")
+                true
+            } else {
+                Log.w(TAG, "Rokid display mode set failed: rc=$sent")
+                false
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "Rokid display toggle threw — ignored", t)
+            false
+        }
+    }
+
+    /** Rokid GET-mode vendor request. Returns the raw Rokid mode integer (0/1/3/4/5, see
+     *  [GlassesProtocol]'s ROKID_MODE_* consts), or null if the device didn't answer. */
+    private fun queryRokidDisplayModeBlocking(conn: UsbDeviceConnection): Int? {
+        val buf = ByteArray(GlassesProtocol.ROKID_REPLY_SIZE)
+        val read = try {
+            conn.controlTransfer(
+                GlassesProtocol.ROKID_REQTYPE_GET, GlassesProtocol.ROKID_REQUEST_GET_MODE,
+                0, GlassesProtocol.ROKID_WINDEX, buf, buf.size, 250
+            )
+        } catch (t: Throwable) {
+            Log.w(TAG, "Rokid mode query threw: ${t.message}"); -1
+        }
+        if (read <= 1) return null
+        val mode = buf[1].toInt() and 0xFF
+        Log.i(TAG, "Rokid disp-mode reply: mode=$mode")
+        return mode
+    }
+
     private fun notifyState() {
         listener?.onChanged(currentState(), lastReportedMode)
     }
@@ -812,6 +879,13 @@ class GlassesController(private val appContext: Context) {
         private const val MODE_PUSH_DELAY_MS = 700L
         // Short: this blocks a background thread and the caller (menu/UI open) is waiting on it.
         private const val MCU_READ_TIMEOUT_MS = 300
+        // Rokid raw mode integers that mean "some SBS/3D variant" — used by queryActualModeBlocking
+        // to collapse Rokid's richer mode space into the shared binary MCU_DISPLAY_MODE_* currency.
+        private val ROKID_SBS_MODES = setOf(
+            GlassesProtocol.ROKID_MODE_3D_SBS_1080P60,
+            GlassesProtocol.ROKID_MODE_3D_SBS_1200P90,
+            GlassesProtocol.ROKID_MODE_3D_SBS_1200P60,
+        )
         // Every value GlassesProtocol.MCU_DISPLAY_MODE_* defines — used to pick the mode byte out
         // of a "read display mode" reply whose data field's shape isn't fixed (see queryDisplayModeBlocking).
         private val KNOWN_DISPLAY_MODES = setOf(
@@ -876,11 +950,21 @@ class GlassesController(private val appContext: Context) {
             // RayNeo we ever send that command to. Other RayNeo PIDs stay passive (detect + hint).
             SupportedDevice(0x1bbb, 0xaf50, Brand.RAYNEO, "Air 3s Pro", rayneoToggle = true),
 
-            // Rokid — detection only. Switching requires the closed Rokid SDK.
-            // (Rokid VID is published as the literal "ROKID_GLASS_VID" macro in the upstream driver;
-            //  the public source doesn't currently expose the numeric value, so until we can grep a
-            //  paired glasses' descriptor block we leave the entry as a stub. Open an issue if you
-            //  have a Rokid Max/Air handy and we'll fill the VID in.)
+            // Rokid — 2D/3D switching via a plain USB vendor control-transfer command (Rokid's own
+            // documented request scheme, mirrored via badicsalex/ar-drivers-rs +
+            // wheaney/XRLinuxDriver's bundled Rokid SDK header — NOT a guess like RayNeo's, so
+            // every matched PID gets it here, see sendRokidDisplayMode). Air and Max share PID
+            // 0x162F (indistinguishable by VID/PID alone — ar-drivers-rs issue #3 — model string
+            // names both); 0x162B-E are other PIDs Rokid's own SDK header lists for the same
+            // family. Max 2 / Max Pro PIDs are from that same header but unconfirmed against real
+            // hardware — flagged in the model string.
+            SupportedDevice(0x04d2, 0x162b, Brand.ROKID, "Air/Max"),
+            SupportedDevice(0x04d2, 0x162c, Brand.ROKID, "Air/Max"),
+            SupportedDevice(0x04d2, 0x162d, Brand.ROKID, "Air/Max"),
+            SupportedDevice(0x04d2, 0x162e, Brand.ROKID, "Air/Max"),
+            SupportedDevice(0x04d2, 0x162f, Brand.ROKID, "Air/Max"),
+            SupportedDevice(0x04d2, 0x2002, Brand.ROKID, "Max 2 (unverified)"),
+            SupportedDevice(0x04d2, 0x2180, Brand.ROKID, "Max Pro (unverified)"),
         )
     }
 }

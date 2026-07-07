@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     Supported XR glasses VID/PID list, mirrored from wheaney/XRLinuxDriver.
-    Android-side switching only works on XREAL today (open MCU protocol).
-    Other brands are detected so the UI can show a brand-specific message
-    instead of nothing.
+    Android-side 2D/3D switching is implemented for XREAL (open MCU protocol),
+    VITURE (bundled SDK) and Rokid (open vendor control-transfer protocol) —
+    see GlassesController. Other brands are detected so the UI can show a
+    brand-specific message instead of nothing.
 -->
 <resources>
     <!-- XREAL: VID 0x3318 (decimal 13080) -->
@@ -32,6 +33,16 @@
     <usb-device vendor-id="13770" product-id="4356" />  <!-- 0x1104 Luma Ultra -->
     <usb-device vendor-id="13770" product-id="4433" />  <!-- 0x1151 Luma Cyber -->
     <usb-device vendor-id="13770" product-id="4609" />  <!-- 0x1201 Beast -->
+
+    <!-- Rokid: VID 0x04D2 (decimal 1234) — open vendor control-transfer 2D/3D switch, see
+         GlassesController.sendRokidDisplayMode. -->
+    <usb-device vendor-id="1234" product-id="5675" />  <!-- 0x162b Air/Max -->
+    <usb-device vendor-id="1234" product-id="5676" />  <!-- 0x162c Air/Max -->
+    <usb-device vendor-id="1234" product-id="5677" />  <!-- 0x162d Air/Max -->
+    <usb-device vendor-id="1234" product-id="5678" />  <!-- 0x162e Air/Max -->
+    <usb-device vendor-id="1234" product-id="5679" />  <!-- 0x162f Air/Max -->
+    <usb-device vendor-id="1234" product-id="8194" />  <!-- 0x2002 Max 2 (unverified) -->
+    <usb-device vendor-id="1234" product-id="8576" />  <!-- 0x2180 Max Pro (unverified) -->
 
     <!-- RayNeo (TCL): intentionally NOT listed here. We don't want Android to auto-launch XPlayer2
          or show the "open app / always open for this device" association dialog when RayNeo glasses
