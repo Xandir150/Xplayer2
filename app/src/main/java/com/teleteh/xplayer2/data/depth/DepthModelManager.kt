@@ -51,15 +51,22 @@ class DepthModelManager(
         val uiLabel: String,
         val selectable: Boolean = true,
     ) {
+        // As of 1.0.11: the file served at this slot's URL is no longer stock MiDaS — it's
+        // V-Model 2, our own EfficientNet-Lite3 + FeatureFusion conv student, trained via DA3-Large
+        // distillation + a real-stereo photometric calibration pass (see project memory
+        // project_own_depth_student.md). Kept the MIDAS enum name/filename/cache slot as-is
+        // (existing installs already auto-update through it — renaming would just mean shipping
+        // a second copy under a new name for no benefit).
         MIDAS(
             "midas_v21_small.tflite", "$REL/midas_v21_small.tflite",
             256, true, 1.0f, 0.90f, "MiDaS small — fast (current default)"
         ),
-        // DORMANT (selectable=false, asset no longer bundled): our own DA-V2 distillation lost
-        // the beta A/B to the tuned MiDaS (weak 3D even after the mul_1 mapper boost) and was
-        // pulled from builds in 1.0.10b5. The entry stays as the re-test hook for a future
-        // retrained version: flip selectable, drop the new .tflite into assets (or publish it at
-        // [url]), done. gpuSafe was never verified (possible DA-V2 ViT remnant, TF #93476).
+        // DORMANT (selectable=false, asset no longer bundled): the ORIGINAL "V-Model" — our
+        // first DA-V2 distillation attempt — lost its beta A/B to tuned MiDaS and was pulled in
+        // 1.0.10b5. Superseded by V-Model 2 (see MIDAS above), not by anything in this slot.
+        // Left dormant as a re-test hook for a possible future THIRD model: flip selectable,
+        // drop a .tflite in assets (or publish at [url]), done. gpuSafe never verified (possible
+        // DA-V2 ViT remnant, TF #93476).
         V_MODEL(
             "v_model_fp16.tflite", "$REL/v_model_fp16.tflite",
             448, false, 1.5f, 0.85f, "V-Model — our DA-V2 distillation (beta)",
@@ -72,10 +79,12 @@ class DepthModelManager(
          * a LUT, so the shape here can be arbitrary math.
          */
         fun mapDepth(d: Float): Float = when (this) {
-            // MiDaS: pow(d, 0.7) — slope at the near end equals 0.7, so within-object relief
-            // errors ("the head pops out of the jacket") shrink, while the far end — which MiDaS
-            // estimates well — gains separation. ≈ iw3's foreground-scale −1 (inv_mul_1).
-            MIDAS -> Math.pow(d.toDouble(), 0.7).toFloat()
+            // Identity. The old pow(d, 0.7) curve here was hand-tuned to compensate STOCK
+            // MiDaS's specific background/midground compression weakness — applying it to
+            // V-Model 2 (which doesn't share that weakness; its own richness gate already
+            // matches the DA3-Large teacher's contrast) over-corrected and visibly hurt quality
+            // in on-device A/B. Richness comes from the model now, not a post-hoc curve.
+            MIDAS -> d
             // V-Model: iw3's mul_1 softplus (bias 0.343, scale 12) — expands the foreground's
             // share of the disparity range and flattens the far background, countering the
             // DA-V2-family's compressed near-field histogram (the "3D looks weak" complaint).
