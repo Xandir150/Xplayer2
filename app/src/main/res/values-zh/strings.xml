@@ -40,6 +40,9 @@
     <string name="remote_lazy3d_starting">2D→3D — 启动中…</string>
     <string name="remote_audio_track">音轨</string>
     <string name="remote_stop_playback">停止播放</string>
+    <string name="remote_touchpad_hint">点按 — 播放/暂停\n左右滑动 — ±10秒\n上下滑动 — 音量\n屏幕会自动熄灭 — 触摸唤醒</string>
+    <string name="remote_page_handle_desc">滑动或点按可在按钮和触控板之间切换</string>
+    <string name="remote_button_page_hint">点按 — 播放/暂停\n滑动或双击 ⇆ — ±10秒</string>
 
     <!-- Glasses -->
     <string name="glasses_mode">眼镜模式</string>

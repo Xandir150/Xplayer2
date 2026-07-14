@@ -48,6 +48,9 @@ class ExternalPlayerPresentation(
         }
         glView = findViewById(R.id.presentationGlView)
         playerView = findViewById(R.id.presentationPlayerView)
+        // Keep the on-glasses transport flash short: it's feedback for a remote action the user
+        // just made, not a control surface they interact with (there's no touch on the glasses).
+        playerView?.controllerShowTimeoutMs = 2000
         glView?.setOnSurfaceReadyListener { surface ->
             surfaceListener(surface)
         }
@@ -82,6 +85,15 @@ class ExternalPlayerPresentation(
 
     fun setPlayer(player: Player?) {
         playerView?.player = player
+    }
+
+    /**
+     * Briefly show the transport OSD (play state, seekbar, position) on the glasses. Called by
+     * PlayerActivity when the user acts on the phone remote mid-playback — media3 only auto-shows
+     * the controller on pause, so seeks while playing were otherwise invisible in the goggles.
+     */
+    fun flashOsd() {
+        playerView?.showController()
     }
 
     override fun onStop() {

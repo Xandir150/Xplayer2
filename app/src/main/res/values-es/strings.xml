@@ -40,6 +40,9 @@
     <string name="remote_lazy3d_starting">2D→3D — iniciando…</string>
     <string name="remote_audio_track">Pista de audio</string>
     <string name="remote_stop_playback">Detener</string>
+    <string name="remote_touchpad_hint">Toque — pausa / play\nDesliza ⇆ — ±10 s\nDesliza ⇅ — volumen\nLa pantalla se apaga sola — toca para despertar</string>
+    <string name="remote_page_handle_desc">Desliza o toca para cambiar entre botones y touchpad</string>
+    <string name="remote_button_page_hint">Toque — pausa / play\nDesliza o toque doble ⇆ — ±10 s</string>
 
     <!-- Glasses -->
     <string name="glasses_mode">Modo gafas</string>

@@ -4,18 +4,26 @@ import android.animation.ValueAnimator
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.AnimationUtils
 import android.widget.ImageButton
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.ViewFlipper
+import kotlin.math.abs
 import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -44,7 +52,10 @@ class RemoteControlActivity : AppCompatActivity() {
     private lateinit var btnResizeMode: MaterialButton
     private lateinit var btnVolumeBoost: MaterialButton
     private lateinit var btnQuality: MaterialButton
-    private lateinit var tvLazyDebug: TextView
+    private lateinit var tvTouchFeedback: TextView
+    private lateinit var remoteFlipper: ViewFlipper
+    private lateinit var iconButtonsPage: android.widget.ImageView
+    private lateinit var iconTouchpadPage: android.widget.ImageView
 
     private val handler = Handler(Looper.getMainLooper())
     private val updateRunnable = object : Runnable {
@@ -57,29 +68,25 @@ class RemoteControlActivity : AppCompatActivity() {
         }
     }
 
-    // TEMPORARY: live IMU / parallax telemetry while tuning Lazy 3D head-tracking. Polls at
-    // ~8 Hz so head movement is visible in the numbers; hides itself when Lazy 3D is off.
-    // Remove this (and the tvLazyDebug view) once the head-tracking feel is dialled in.
-    private val lazyDebugRunnable = object : Runnable {
-        override fun run() {
-            val player = PlayerActivity.currentInstance
-            val line = player?.lazy3dDebugLine()
-            if (line != null) {
-                tvLazyDebug.visibility = View.VISIBLE
-                tvLazyDebug.text = line
-            } else {
-                tvLazyDebug.visibility = View.GONE
-            }
-            handler.postDelayed(this, 120)
-        }
-    }
-    
+    // Touchpad state — the eyes-free gesture surface at the top of the remote.
+    private lateinit var gestureDetector: GestureDetector
+    private var audioManager: AudioManager? = null
+    private var vibrator: Vibrator? = null
+    private enum class SwipeAxis { NONE, HORIZONTAL, VERTICAL }
+    private var swipeAxis = SwipeAxis.NONE
+    private var volumeAccumPx = 0f
+    private var feedbackFade: ValueAnimator? = null
+
+
     // Screen dimming
     private var isScreenDimmed = false
     private var dimAnimator: ValueAnimator? = null
     private var dimOverlay: View? = null
     private val dimDelayMs = 5000L // 5 seconds before dimming
     private val dimRunnable = Runnable { dimScreen() }
+    // Tracks play/pause transitions so we only act (arm/disarm the dim timer, wake the screen)
+    // on a change, not on every 500 ms poll tick — see updatePlayPauseButton().
+    private var lastKnownPlaying: Boolean? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -102,21 +109,33 @@ class RemoteControlActivity : AppCompatActivity() {
         btnResizeMode = findViewById(R.id.btnResizeMode)
         btnVolumeBoost = findViewById(R.id.btnVolumeBoost)
         btnQuality = findViewById(R.id.btnQuality)
-        tvLazyDebug = findViewById(R.id.tvLazyDebug)
+        tvTouchFeedback = findViewById(R.id.tvTouchFeedback)
+        remoteFlipper = findViewById(R.id.remoteFlipper)
+        iconButtonsPage = findViewById(R.id.iconButtonsPage)
+        iconTouchpadPage = findViewById(R.id.iconTouchpadPage)
+
+        audioManager = getSystemService(AudioManager::class.java)
+        vibrator = getSystemService(Vibrator::class.java)
+        setupTouchpad()
+        setupButtonPageGestures()
+        setupPageHandle()
 
         // Play/Pause
         btnPlayPause.setOnClickListener {
+            hapticClick()
             PlayerActivity.currentInstance?.togglePlayPause()
             updatePlayPauseButton()
         }
 
         // Rewind 10s
         findViewById<ImageButton>(R.id.btnRewind).setOnClickListener {
+            hapticSeekBack()
             PlayerActivity.currentInstance?.seekRelative(-10000)
         }
 
         // Forward 10s
         findViewById<ImageButton>(R.id.btnForward).setOnClickListener {
+            hapticSeekForward()
             PlayerActivity.currentInstance?.seekRelative(10000)
         }
 
@@ -128,23 +147,28 @@ class RemoteControlActivity : AppCompatActivity() {
                 }
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                hapticClick()
+            }
         })
 
         // SBS toggle
         btnSbs.setOnClickListener {
+            hapticClick()
             PlayerActivity.currentInstance?.toggleStereoSbs()
             updateButtons()
         }
 
         // Shift toggle
         btnShift.setOnClickListener {
+            hapticClick()
             PlayerActivity.currentInstance?.toggleShift()
             updateButtons()
         }
 
         // Resize mode cycle (mirrors the overlay button on the goggles side)
         btnResizeMode.setOnClickListener {
+            hapticClick()
             val newLabel = PlayerActivity.currentInstance?.cycleResizeMode()
             if (newLabel != null) btnResizeMode.text = newLabel
         }
@@ -152,29 +176,35 @@ class RemoteControlActivity : AppCompatActivity() {
         // Stream quality — only relevant for multi-quality sources (VK/OK.ru). The button is
         // hidden in updateButtons() when the source exposes a single quality.
         btnQuality.setOnClickListener {
+            hapticTick()
             showQualityDialog()
         }
 
         // Audio track
         findViewById<MaterialButton>(R.id.btnAudio).setOnClickListener {
+            hapticTick()
             showAudioTrackDialog()
         }
 
         // Subtitles — off by default, so this is the way to switch one on (and back off) while
         // the picture is on the goggles and the phone is the remote.
         findViewById<MaterialButton>(R.id.btnSubtitle).setOnClickListener {
+            hapticTick()
             showSubtitleTrackDialog()
         }
 
         // Volume boost — cycles Off/+6/+12/+18/+24 dB to lift quiet sources. Reachable
         // here so it works while the picture is on the goggles and the phone is the remote.
         btnVolumeBoost.setOnClickListener {
+            hapticClick()
             val player = PlayerActivity.currentInstance ?: return@setOnClickListener
-            btnVolumeBoost.text = player.cycleVolumeBoost()
+            player.cycleVolumeBoost()
+            btnVolumeBoost.text = player.getVolumeBoostShortLabel()
         }
 
         // Stop button - finish both activities
         findViewById<MaterialButton>(R.id.btnStop).setOnClickListener {
+            hapticHeavy()
             PlayerActivity.currentInstance?.finishAndClose()
             finish()
         }
@@ -208,6 +238,261 @@ class RemoteControlActivity : AppCompatActivity() {
         }
     }
     
+    /**
+     * The eyes-free control surface: while the picture is on the goggles, the user can't see the
+     * phone, so precise button taps are hopeless. The touchpad turns the top half of the remote
+     * into coarse gestures, each confirmed by a DISTINCT vibration so the hand knows what
+     * happened without looking:
+     *   tap            -> play/pause          (single click, instant)
+     *   fling right    -> +10 s               (one tick)
+     *   fling left     -> −10 s               (two ticks — direction is feelable)
+     *   drag up/down   -> media volume        (light tick per step)
+     *   long-press     -> flash OSD on glasses (heavy click)
+     *
+     * The touchpad only works while the screen is lit. After 5 s idle the screen slowly fades
+     * (5 s) to true black; while dark, ANY touch anywhere just wakes it (and is consumed, so
+     * nothing underneath can be mis-tapped) — see dispatchTouchEvent.
+     */
+    private fun setupTouchpad() {
+        val touchpad = findViewById<View>(R.id.touchpad)
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
+        val volumeStepPx = resources.displayMetrics.density * 48f  // ~one step per 48 dp of drag
+
+        gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent): Boolean {
+                swipeAxis = SwipeAxis.NONE
+                volumeAccumPx = 0f
+                return true
+            }
+
+            fun tapPlayPause() {
+                val player = PlayerActivity.currentInstance ?: return
+                player.togglePlayPause()
+                hapticClick()
+                // togglePlayPause is synchronous on ExoPlayer, so the flipped state is readable
+                // immediately — show what the tap DID, not what was before.
+                showTouchFeedback(if (player.isPlaying()) "▶" else "⏸")
+                updatePlayPauseButton()
+            }
+
+            override fun onSingleTapUp(e: MotionEvent): Boolean {
+                tapPlayPause()
+                return true
+            }
+
+            override fun onScroll(
+                e1: MotionEvent?, e2: MotionEvent,
+                distanceX: Float, distanceY: Float
+            ): Boolean {
+                val startX = e1?.x ?: return false
+                val startY = e1.y
+                // Lock the gesture to one axis once movement is unambiguous, so a sloppy
+                // horizontal seek-swipe can't also nudge the volume.
+                if (swipeAxis == SwipeAxis.NONE) {
+                    val totalDx = abs(e2.x - startX)
+                    val totalDy = abs(e2.y - startY)
+                    if (totalDx > touchSlop * 2 || totalDy > touchSlop * 2) {
+                        swipeAxis = if (totalDx > totalDy) SwipeAxis.HORIZONTAL else SwipeAxis.VERTICAL
+                    }
+                }
+                if (swipeAxis == SwipeAxis.VERTICAL) {
+                    // distanceY is positive when the finger moves UP -> volume up.
+                    volumeAccumPx += distanceY
+                    while (volumeAccumPx >= volumeStepPx) {
+                        volumeAccumPx -= volumeStepPx
+                        adjustVolume(up = true)
+                    }
+                    while (volumeAccumPx <= -volumeStepPx) {
+                        volumeAccumPx += volumeStepPx
+                        adjustVolume(up = false)
+                    }
+                }
+                return true
+            }
+
+            override fun onFling(
+                e1: MotionEvent?, e2: MotionEvent,
+                velocityX: Float, velocityY: Float
+            ): Boolean {
+                if (swipeAxis != SwipeAxis.HORIZONTAL || abs(velocityX) < 600) return false
+                val player = PlayerActivity.currentInstance ?: return true
+                if (velocityX > 0) {
+                    player.seekRelative(10_000)
+                    hapticSeekForward()
+                    showTouchFeedback("⏩ +10s")
+                } else {
+                    player.seekRelative(-10_000)
+                    hapticSeekBack()
+                    showTouchFeedback("⏪ −10s")
+                }
+                return true
+            }
+
+            override fun onLongPress(e: MotionEvent) {
+                // Placeholder until the glasses OSD menu lands: long-press just flashes the
+                // transport OSD in the goggles so the user can check position without acting.
+                hapticHeavy()
+                PlayerActivity.currentInstance?.flashGlassesOsd()
+                showTouchFeedback("ⓘ")
+            }
+        })
+
+        touchpad.setOnTouchListener { v, ev ->
+            if (ev.actionMasked == MotionEvent.ACTION_UP) v.performClick()
+            gestureDetector.onTouchEvent(ev)
+            true
+        }
+    }
+
+    /**
+     * The button page has plenty of dead space around/between the three transport buttons, so it
+     * gets the same YouTube-style shortcuts as the touchpad, minus volume (that stays touchpad-
+     * only): tap empty space = play/pause, swipe or double-tap left/right = ±10 s. This overlay
+     * sits BEHIND the buttons in z-order (added first in the XML), so a touch that lands on an
+     * actual button is consumed by the button itself and never reaches here — only touches that
+     * miss every button fall through to this layer.
+     *
+     * Unlike the touchpad (which has no double-tap, so a single tap can fire instantly via
+     * onSingleTapUp), play/pause here waits for onSingleTapConfirmed — the ~300 ms double-tap
+     * timeout — so a double-tap-to-seek doesn't also toggle playback. Same trade-off YouTube's
+     * own app makes.
+     *
+     * Double-tap only seeks in the outer thirds of the area, like YouTube's own gesture zones —
+     * the middle third is a dead zone so a double-tap near the play/pause button can't also seek.
+     * Feedback lives ABOVE the buttons (not behind/under them) so it's never obscured.
+     */
+    private fun setupButtonPageGestures() {
+        val area = findViewById<View>(R.id.buttonPageGestureArea)
+        val tvFeedback = findViewById<TextView>(R.id.tvButtonPageFeedback)
+
+        fun seek(forward: Boolean) {
+            val player = PlayerActivity.currentInstance ?: return
+            if (forward) {
+                player.seekRelative(10_000)
+                hapticSeekForward()
+                showFeedback(tvFeedback, "⏩ +10s")
+            } else {
+                player.seekRelative(-10_000)
+                hapticSeekBack()
+                showFeedback(tvFeedback, "⏪ −10s")
+            }
+        }
+
+        val detector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent) = true
+
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                val player = PlayerActivity.currentInstance ?: return true
+                player.togglePlayPause()
+                hapticClick()
+                showFeedback(tvFeedback, if (player.isPlaying()) "▶" else "⏸")
+                updatePlayPauseButton()
+                return true
+            }
+
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                val w = area.width
+                if (e.x < w / 3f) seek(forward = false)
+                else if (e.x > w * 2f / 3f) seek(forward = true)
+                return true
+            }
+
+            override fun onFling(
+                e1: MotionEvent?, e2: MotionEvent,
+                velocityX: Float, velocityY: Float
+            ): Boolean {
+                val startX = e1?.x ?: return false
+                val startY = e1.y
+                if (abs(velocityX) < 600 || abs(e2.x - startX) < abs(e2.y - startY)) return false
+                seek(forward = velocityX > 0)
+                return true
+            }
+        })
+
+        area.setOnTouchListener { v, ev ->
+            if (ev.actionMasked == MotionEvent.ACTION_UP) v.performClick()
+            detector.onTouchEvent(ev)
+            true
+        }
+    }
+
+    /**
+     * The block above the seekbar shows one of two pages — button transport (default, page 0,
+     * works with a D-pad on a TV box with no touch at all) or the touchpad (page 1, eyes-free,
+     * phone-only). Only this block slides; nothing else on the remote moves. Switching is a plain
+     * tap on the handle below the block (a fling/swipe gesture there used to ALSO trigger the
+     * forced performClick() on ACTION_UP, double-toggling and flipping straight back — looked
+     * like a glitch). Never a gesture over the pages themselves either way — the touchpad's own
+     * swipes already mean seek/volume.
+     */
+    private fun setupPageHandle() {
+        val handle = findViewById<View>(R.id.pageHandle)
+        updatePageIcons()
+        handle.setOnClickListener { switchPage() }
+    }
+
+    private fun switchPage() {
+        val goingToTouchpad = remoteFlipper.displayedChild == 0
+        remoteFlipper.inAnimation = AnimationUtils.loadAnimation(
+            this, if (goingToTouchpad) R.anim.slide_in_from_right else R.anim.slide_in_from_left
+        )
+        remoteFlipper.outAnimation = AnimationUtils.loadAnimation(
+            this, if (goingToTouchpad) R.anim.slide_out_to_left else R.anim.slide_out_to_right
+        )
+        remoteFlipper.displayedChild = if (goingToTouchpad) 1 else 0
+        hapticTick()
+        updatePageIcons()
+    }
+
+    private fun updatePageIcons() {
+        val onTouchpad = remoteFlipper.displayedChild == 1
+        val activeColor = themeColor(androidx.appcompat.R.attr.colorPrimary)
+        // rc_outline is a near-black card-stroke colour — invisible here. rc_secondary is the
+        // muted-but-legible grey used for secondary text, reads correctly as "inactive".
+        val inactiveColor = getColor(R.color.rc_secondary)
+        iconButtonsPage.imageTintList = ColorStateList.valueOf(if (onTouchpad) inactiveColor else activeColor)
+        iconTouchpadPage.imageTintList = ColorStateList.valueOf(if (onTouchpad) activeColor else inactiveColor)
+    }
+
+    private fun adjustVolume(up: Boolean) {
+        val am = audioManager ?: return
+        am.adjustStreamVolume(
+            AudioManager.STREAM_MUSIC,
+            if (up) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER,
+            0 // no system volume UI — our own feedback text + haptic tick instead
+        )
+        hapticTick()
+        val cur = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        showTouchFeedback((if (up) "🔊 " else "🔉 ") + (cur * 100 / max) + "%")
+    }
+
+    /** Big center text on the touchpad showing the last action, fading out on its own. */
+    private fun showTouchFeedback(text: String) = showFeedback(tvTouchFeedback, text)
+
+    /** Same feedback flash, generalized so the button page's own gesture layer can use it too. */
+    private fun showFeedback(tv: TextView, text: String) {
+        feedbackFade?.cancel()
+        tv.text = text
+        tv.alpha = 1f
+        feedbackFade = ValueAnimator.ofFloat(1f, 0f).apply {
+            startDelay = 500
+            duration = 500
+            addUpdateListener { tv.alpha = it.animatedValue as Float }
+            start()
+        }
+    }
+
+    // --- Haptic vocabulary -------------------------------------------------------------------
+    private fun vibrate(effect: VibrationEffect) {
+        try { vibrator?.vibrate(effect) } catch (_: Throwable) { /* some boxes have no vibrator */ }
+    }
+    private fun hapticClick() = vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+    private fun hapticTick() = vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
+    private fun hapticHeavy() = vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK))
+    private fun hapticSeekForward() = vibrate(VibrationEffect.createWaveform(longArrayOf(0, 30), -1))
+    private fun hapticSeekBack() = vibrate(VibrationEffect.createWaveform(longArrayOf(0, 25, 90, 25), -1))
+
     private fun setupDimOverlay() {
         // Create a fullscreen black overlay for dimming
         val rootView = findViewById<View>(android.R.id.content) as android.view.ViewGroup
@@ -215,12 +500,12 @@ class RemoteControlActivity : AppCompatActivity() {
             setBackgroundColor(Color.BLACK)
             alpha = 0f
             visibility = View.GONE
-            isClickable = true
-            // NOT focusable: on a D-pad/TV device a focusable full-screen overlay would steal
-            // focus when it appears and trap navigation. Touch wakes it via the click listener;
-            // D-pad/keys wake it via dispatchKeyEvent.
+            // Purely visual: while dimmed, dispatchTouchEvent intercepts ALL touches before any
+            // view (routing them into the touchpad gestures), so this overlay never needs to be
+            // clickable. NOT focusable either — on a D-pad/TV device a focusable full-screen
+            // overlay would steal focus and trap navigation; keys wake via dispatchKeyEvent.
+            isClickable = false
             isFocusable = false
-            setOnClickListener { wakeScreen() }
         }
         rootView.addView(dimOverlay, android.view.ViewGroup.LayoutParams(
             android.view.ViewGroup.LayoutParams.MATCH_PARENT,
@@ -230,6 +515,10 @@ class RemoteControlActivity : AppCompatActivity() {
     
     private fun scheduleDim() {
         handler.removeCallbacks(dimRunnable)
+        // Dimming exists so the phone doesn't glow at the user while the picture is on the
+        // goggles — only a concern while video is actually playing. Paused, keep the remote lit:
+        // the user is very likely looking at it to decide what to do next.
+        if (PlayerActivity.currentInstance?.isPlaying() != true) return
         handler.postDelayed(dimRunnable, dimDelayMs)
     }
     
@@ -246,14 +535,20 @@ class RemoteControlActivity : AppCompatActivity() {
         
         // Animate overlay alpha and screen brightness
         dimAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 500
+            // Slow, gentle fade-out (5 s): the user is settling into the goggles — a snap to
+            // black reads as "something broke"; a long dusk reads as intentional.
+            duration = 5000
             interpolator = AccelerateDecelerateInterpolator()
             addUpdateListener { animator ->
                 val value = animator.animatedValue as Float
                 dimOverlay?.alpha = value
-                // Also dim actual screen brightness
+                // Dim the actual backlight all the way to BRIGHTNESS_OVERRIDE_OFF (0.0):
+                // backlight fully off, touch digitizer stays alive — combined with the opaque
+                // black overlay this is genuinely zero light on OLED, not a 1% glow.
                 window.attributes = window.attributes.apply {
-                    screenBrightness = (1f - value * 0.99f).coerceAtLeast(0.01f)
+                    screenBrightness = (1f - value).coerceAtLeast(
+                        WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_OFF
+                    )
                 }
             }
             start()
@@ -266,16 +561,19 @@ class RemoteControlActivity : AppCompatActivity() {
         
         dimAnimator?.cancel()
         
-        // Animate back to full brightness
+        // Waking is near-instant (unlike the long dim fade): the user actively asked for the
+        // screen, don't make them watch it ramp.
         val currentAlpha = dimOverlay?.alpha ?: 1f
         dimAnimator = ValueAnimator.ofFloat(currentAlpha, 0f).apply {
-            duration = 300
+            duration = 150
             interpolator = AccelerateDecelerateInterpolator()
             addUpdateListener { animator ->
                 val value = animator.animatedValue as Float
                 dimOverlay?.alpha = value
                 window.attributes = window.attributes.apply {
-                    screenBrightness = (1f - value * 0.99f).coerceAtLeast(0.01f)
+                    screenBrightness = (1f - value).coerceAtLeast(
+                        WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_OFF
+                    )
                 }
             }
             addListener(object : android.animation.Animator.AnimatorListener {
@@ -297,13 +595,19 @@ class RemoteControlActivity : AppCompatActivity() {
     }
     
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
-        // Any touch resets the dim timer
-        if (ev?.action == MotionEvent.ACTION_DOWN) {
-            if (isScreenDimmed) {
+        if (ev == null) return super.dispatchTouchEvent(ev)
+        if (isScreenDimmed) {
+            // Dark (or fading) screen: any touch just wakes it, and is consumed — nothing ever
+            // reaches the controls underneath, so a blind grab of the phone can't mis-tap
+            // anything. All actual control happens on the lit remote.
+            if (ev.action == MotionEvent.ACTION_DOWN) {
+                hapticTick() // confirm the wake landed even before the eyes find the screen
                 wakeScreen()
-                return true // Consume the touch
             }
-            // Reset dim timer on any interaction
+            return true
+        }
+        if (ev.action == MotionEvent.ACTION_DOWN) {
+            // Reset dim timer on any interaction while lit
             scheduleDim()
         }
         return super.dispatchTouchEvent(ev)
@@ -335,7 +639,6 @@ class RemoteControlActivity : AppCompatActivity() {
         updateButtons()
         updateProgress()
         handler.post(updateRunnable)
-        handler.post(lazyDebugRunnable)
         // Start dim timer
         scheduleDim()
     }
@@ -343,7 +646,6 @@ class RemoteControlActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         handler.removeCallbacks(updateRunnable)
-        handler.removeCallbacks(lazyDebugRunnable)
         cancelDim()
         dimAnimator?.cancel()
         // Reset brightness when leaving
@@ -363,6 +665,13 @@ class RemoteControlActivity : AppCompatActivity() {
     fun syncControls() {
         if (PlayerActivity.currentInstance == null) return
         updateButtons()
+    }
+
+    /** Push-path from the player's onIsPlayingChanged: refresh the transport UI immediately
+     *  instead of waiting out the 500 ms poll (which read as lag after every remote tap). */
+    fun onTransportChanged() {
+        if (PlayerActivity.currentInstance == null) return
+        updateProgress()
     }
 
     companion object {
@@ -406,6 +715,18 @@ class RemoteControlActivity : AppCompatActivity() {
             if (isPlaying) android.R.drawable.ic_media_pause
             else android.R.drawable.ic_media_play
         )
+        // React only on a play<->pause transition (this runs every 500 ms poll tick too, and
+        // scheduleDim() would just keep resetting its own timer otherwise). Pausing wakes the
+        // screen immediately and disarms the timer; resuming re-arms it.
+        if (lastKnownPlaying != isPlaying) {
+            lastKnownPlaying = isPlaying
+            if (isPlaying) {
+                scheduleDim()
+            } else {
+                cancelDim()
+                if (isScreenDimmed) wakeScreen()
+            }
+        }
     }
 
     private fun updateButtons() {
@@ -431,7 +752,7 @@ class RemoteControlActivity : AppCompatActivity() {
         btnResizeMode.text = player.getResizeModeLabel()
 
         // Volume boost label reflects the persisted value when the remote opens.
-        btnVolumeBoost.text = player.getVolumeBoostLabel()
+        btnVolumeBoost.text = player.getVolumeBoostShortLabel()
 
         // Quality picker — only for sources with ≥2 qualities. Label shows the current quality.
         if (player.hasMultipleQualities()) {
@@ -507,6 +828,7 @@ class RemoteControlActivity : AppCompatActivity() {
             btn.text = m.uiLabel
             btn.isChecked = (m == active)
             btn.setOnClickListener {
+                hapticClick()
                 dialog.dismiss()
                 player.applyChosenDepthModel(m)
                 updateButtons()
@@ -524,6 +846,7 @@ class RemoteControlActivity : AppCompatActivity() {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(R.string.quality)
             .setSingleChoiceItems(labels.toTypedArray(), checkedItem) { dialog, which ->
+                hapticClick()
                 player.selectQuality(which)
                 updateButtons()
                 dialog.dismiss()
@@ -549,6 +872,7 @@ class RemoteControlActivity : AppCompatActivity() {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(R.string.dialog_audio_track_title)
             .setSingleChoiceItems(labels, checkedItem) { dialog, which ->
+                hapticClick()
                 val (_, trackIndex) = tracks[which]
                 player.selectAudioTrack(trackIndex)
                 dialog.dismiss()
@@ -579,6 +903,7 @@ class RemoteControlActivity : AppCompatActivity() {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle(R.string.select_subtitle)
             .setSingleChoiceItems(labels, checkedItem) { dialog, which ->
+                hapticClick()
                 val (_, trackIndex) = tracks[which]
                 player.selectSubtitleTrack(trackIndex)
                 dialog.dismiss()

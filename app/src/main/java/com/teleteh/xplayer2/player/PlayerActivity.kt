@@ -863,6 +863,11 @@ class PlayerActivity : AppCompatActivity() {
                     override fun onAudioSessionIdChanged(audioSessionId: Int) {
                         rebindLoudnessEnhancer(audioSessionId)
                     }
+                    override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        // Push the state to the phone remote immediately — it otherwise polls at
+                        // 500 ms, which reads as lag on the play/pause icon after a remote tap.
+                        RemoteControlActivity.currentInstance?.onTransportChanged()
+                    }
                     override fun onVideoSizeChanged(videoSize: VideoSize) {
                         lastVideoWidth = videoSize.width
                         lastVideoHeight = videoSize.height
@@ -1239,6 +1244,10 @@ class PlayerActivity : AppCompatActivity() {
 
     /** Current volume-boost button label, e.g. "Boost: off" / "Boost: +12 dB". */
     fun getVolumeBoostLabel(): String = boostLabel(getVolumeBoostMb())
+
+    /** Compact label for the icon-only remote row: always "+N", never "off" — the icon already
+     *  says what the button is, this just needs to carry the current dB value. */
+    fun getVolumeBoostShortLabel(): String = "+${getVolumeBoostMb() / 100}"
 
     /** Cycle volume boost 0 -> +6 -> +12 -> +18 -> +24 dB -> 0; returns the new label. */
     fun cycleVolumeBoost(): String {
@@ -2321,6 +2330,7 @@ class PlayerActivity : AppCompatActivity() {
 
     fun seekTo(positionMs: Long) {
         player?.seekTo(positionMs.coerceAtLeast(0))
+        flashGlassesOsd()
     }
 
     fun seekRelative(deltaMs: Long) {
@@ -2328,6 +2338,14 @@ class PlayerActivity : AppCompatActivity() {
             val newPos = (exo.currentPosition + deltaMs).coerceIn(0, exo.duration.coerceAtLeast(0))
             exo.seekTo(newPos)
         }
+        flashGlassesOsd()
+    }
+
+    /** Feedback on the goggles for remote actions: flash the transport OSD there for ~2 s.
+     *  No-op when there's no external presentation (phone-only or glasses-as-primary/TV-box
+     *  playback, where PlayerActivity's own overlay is the visible UI). */
+    fun flashGlassesOsd() {
+        presentation?.flashOsd()
     }
 
     fun isStereoSbsEnabled(): Boolean = getStereoSbs()
@@ -2370,26 +2388,6 @@ class PlayerActivity : AppCompatActivity() {
 
     /** Whether the Lazy-3D toggle is currently on. */
     fun isLazy3dEnabled(): Boolean = lazy3dEnabled
-
-    /**
-     * Live telemetry for the remote's temporary Lazy-3D debug overlay, or null when Lazy 3D is
-     * off / nothing to report (so the remote hides the row). Shows the depth-synthesis inference
-     * time, which backend it's actually running on (NNAPI/GPU/CPU — see DepthEstimator.init's
-     * delegate ladder) and the SoC, plus a best-effort overall CPU load % (there's no public
-     * Android API for per-NPU/GPU utilization, so this is the closest available proxy — it's
-     * total system load, not just this process/backend). Remove the overlay once tuning is done.
-     */
-    fun lazy3dDebugLine(): String? {
-        if (!lazy3dEnabled) return null
-        val est = depthEstimator
-        if (est?.isReady() != true) return null
-        val backend = est.backend ?: "?"
-        val cpuLoad = DepthEstimator.sampleCpuLoadPercent()?.let { " · CPU load ${it}%" } ?: ""
-        // Thermal throttle state, when active — lets testers see the governor doing its job.
-        val thermal = depthThermal?.level?.takeIf { it != DepthThermalGovernor.Level.FULL }
-            ?.let { " · hot→${it.label}" } ?: ""
-        return "depth ${"%.0f".format(est.avgInferenceMs)}ms · $backend · ${DepthEstimator.socLabel}$cpuLoad$thermal"
-    }
 
     /**
      * Coarse status for the remote to show feedback right after the toggle is tapped, so the

@@ -143,6 +143,10 @@
     <string name="remote_now_playing_label">Now playing</string>
     <string name="remote_section_display">Display</string>
     <string name="remote_section_audio">Audio &amp; subtitles</string>
+    <!-- Touchpad idle hint. Three short lines: glanceable through the goggles' passthrough. -->
+    <string name="remote_touchpad_hint">Tap — play / pause\nSwipe ⇆ — ±10 s\nSwipe ⇅ — volume\nScreen dims by itself — touch to wake</string>
+    <string name="remote_page_handle_desc">Swipe or tap to switch between buttons and touchpad</string>
+    <string name="remote_button_page_hint">Tap — play / pause\nSwipe or double-tap ⇆ — ±10 s</string>
 
     <!-- Yandex Disk public-link browser -->
     <string name="yadisk_title">Yandex Disk</string>

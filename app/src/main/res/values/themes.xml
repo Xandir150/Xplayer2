@@ -37,6 +37,25 @@
         <item name="android:insetBottom">0dp</item>
     </style>
 
+    <!-- Compact centered icon (+ optional short label) button for a row of equal-width buttons,
+         e.g. the remote's audio/subtitle/boost row. -->
+    <style name="Widget.XPlayer.RemoteIconRow" parent="Widget.MaterialComponents.Button.UnelevatedButton">
+        <item name="backgroundTint">@color/rc_row</item>
+        <item name="android:textColor">@color/rc_on_surface</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:gravity">center</item>
+        <item name="iconGravity">textStart</item>
+        <item name="iconPadding">4dp</item>
+        <item name="iconTint">?attr/colorPrimary</item>
+        <item name="cornerRadius">14dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:paddingStart">0dp</item>
+        <item name="android:paddingEnd">0dp</item>
+        <item name="android:minWidth">0dp</item>
+    </style>
+
     <!-- Section caption above a card's controls. -->
     <style name="TextAppearance.XPlayer.Section" parent="TextAppearance.MaterialComponents.Overline">
         <item name="android:textColor">@color/rc_secondary</item>

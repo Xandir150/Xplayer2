@@ -115,6 +115,9 @@
     <string name="remote_now_playing_label">Сейчас играет</string>
     <string name="remote_section_display">Изображение</string>
     <string name="remote_section_audio">Звук и субтитры</string>
+    <string name="remote_touchpad_hint">Тап — пауза / плей\nСвайп ⇆ — ±10 с\nСвайп ⇅ — громкость\nЭкран гаснет сам — коснитесь, чтобы разбудить</string>
+    <string name="remote_page_handle_desc">Свайп или тап — переключить кнопки/тачпад</string>
+    <string name="remote_button_page_hint">Тап — пауза / плей\nСвайп или двойной тап ⇆ — ±10 с</string>
 
     <!-- Yandex Disk public-link browser -->
     <string name="yadisk_title">Яндекс Диск</string>
