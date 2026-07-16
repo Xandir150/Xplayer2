@@ -77,6 +77,15 @@ class RemoteControlActivity : AppCompatActivity() {
     private var volumeAccumPx = 0f
     private var feedbackFade: ValueAnimator? = null
 
+    // Variable-speed seekbar scrubbing state — see setupSeekbarScrubbing().
+    private lateinit var tvScrubInfo: TextView
+    private var isScrubbing = false
+    private var scrubProgress = 0f
+    private var scrubSpeed = 1f
+    private var lastScrubX = 0f
+    private var lastLiveSeekMs = 0L
+    private var scrubInfoFade: ValueAnimator? = null
+
 
     // Screen dimming
     private var isScreenDimmed = false
@@ -110,6 +119,7 @@ class RemoteControlActivity : AppCompatActivity() {
         btnVolumeBoost = findViewById(R.id.btnVolumeBoost)
         btnQuality = findViewById(R.id.btnQuality)
         tvTouchFeedback = findViewById(R.id.tvTouchFeedback)
+        tvScrubInfo = findViewById(R.id.tvScrubInfo)
         remoteFlipper = findViewById(R.id.remoteFlipper)
         iconButtonsPage = findViewById(R.id.iconButtonsPage)
         iconTouchpadPage = findViewById(R.id.iconTouchpadPage)
@@ -139,7 +149,8 @@ class RemoteControlActivity : AppCompatActivity() {
             PlayerActivity.currentInstance?.seekRelative(10000)
         }
 
-        // SeekBar
+        // SeekBar. This listener only matters for D-pad/TV key events now — finger input is fully
+        // consumed by the scrubbing touch handler below, which sets progress with fromUser=false.
         seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
@@ -151,6 +162,7 @@ class RemoteControlActivity : AppCompatActivity() {
                 hapticClick()
             }
         })
+        setupSeekbarScrubbing()
 
         // SBS toggle
         btnSbs.setOnClickListener {
@@ -413,6 +425,101 @@ class RemoteControlActivity : AppCompatActivity() {
             if (ev.actionMasked == MotionEvent.ACTION_UP) v.performClick()
             detector.onTouchEvent(ev)
             true
+        }
+    }
+
+    /**
+     * Variable-speed scrubbing (the Apple scrubber, adapted): dragging along the bar maps 1:1
+     * like a stock SeekBar, but sliding the finger UP away from the bar mid-drag shifts to 25%
+     * and then 5% speed. A stock linear seekbar is ~20 s per dp on a 2-hour film — physically
+     * incapable of precision; at 5% the same finger travel is ~1 s per dp. A readout above the
+     * bar shows the target timecode (and current speed) the whole time, since the thumb itself
+     * is under the finger.
+     *
+     * Touch is consumed entirely here; the OnSeekBarChangeListener path still handles D-pad/TV
+     * key events (those never hit onTouch). The player follows the drag live (throttled) so the
+     * user sees the picture move on the glasses while hunting for a scene.
+     */
+    private fun setupSeekbarScrubbing() {
+        val density = resources.displayMetrics.density
+        seekBar.setOnTouchListener { v, ev ->
+            val sb = v as SeekBar
+            val max = sb.max
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    if (max <= 0) return@setOnTouchListener true
+                    isScrubbing = true
+                    // The seekbar lives in a ScrollView: without this, the vertical part of the
+                    // slow-down gesture would get stolen as a scroll.
+                    sb.parent.requestDisallowInterceptTouchEvent(true)
+                    val track = (sb.width - sb.paddingLeft - sb.paddingRight).coerceAtLeast(1)
+                    val frac = ((ev.x - sb.paddingLeft) / track).coerceIn(0f, 1f)
+                    scrubProgress = frac * max
+                    scrubSpeed = 1f
+                    lastScrubX = ev.x
+                    sb.progress = scrubProgress.toInt()
+                    hapticTick()
+                    updateScrubInfo()
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (!isScrubbing || max <= 0) return@setOnTouchListener true
+                    val track = (sb.width - sb.paddingLeft - sb.paddingRight).coerceAtLeast(1)
+                    // ev.y is relative to the seekbar; above it is negative. Distance above the
+                    // bar picks the speed tier.
+                    val dyDp = -ev.y / density
+                    val newSpeed = when {
+                        dyDp > 120 -> 0.05f
+                        dyDp > 48 -> 0.25f
+                        else -> 1f
+                    }
+                    if (newSpeed != scrubSpeed) {
+                        scrubSpeed = newSpeed
+                        hapticTick() // feel the gear change without looking
+                    }
+                    scrubProgress = (scrubProgress + (ev.x - lastScrubX) / track * max * scrubSpeed)
+                        .coerceIn(0f, max.toFloat())
+                    lastScrubX = ev.x
+                    sb.progress = scrubProgress.toInt()
+                    updateScrubInfo()
+                    // Live-follow so the scene is visible on the glasses while hunting, but
+                    // throttled — every MOVE event would flood ExoPlayer with seeks.
+                    val now = android.os.SystemClock.uptimeMillis()
+                    if (now - lastLiveSeekMs > 250) {
+                        lastLiveSeekMs = now
+                        PlayerActivity.currentInstance?.seekTo(scrubProgress.toLong())
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (isScrubbing) {
+                        isScrubbing = false
+                        if (ev.actionMasked == MotionEvent.ACTION_UP) {
+                            PlayerActivity.currentInstance?.seekTo(scrubProgress.toLong())
+                            hapticClick()
+                        }
+                        hideScrubInfo()
+                        v.performClick()
+                    }
+                }
+            }
+            true
+        }
+    }
+
+    private fun updateScrubInfo() {
+        scrubInfoFade?.cancel()
+        tvScrubInfo.alpha = 1f
+        // Numeric-only readout — nothing to localize. Speed shown as a percent when slowed.
+        tvScrubInfo.text = formatTime(scrubProgress.toLong()) +
+            if (scrubSpeed < 1f) "  ·  ${(scrubSpeed * 100).toInt()}%" else ""
+    }
+
+    private fun hideScrubInfo() {
+        scrubInfoFade?.cancel()
+        scrubInfoFade = ValueAnimator.ofFloat(tvScrubInfo.alpha, 0f).apply {
+            startDelay = 400
+            duration = 300
+            addUpdateListener { tvScrubInfo.alpha = it.animatedValue as Float }
+            start()
         }
     }
 
@@ -701,7 +808,9 @@ class RemoteControlActivity : AppCompatActivity() {
         tvPosition.text = formatTime(position)
         tvDuration.text = formatTime(duration)
 
-        if (duration > 0) {
+        // While the user is scrubbing, the thumb belongs to their finger — the 500 ms poll (and
+        // push updates) must not yank it back to the player's current position mid-drag.
+        if (duration > 0 && !isScrubbing) {
             seekBar.max = duration.toInt()
             seekBar.progress = position.toInt()
         }

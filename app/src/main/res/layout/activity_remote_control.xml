@@ -249,6 +249,20 @@
             android:paddingTop="6dp"
             android:paddingBottom="14dp">
 
+            <!-- Floating scrub readout: target timecode (+ speed when slowed) while dragging the
+                 seekbar. Occupies its slim strip permanently (alpha 0 when idle) so appearing
+                 doesn't shift the layout. -->
+            <TextView
+                android:id="@+id/tvScrubInfo"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textColor="@color/rc_on_surface"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:alpha="0"
+                android:text="0:00" />
+
             <SeekBar
                 android:id="@+id/seekBar"
                 android:layout_width="match_parent"
