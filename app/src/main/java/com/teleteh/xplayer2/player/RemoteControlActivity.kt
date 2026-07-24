@@ -28,6 +28,8 @@ import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.toColorInt
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.util.UnstableApi
 import com.google.android.material.button.MaterialButton
 import com.teleteh.xplayer2.MainActivity
@@ -633,11 +635,26 @@ class RemoteControlActivity : AppCompatActivity() {
         handler.removeCallbacks(dimRunnable)
     }
     
+    /** Hide/show the system bars with the dim state: our black overlay only covers the app's
+     *  content area, and on OLED `screenBrightness = 0` is "minimum", not "off" — so without
+     *  this the status-bar clock/icons keep visibly glowing on an otherwise-black screen. */
+    private fun setSystemBarsHidden(hidden: Boolean) {
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        if (hidden) {
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        } else {
+            controller.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
     private fun dimScreen() {
         if (isScreenDimmed) return
         isScreenDimmed = true
-        
+
         dimAnimator?.cancel()
+        setSystemBarsHidden(true)
         dimOverlay?.visibility = View.VISIBLE
         
         // Animate overlay alpha and screen brightness
@@ -665,8 +682,9 @@ class RemoteControlActivity : AppCompatActivity() {
     private fun wakeScreen() {
         if (!isScreenDimmed) return
         isScreenDimmed = false
-        
+
         dimAnimator?.cancel()
+        setSystemBarsHidden(false)
         
         // Waking is near-instant (unlike the long dim fade): the user actively asked for the
         // screen, don't make them watch it ramp.
@@ -755,7 +773,8 @@ class RemoteControlActivity : AppCompatActivity() {
         handler.removeCallbacks(updateRunnable)
         cancelDim()
         dimAnimator?.cancel()
-        // Reset brightness when leaving
+        // Reset brightness and bring the system bars back when leaving
+        setSystemBarsHidden(false)
         window.attributes = window.attributes.apply {
             screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
         }

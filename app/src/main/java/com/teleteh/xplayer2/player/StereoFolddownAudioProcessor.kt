@@ -96,29 +96,43 @@ class StereoFolddownAudioProcessor(
         private const val MASTER_GAIN = 0.59f   // partial normalization — see class doc
 
         /**
-         * True when any attached audio output can take a ≥6-channel PCM stream — HDMI (incl.
-         * ARC/eARC), USB audio devices/docks, i.e. the "real surround rig" cases. An empty
-         * channel-count list on those device types means "unspecified/flexible", which we treat
-         * as capable: worst case the platform folds down exactly as it did before this processor
-         * existed. Phone speakers, Bluetooth and wired headsets are stereo by definition — for
-         * them (and stereo USB glasses) the fold-down activates.
+         * True when any attached audio output can take a ≥6-channel PCM stream — the "real
+         * surround rig" cases where passthrough is what the user wants.
+         *
+         * The burden of proof differs by transport:
+         *  - HDMI / ARC / eARC: an empty channel-count list means "unspecified/flexible" and IS
+         *    treated as capable — TVs and AV receivers legitimately negotiate that way.
+         *  - USB / dock: capable ONLY if the device EXPLICITLY reports ≥6 channels. XR glasses
+         *    (RayNeo/XREAL/VITURE) are USB audio with a plain stereo DAC, and many of them ship
+         *    descriptors with no channel counts at all. Treating "empty" as capable here handed
+         *    the 6-ch stream to the platform fold-down — the exact quiet-center/no-dialogue OEM
+         *    path this processor exists to replace (field report: RayNeo Air 4 Pro on a Samsung
+         *    S20 Ultra, Russian dialogue inaudible; randomly OK when USB enumeration lost the
+         *    race and the glasses weren't visible yet at configure time). Stereo-by-default is
+         *    the safe side of that race: a genuine USB surround DAC that reports nothing loses
+         *    passthrough, but keeps correct, audible audio.
+         *
+         * Phone speakers, Bluetooth and wired headsets are stereo by definition — for them (and
+         * stereo USB glasses) the fold-down activates.
          */
         fun multichannelSinkAvailable(context: Context): Boolean {
             val am = context.getSystemService(AudioManager::class.java) ?: return false
             return am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { d ->
-                val typeOk = when (d.type) {
+                val explicitlyMultichannel = d.channelCounts.any { it >= 6 }
+                when (d.type) {
                     AudioDeviceInfo.TYPE_HDMI,
                     AudioDeviceInfo.TYPE_HDMI_ARC,
+                    -> explicitlyMultichannel || d.channelCounts.isEmpty()
                     AudioDeviceInfo.TYPE_USB_DEVICE,
                     AudioDeviceInfo.TYPE_USB_ACCESSORY,
                     AudioDeviceInfo.TYPE_USB_HEADSET,
                     AudioDeviceInfo.TYPE_DOCK,
-                    -> true
+                    -> explicitlyMultichannel
                     else ->
                         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                            d.type == AudioDeviceInfo.TYPE_HDMI_EARC
+                            d.type == AudioDeviceInfo.TYPE_HDMI_EARC &&
+                            (explicitlyMultichannel || d.channelCounts.isEmpty())
                 }
-                typeOk && (d.channelCounts.isEmpty() || d.channelCounts.any { it >= 6 })
             }
         }
     }
