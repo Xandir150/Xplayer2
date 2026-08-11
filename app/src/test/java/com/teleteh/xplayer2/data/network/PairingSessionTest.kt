@@ -275,7 +275,8 @@ class PairingSessionTest {
         )
 
         // A genuine tag from a PC that did everything right, arriving one tap too early.
-        val effects = session.onLine(server.pairConfirm())
+        val genuineTag = server.pairConfirm()
+        val effects = session.onLine(genuineTag)
         assertEquals(PairingFailure.PROTOCOL, effects.finishedFailure())
         assertNoPersist(effects)
         assertTrue(
@@ -283,6 +284,20 @@ class PairingSessionTest {
             effects.sends().none { JSONObject(it).optString("type") == "pair_confirm" }
         )
         assertTrue(effects.any { it is PairingEffect.Close })
+
+        // Prove those bytes really were a tag that verifies. The state check above runs *before*
+        // the tag is ever examined, so without this the test would pass exactly as happily on junk
+        // — and would quietly rot into asserting nothing the day the scripted PC stopped deriving
+        // real keys. Same bytes (the fixtures are deterministic, so the transcript is identical),
+        // delivered to a session whose user did tap: it must pair.
+        now = 0
+        val tapped = pairingSession()
+        revealBoth(tapped, ScriptedServer())
+        tapped.onUserAccept()
+        assertTrue(
+            "the refused tag must be one a tapped session accepts",
+            tapped.onLine(genuineTag).any { it is PairingEffect.Persist }
+        )
 
         // And ignoring the sheet expires the ceremony rather than lapsing into a pairing.
         now = 0
