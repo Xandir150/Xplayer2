@@ -36,14 +36,17 @@
             android:focusable="true"
             android:focusableInTouchMode="true" />
 
+        <!-- focusable for D-pad/glasses navigation, but NOT focusableInTouchMode: that made the
+             first tap merely take focus (View.onTouchEvent suppresses the click), so the button
+             needed two taps. Only the EditText above keeps it — a text field must take focus on
+             touch to receive input. -->
         <Button
             android:id="@+id/btnConnectManual"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:text="@string/pclink_connect"
-            android:focusable="true"
-            android:focusableInTouchMode="true" />
+            android:focusable="true" />
     </LinearLayout>
 
     <!-- Discovered-on-LAN section header + refresh (re-triggers discovery; no swipe-refresh dep
@@ -74,7 +77,6 @@
             android:text="@string/pclink_refresh"
             android:textAllCaps="false"
             android:focusable="true"
-            android:focusableInTouchMode="true"
             app:icon="@drawable/ic_refresh_24"
             app:iconGravity="textStart" />
     </LinearLayout>
@@ -91,8 +93,7 @@
             android:clipToPadding="false"
             android:paddingTop="4dp"
             android:paddingBottom="8dp"
-            android:focusable="true"
-            android:focusableInTouchMode="true" />
+            android:focusable="true" />
 
         <TextView
             android:id="@+id/tvEmpty"
