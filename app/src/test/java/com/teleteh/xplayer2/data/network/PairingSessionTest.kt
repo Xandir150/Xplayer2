@@ -274,6 +274,44 @@ class PairingSessionTest {
         assertTrue(effects.any { it is PairingEffect.Close })
     }
 
+    /**
+     * §2.12: the server's `auth_response` must carry a usable 16-byte nonce, and a client that
+     * proceeded without one — assuming zeroes, say — would be fixing half the input of *both*
+     * proofs for an attacker, which is exactly what the freshness requirement exists to prevent.
+     * So a missing or malformed nonce is a protocol abort, not something to paper over.
+     *
+     * Distinct from the neighbouring test: a well-formed proof that simply doesn't verify is
+     * [PairingFailure.AUTH_FAILED] (an impostor), while a field we can't even parse is
+     * [PairingFailure.PROTOCOL] (a broken peer). Neither reveals our own proof.
+     */
+    @Test
+    fun aServerResponseWithoutAUsableNonceIsRefused() {
+        val server = ScriptedServer()
+        fun responseWith(field: String, value: String?): List<PairingEffect> {
+            val session = authSession(listOf(server.asStoredPairing()))
+            val response = JSONObject(server.authResponse(JSONObject(session.start().sends().single())))
+                .apply { if (value == null) remove(field) else put(field, value) }
+            return session.onLine(response.toString())
+        }
+
+        val cases = listOf(
+            "nonce" to null,                        // absent entirely
+            "nonce" to "",                          // present but empty
+            "nonce" to "00".repeat(15),             // 15 bytes, not 16
+            "nonce" to "00".repeat(17),             // 17 bytes
+            "nonce" to "202122232425262728292A2B2C2D2E2F", // uppercase is not the wire format
+            "nonce" to "zzzz22232425262728292a2b2c2d2e2f", // not hex at all
+            "proof" to null,
+            "proof" to "00".repeat(31)
+        )
+        for ((field, value) in cases) {
+            val effects = responseWith(field, value)
+            assertEquals("$field=$value", PairingFailure.PROTOCOL, effects.finishedFailure())
+            assertTrue("$field=$value must not reveal proofC", effects.sends().isEmpty())
+            assertTrue("$field=$value must close", effects.any { it is PairingEffect.Close })
+        }
+    }
+
     /** §5: the direction labels are what stop a proof being bounced back at its own author. */
     @Test
     fun reflectedClientProofIsRejected() {
