@@ -139,6 +139,11 @@ dependencies {
     // omits it for 16 KB compliance and uses the no-op VitureController in src/play.
     "fullImplementation"(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
     testImplementation(libs.junit)
+    // Real org.json implementation for JVM unit tests: the android.jar used by local unit tests
+    // stubs org.json (like the rest of the framework) to throw "not mocked" at runtime, so tests
+    // exercising JSON parsing (e.g. PcLinkDiscoveryTest) need the actual reference implementation
+    // on the test classpath.
+    testImplementation("org.json:json:20260719")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
