@@ -3,7 +3,6 @@ package com.teleteh.xplayer2.ui.network
 import com.teleteh.xplayer2.data.network.PcLinkServer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -98,36 +97,69 @@ class PcServerListStateTest {
 
     // --- manual-IP validation ----------------------------------------------------------------
 
+    /** Convenience: the accepted host, or null for any rejection. */
+    private fun host(input: String): String? =
+        (PcServerListState.validateHost(input) as? HostInput.Valid)?.host
+
     @Test
     fun `validateHost accepts a plain IPv4 address`() {
-        assertEquals("192.168.1.10", PcServerListState.validateHost("192.168.1.10"))
+        assertEquals("192.168.1.10", host("192.168.1.10"))
     }
 
     @Test
     fun `validateHost strips an optional port suffix`() {
-        assertEquals("192.168.1.10", PcServerListState.validateHost("192.168.1.10:7890"))
+        assertEquals("192.168.1.10", host("192.168.1.10:7890"))
     }
 
     @Test
     fun `validateHost accepts a hostname`() {
-        assertEquals("living-room-pc.local", PcServerListState.validateHost("living-room-pc.local"))
+        assertEquals("living-room-pc.local", host("living-room-pc.local"))
     }
 
     @Test
     fun `validateHost trims surrounding whitespace`() {
-        assertEquals("192.168.1.10", PcServerListState.validateHost("  192.168.1.10  "))
+        assertEquals("192.168.1.10", host("  192.168.1.10  "))
     }
 
     @Test
     fun `validateHost rejects blank input`() {
-        assertNull(PcServerListState.validateHost(""))
-        assertNull(PcServerListState.validateHost("   "))
+        assertEquals(HostInput.Invalid, PcServerListState.validateHost(""))
+        assertEquals(HostInput.Invalid, PcServerListState.validateHost("   "))
     }
 
     @Test
     fun `validateHost rejects obviously malformed input`() {
-        assertNull(PcServerListState.validateHost("not a host!!"))
-        assertNull(PcServerListState.validateHost("http://192.168.1.10"))
-        assertNull(PcServerListState.validateHost("192.168.1.10/path"))
+        assertEquals(HostInput.Invalid, PcServerListState.validateHost("not a host!!"))
+        assertEquals(HostInput.Invalid, PcServerListState.validateHost("http://192.168.1.10"))
+        assertEquals(HostInput.Invalid, PcServerListState.validateHost("192.168.1.10/path"))
+    }
+
+    @Test
+    fun `validateHost rejects a port outside the 16 bit range`() {
+        assertEquals(HostInput.Invalid, PcServerListState.validateHost("192.168.1.10:0"))
+        assertEquals(HostInput.Invalid, PcServerListState.validateHost("192.168.1.10:65536"))
+        assertEquals(HostInput.Invalid, PcServerListState.validateHost("192.168.1.10:99999999"))
+        assertEquals(HostInput.Invalid, PcServerListState.validateHost("192.168.1.10:"))
+        assertEquals(HostInput.Invalid, PcServerListState.validateHost("192.168.1.10:http"))
+    }
+
+    @Test
+    fun `validateHost accepts the extremes of the port range`() {
+        assertEquals("192.168.1.10", host("192.168.1.10:1"))
+        assertEquals("192.168.1.10", host("192.168.1.10:65535"))
+    }
+
+    @Test
+    fun `validateHost reports IPv6 literals as unsupported rather than truncating them`() {
+        // substringBefore(":") used to turn these into a probe of "fe80" / "" — garbage hosts that
+        // could only ever time out, with no way for the UI to explain why.
+        assertEquals(HostInput.Ipv6Unsupported, PcServerListState.validateHost("fe80::1"))
+        assertEquals(HostInput.Ipv6Unsupported, PcServerListState.validateHost("::1"))
+        assertEquals(
+            HostInput.Ipv6Unsupported,
+            PcServerListState.validateHost("2001:db8:85a3::8a2e:370:7334")
+        )
+        assertEquals(HostInput.Ipv6Unsupported, PcServerListState.validateHost("[::1]"))
+        assertEquals(HostInput.Ipv6Unsupported, PcServerListState.validateHost("[fe80::1]:48631"))
     }
 }

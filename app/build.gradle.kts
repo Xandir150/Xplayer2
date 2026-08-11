@@ -144,6 +144,9 @@ dependencies {
     // exercising JSON parsing (e.g. PcLinkDiscoveryTest) need the actual reference implementation
     // on the test classpath.
     testImplementation("org.json:json:20260719")
+    // Dispatchers.setMain() for the coroutine-facing unit tests (PcLinkDiscovery reports its
+    // results on Dispatchers.Main, which has no Looper in a local unit test).
+    testImplementation(libs.org.jetbrains.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

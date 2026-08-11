@@ -11,7 +11,9 @@ import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
@@ -19,7 +21,10 @@ import com.teleteh.xplayer2.R
 import com.teleteh.xplayer2.data.network.PcLinkServer
 import com.teleteh.xplayer2.player.PlayerActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -32,7 +37,9 @@ import kotlinx.coroutines.launch
  *
  * Discovery is accessed through [PcLinkDiscoverySource] (see PcServerListState.kt) rather than
  * `data.network.PcLinkDiscovery` directly, keeping this screen's dependency on that concurrently-
- * owned package to a single adapter class.
+ * owned package to a single adapter class. Two independent sources: [discoverySource] runs the
+ * repeating LAN passes (restarted by Refresh, parked while the screen isn't STARTED), while
+ * [probeSource] serves manual-IP probes so a stray Refresh can't cancel one mid-flight.
  */
 class PcConnectActivity : AppCompatActivity() {
 
@@ -40,7 +47,10 @@ class PcConnectActivity : AppCompatActivity() {
     private lateinit var adapter: ServerAdapter
     private lateinit var tvEmpty: TextView
     private lateinit var connectingOverlay: View
-    private var discovery: PcLinkDiscoverySource = NoOpPcLinkDiscovery()
+    private lateinit var btnRefresh: View
+    private var discoverySource: PcLinkDiscoverySource = NoOpPcLinkDiscovery()
+    private var probeSource: PcLinkDiscoverySource = NoOpPcLinkDiscovery()
+    private var discoveryLoop: Job? = null
     private var connecting = false
     private var probing = false
 
@@ -71,61 +81,92 @@ class PcConnectActivity : AppCompatActivity() {
             } else false
         }
 
-        findViewById<View>(R.id.btnRefresh).setOnClickListener { startDiscovery() }
+        btnRefresh = findViewById(R.id.btnRefresh)
+        btnRefresh.setOnClickListener { restartDiscovery() }
 
-        startDiscovery()
+        discoverySource = RealPcLinkDiscoverySource(this, lifecycleScope)
+        probeSource = RealPcLinkDiscoverySource(this, lifecycleScope)
+        restartDiscovery()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // repeatOnLifecycle has already parked the loop; this also closes the socket of the pass
+        // that was in flight, instead of letting it broadcast out the rest of its window.
+        discoverySource.stop()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        discovery.stop()
+        discoverySource.stop()
+        probeSource.stop()
     }
 
     /** Validates the typed host, then probes it directly for a real PC Link reply before connecting
      *  (so we hand PlayerActivity the server's actual ports, not a guess). */
     private fun tryConnectManual(etHost: EditText) {
         if (connecting || probing) return
-        val host = PcServerListState.validateHost(etHost.text?.toString().orEmpty())
-        if (host == null) {
-            Toast.makeText(this, R.string.pclink_invalid_host, Toast.LENGTH_SHORT).show()
-            return
+        val host = when (val input = PcServerListState.validateHost(etHost.text?.toString().orEmpty())) {
+            is HostInput.Valid -> input.host
+            HostInput.Ipv6Unsupported -> {
+                Toast.makeText(this, R.string.pclink_error_ipv6_unsupported, Toast.LENGTH_LONG).show()
+                return
+            }
+            HostInput.Invalid -> {
+                Toast.makeText(this, R.string.pclink_invalid_host, Toast.LENGTH_SHORT).show()
+                return
+            }
         }
         probing = true
+        btnRefresh.isEnabled = false
         connectingOverlay.visibility = View.VISIBLE
         tvEmpty.visibility = View.GONE
-        var responded = false
-        discovery.probeHost(host) { server ->
-            responded = true
+        // One probe, one outcome: probeHost reports null itself when the host stays silent, so
+        // there is no second wall-clock timer here to race it — nor a late reply that could fire
+        // connectTo() after "unreachable" was already shown.
+        probeSource.probeHost(host) { server ->
+            if (!probing) return@probeHost
             probing = false
-            connectTo(server)
-        }
-        lifecycleScope.launch {
-            delay(MANUAL_PROBE_TIMEOUT_MS)
-            if (!responded) {
-                probing = false
+            btnRefresh.isEnabled = true
+            if (server != null) {
+                connectTo(server)
+            } else {
                 connectingOverlay.visibility = View.GONE
                 updateEmptyState()
-                Toast.makeText(this@PcConnectActivity, R.string.pclink_manual_unreachable, Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, R.string.pclink_manual_unreachable, Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    /** (Re)starts discovery: clears the current list and asks [discovery] to look again. */
-    private fun startDiscovery() {
-        discovery.stop()
+    /**
+     * (Re)starts discovery: clears the current list and runs back-to-back passes for as long as the
+     * screen is STARTED — a PC that only starts serving a minute from now still shows up, which the
+     * old single 4 s pass never allowed. Refresh just re-triggers this.
+     */
+    private fun restartDiscovery() {
         listState.clear()
         adapter.submitList(listState.snapshot())
         updateEmptyState()
-        discovery = RealPcLinkDiscoverySource(lifecycleScope)
-        discovery.discover { server -> onServerDiscovered(server) }
+        val previous = discoveryLoop
+        discoveryLoop = lifecycleScope.launch {
+            // Wait out the previous loop before touching the source, or its dying pass could be
+            // cancelled after the new one starts.
+            previous?.cancelAndJoin()
+            discoverySource.stop()
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    discoverySource.discover { onServerDiscovered(it) }.join()
+                    delay(DISCOVERY_PASS_GAP_MS)
+                }
+            }
+        }
     }
 
+    /** Called on the main thread (see [PcLinkDiscoverySource.discover]). */
     private fun onServerDiscovered(server: PcLinkServer) {
-        runOnUiThread {
-            if (listState.addOrUpdate(server)) {
-                adapter.submitList(listState.snapshot())
-                updateEmptyState()
-            }
+        if (listState.addOrUpdate(server)) {
+            adapter.submitList(listState.snapshot())
+            updateEmptyState()
         }
     }
 
@@ -138,6 +179,8 @@ class PcConnectActivity : AppCompatActivity() {
     private fun connectTo(server: PcLinkServer) {
         if (connecting) return
         connecting = true
+        discoveryLoop?.cancel()
+        discoverySource.stop()
         connectingOverlay.visibility = View.VISIBLE
         tvEmpty.visibility = View.GONE
         // Brief "connecting…" beat before the placeholder hand-off — real handshake/progress
@@ -195,6 +238,8 @@ class PcConnectActivity : AppCompatActivity() {
         const val EXTRA_PCLINK_NAME = "com.teleteh.xplayer2.extra.PCLINK_NAME"
 
         private const val CONNECTING_DELAY_MS = 450L
-        private const val MANUAL_PROBE_TIMEOUT_MS = 2500L
+
+        /** Breather between discovery passes (each pass listens ~4 s), so a pass starts every ~5 s. */
+        private const val DISCOVERY_PASS_GAP_MS = 1000L
     }
 }
