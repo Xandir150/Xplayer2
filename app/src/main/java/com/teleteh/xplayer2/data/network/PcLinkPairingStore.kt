@@ -20,6 +20,10 @@ import javax.crypto.spec.GCMParameterSpec
  * X25519 public key) and is the storage key — a PC that changes name or IP is still the same
  * pairing, and a PC that regenerates its identity is correctly a different one.
  *
+ * [serverId] and [name] are both authenticated: they come out of a ceremony the user confirmed with
+ * a 6-digit code, not from a discovery reply or an invite. That is what makes this record the right
+ * thing to label a paired device with — see `PcConnectActivity.pairedNameFor`.
+ *
  * [lastHost] is phone-side bookkeeping, not part of the protocol: until the discovery reply carries
  * `serverId` (design §9.1), it is how [PcLinkPairingStore.findByHost] guesses which stored LTK to
  * try first. A wrong guess is harmless — it just fails the server's proof, and

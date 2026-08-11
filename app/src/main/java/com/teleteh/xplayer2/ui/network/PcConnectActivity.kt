@@ -524,7 +524,7 @@ class PcConnectActivity : AppCompatActivity() {
         when (outcome) {
             is PairingOutcome.Success -> {
                 if (outcome.paired) refreshPairings() else touchPairing(outcome, target)
-                handOff(target, outcome.serverId)
+                handOff(target, outcome.serverId, outcome.serverName)
             }
 
             is PairingOutcome.Failure -> {
@@ -605,15 +605,15 @@ class PcConnectActivity : AppCompatActivity() {
      * the ports aren't known yet — probe for them rather than guess, and if the PC doesn't answer,
      * say the pairing worked and leave the user on the list.
      */
-    private fun handOff(target: PairingTarget, serverId: String) {
+    private fun handOff(target: PairingTarget, serverId: String, serverName: String) {
         val server = target.server
         if (server != null) {
-            startPlayer(server, serverId)
+            startPlayer(server, serverId, serverName)
             return
         }
         probeSource.probeHost(target.host) { probed ->
             if (probed != null) {
-                startPlayer(probed, serverId)
+                startPlayer(probed, serverId, serverName)
             } else {
                 connecting = false
                 hideOverlay()
@@ -623,13 +623,17 @@ class PcConnectActivity : AppCompatActivity() {
         }
     }
 
-    private fun startPlayer(server: PcLinkServer, serverId: String) {
+    private fun startPlayer(server: PcLinkServer, serverId: String, serverName: String) {
         val intent = Intent(this, PlayerActivity::class.java).apply {
             putExtra(EXTRA_PCLINK_HOST, server.host)
             putExtra(EXTRA_PCLINK_CONTROL_PORT, server.controlPort)
             putExtra(EXTRA_PCLINK_VIDEO_PORT, server.videoPort)
             putExtra(EXTRA_PCLINK_PROTOCOL_VERSION, server.protocolVersion)
-            putExtra(EXTRA_PCLINK_NAME, server.name)
+            // The transcript-bound name, for the same reason the list labels paired rows from the
+            // store: the player prints this in its status overlay, and `server.name` is whatever an
+            // unauthenticated datagram claimed. Falls back to the advertised name only if the
+            // exchange somehow yielded none.
+            putExtra(EXTRA_PCLINK_NAME, serverName.ifEmpty { server.name })
             // [serverId] comes from the exchange we just completed, so it is the fingerprint the
             // pairing was actually stored under. `server.serverId` is only ever a hint — discovery
             // is unauthenticated (§8.4), and on the re-pair path it is the *stale* fingerprint the

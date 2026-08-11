@@ -27,7 +27,14 @@ import java.net.SocketTimeoutException
  * not anything the payload claimed, so the ceremony always runs against whoever actually sent it.
  */
 data class PcLinkPairInvite(
+    /**
+     * What the sender calls itself — an **unauthenticated claim**, not a name to keep. Fine for the
+     * "«…» wants to pair" prompt, since the user is being asked whether to start a ceremony at all;
+     * never store it or label a paired device with it. The name that gets stored comes out of the
+     * ceremony's transcript, which is the one the user compared a code against.
+     */
     val serverName: String,
+    /** Also an unauthenticated claim: a hint for picking a stored pairing, never a grant of trust. */
     val serverId: String?,
     val host: String,
     val controlPort: Int,
