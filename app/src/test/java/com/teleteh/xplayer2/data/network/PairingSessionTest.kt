@@ -302,7 +302,9 @@ class PairingSessionTest {
             "nonce" to "202122232425262728292A2B2C2D2E2F", // uppercase is not the wire format
             "nonce" to "zzzz22232425262728292a2b2c2d2e2f", // not hex at all
             "proof" to null,
-            "proof" to "00".repeat(31)
+            "proof" to "00".repeat(31),           // 31 bytes, not 32
+            "proof" to "00".repeat(33),           // 33 bytes
+            "proof" to "zz".repeat(32)            // not hex at all
         )
         for ((field, value) in cases) {
             val effects = responseWith(field, value)
