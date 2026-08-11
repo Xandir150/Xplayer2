@@ -244,6 +244,56 @@ class PairingSessionTest {
         assertNoPersist(effects)
     }
 
+    /**
+     * §4.5: the phone's Pair button is not cosmetic — it is what stops a **hostile PC** pairing
+     * itself to this phone.
+     *
+     * Note what does *not* save us in that scenario: the two codes match, legitimately, because
+     * there is no man in the middle to make them differ. A directly-connected attacker shares our
+     * transcript and derives our SAS. The code is the anti-MITM gate; the button is the
+     * anti-stranger gate, and only the button applies here.
+     *
+     * So a PC that runs a flawless ceremony and then sends a *cryptographically valid*
+     * confirmation tag must still get nothing until the user taps — the tag being genuine is
+     * exactly why this is worth asserting, since it means the state check is the only thing
+     * standing between that PC and a stored pairing. This is the assertion most likely to be
+     * streamlined away for a smoother demo, which is why it says so out loud.
+     * (Mirrors `xpl-pairing`'s `a_server_never_pairs_without_its_own_users_accept`.)
+     */
+    @Test
+    fun nothingIsPairedWithoutTheUsersTap() {
+        val server = ScriptedServer()
+        val session = pairingSession()
+        val revealed = revealBoth(session, server)
+
+        // The code is on screen and our key is revealed — but our confirmation tag is not.
+        assertTrue(revealed.any { it is PairingEffect.ShowSas })
+        assertEquals(PairingSession.State.AWAITING_USER, session.state)
+        assertTrue(
+            "the confirmation tag must not go out ahead of the user's tap",
+            revealed.sends().none { JSONObject(it).optString("type") == "pair_confirm" }
+        )
+
+        // A genuine tag from a PC that did everything right, arriving one tap too early.
+        val effects = session.onLine(server.pairConfirm())
+        assertEquals(PairingFailure.PROTOCOL, effects.finishedFailure())
+        assertNoPersist(effects)
+        assertTrue(
+            "a valid tag must not extract our own",
+            effects.sends().none { JSONObject(it).optString("type") == "pair_confirm" }
+        )
+        assertTrue(effects.any { it is PairingEffect.Close })
+
+        // And ignoring the sheet expires the ceremony rather than lapsing into a pairing.
+        now = 0
+        val ignored = pairingSession()
+        revealBoth(ignored, ScriptedServer())
+        now += PairingSession.CONFIRM_TIMEOUT_MS
+        val expired = ignored.onTick()
+        assertEquals(PairingFailure.TIMEOUT, expired.finishedFailure())
+        assertNoPersist(expired)
+    }
+
     @Test
     fun forgedConfirmationTagIsRejected() {
         val server = ScriptedServer()
