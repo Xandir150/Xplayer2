@@ -130,6 +130,7 @@
     <!-- Authentication of the player\'s own streaming connection failed; shown on the video overlay -->
     <string name="pclink_stream_auth_failed">couldn\'t verify this PC. Someone may be interfering with your network, or the pairing is corrupted.</string>
     <string name="pclink_stream_auth_error">couldn\'t sign in to this PC. Try connecting again.</string>
+    <string name="pclink_stream_unknown_client">this PC no longer recognizes your device.</string>
 
     <!-- The PC forgot us: re-pairing must always be an explicit choice, never automatic -->
     <string name="pclink_repair_title">Pair again?</string>

@@ -95,6 +95,7 @@ import com.teleteh.xplayer2.ui.util.DisplayUtils
 import com.teleteh.xplayer2.BuildConfig
 import com.teleteh.xplayer2.util.VideoStreamExtractor
 import com.teleteh.xplayer2.util.WebSourceClassifier
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -338,6 +339,8 @@ class PlayerActivity : AppCompatActivity() {
     private var pcLinkServerName: String = ""
     /** The PC's identity fingerprint, when [PcConnectActivity] paired or re-authenticated with it. */
     private var pcLinkServerId: String? = null
+    /** A `unknown_client` refusal waiting to hand the user back to [PcConnectActivity]. */
+    private var pcLinkRepairPending = false
     // Built on demand from the PC Link client's IO thread (see [pcLinkAuth]), read from there only.
     @Volatile private var pcLinkStore: PcLinkPairingStore? = null
     private var pcLinkClient: PcLinkClient? = null
@@ -1071,8 +1074,10 @@ class PlayerActivity : AppCompatActivity() {
         super.onStart()
         // Don't initialize player if stream extraction is in progress
         if (player == null && sourceUri != null && !isExtractingStream) initializePlayer()
-        // Coming back to the foreground with the link torn down (see onStop): re-open it.
-        if (isPcLinkMode) connectPcLink()
+        // Coming back to the foreground with the link torn down (see onStop): re-open it — unless
+        // a `unknown_client` refusal is waiting to take the user back to the connect screen, which
+        // it couldn't do while this activity was stopped.
+        if (isPcLinkMode && !bouncePcLinkRepair()) connectPcLink()
         // Try to show Presentation on external display
         tryShowExternalPresentation()
         // If the picture is on the goggles, bring the phone-side remote to the front.
@@ -3088,6 +3093,7 @@ class PlayerActivity : AppCompatActivity() {
         pcLinkServerName = ""
         pcLinkServerId = null
         pcLinkStore = null
+        pcLinkRepairPending = false
         pcLinkConfig = null
         pcLinkSourceIsSbs = false
         pcVideoWidth = 0
@@ -3183,18 +3189,16 @@ class PlayerActivity : AppCompatActivity() {
         if (!isPcLinkMode) return
         disconnectPcLink()
         if (reason == PairingFailure.UNKNOWN_TO_PC) {
-            startActivity(
-                Intent(this, PcConnectActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    putExtra(PcConnectActivity.EXTRA_PCLINK_REPAIR, true)
-                    putExtra(PcConnectActivity.EXTRA_PCLINK_HOST, pcLinkHost)
-                    putExtra(PcConnectActivity.EXTRA_PCLINK_CONTROL_PORT, pcLinkControlPort)
-                    putExtra(PcConnectActivity.EXTRA_PCLINK_VIDEO_PORT, pcLinkVideoPort)
-                    putExtra(PcConnectActivity.EXTRA_PCLINK_NAME, pcLinkServerName)
-                    putExtra(PcConnectActivity.EXTRA_PCLINK_SERVER_ID, pcLinkServerId)
-                }
-            )
-            finish()
+            pcLinkRepairPending = true
+            // With the picture on the glasses the link keeps running while this activity is
+            // stopped (see onStop), and a stopped activity may not launch another one — so when
+            // the bounce can't happen now it waits for onStart, and the overlay says why.
+            if (!bouncePcLinkRepair()) {
+                setPcLinkStatus(
+                    "$pcLinkServerName — ${getString(R.string.pclink_stream_unknown_client)}",
+                    dim = false
+                )
+            }
             return
         }
         val message = if (reason == PairingFailure.AUTH_FAILED) {
@@ -3203,6 +3207,30 @@ class PlayerActivity : AppCompatActivity() {
             R.string.pclink_stream_auth_error
         }
         setPcLinkStatus("$pcLinkServerName — ${getString(message)}", dim = false)
+    }
+
+    /**
+     * Hands the user back to [PcConnectActivity] with the re-pair request, if we're in a position
+     * to. Returns true once that's under way — the caller must then not re-open the link, which
+     * would only earn the same refusal.
+     */
+    private fun bouncePcLinkRepair(): Boolean {
+        if (!pcLinkRepairPending) return false
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return false
+        pcLinkRepairPending = false
+        startActivity(
+            Intent(this, PcConnectActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                putExtra(PcConnectActivity.EXTRA_PCLINK_REPAIR, true)
+                putExtra(PcConnectActivity.EXTRA_PCLINK_HOST, pcLinkHost)
+                putExtra(PcConnectActivity.EXTRA_PCLINK_CONTROL_PORT, pcLinkControlPort)
+                putExtra(PcConnectActivity.EXTRA_PCLINK_VIDEO_PORT, pcLinkVideoPort)
+                putExtra(PcConnectActivity.EXTRA_PCLINK_NAME, pcLinkServerName)
+                putExtra(PcConnectActivity.EXTRA_PCLINK_SERVER_ID, pcLinkServerId)
+            }
+        )
+        finish()
+        return true
     }
 
     private val pcDecoderListener = object : PcStreamDecoder.Listener {
