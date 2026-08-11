@@ -346,9 +346,7 @@ class PcConnectActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.pclink_connecting, Toast.LENGTH_SHORT).show()
             return
         }
-        connecting = true
-        discoveryLoop?.cancel()
-        discoverySource.stop()
+        claimScreenForSession()
 
         val pairing = storedPairingFor(server)
         val target = PairingTarget(server.host, server.controlPort, server.name, server)
@@ -357,6 +355,16 @@ class PcConnectActivity : AppCompatActivity() {
         } else {
             startPairing(identity, target)
         }
+    }
+
+    /**
+     * Marks the screen as busy with one PC and parks discovery for the duration: a ceremony has a
+     * human in it, and rows shuffling underneath while someone reads a code is no help to anyone.
+     */
+    private fun claimScreenForSession() {
+        connecting = true
+        discoveryLoop?.cancel()
+        discoverySource.stop()
     }
 
     /** Silent re-authentication with a stored key, behind a spinner (§5). */
@@ -463,8 +471,7 @@ class PcConnectActivity : AppCompatActivity() {
                 positiveRes = R.string.pclink_repair_accept,
                 onAccept = {
                     val identity = identity ?: return@showPrompt
-                    connecting = true
-                    discoveryLoop?.cancel()
+                    claimScreenForSession()
                     startPairing(identity, target)
                 }
             )
@@ -496,9 +503,7 @@ class PcConnectActivity : AppCompatActivity() {
             positiveRes = R.string.pclink_invite_accept,
             negativeRes = R.string.pclink_invite_ignore,
             onAccept = {
-                connecting = true
-                discoveryLoop?.cancel()
-                discoverySource.stop()
+                claimScreenForSession()
                 // The ceremony runs against the datagram's source address, not anything it claimed.
                 startPairing(
                     identity,
