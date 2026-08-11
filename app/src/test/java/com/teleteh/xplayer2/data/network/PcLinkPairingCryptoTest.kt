@@ -15,9 +15,11 @@ import org.junit.Test
 /**
  * Cross-implementation known-answer tests for [PcLinkPairingCrypto].
  *
- * The fixtures in `src/test/resources/pclink_vectors.json` are the canonical pairing vectors from
- * `xplayer-link-server/docs/pairing-design.md` §14.1 — the same file the Rust `xpl-pairing` KAT
- * consumes. Every intermediate is asserted in hex, not just the end result: if the two languages
+ * `src/test/resources/pclink_vectors.json` is a verbatim copy of
+ * `xplayer-link-server/crates/xpl-pairing/test-vectors/pairing_vectors.json` — literally the same
+ * bytes the Rust KAT consumes, so neither side can drift without the other noticing. The values
+ * are the canonical ones from `docs/pairing-design.md` §14.1. Every intermediate is asserted in
+ * hex, not just the end result: if the two languages
  * ever disagree about a length prefix, a UTF-8 encoding, an HKDF info string or a MAC label, the
  * test that fails names the exact step rather than leaving a mismatched 6-digit code to be
  * debugged on a phone against a PC.
@@ -106,7 +108,6 @@ class PcLinkPairingCryptoTest {
 
     @Test
     fun unpairProofsMatch() = forEachVector { v ->
-        if (!v.has("unpairProofClient")) return@forEachVector // optional field in the shared fixture
         val ltk = bytes(v, "ltk")
         val nonceC = bytes(v, "authClientNonce")
         val nonceS = bytes(v, "authServerNonce")
