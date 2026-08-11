@@ -71,6 +71,13 @@ sealed interface PairingOutcome {
      * fresh pairing under one id while the rest of the app looks for it under another: every
      * ceremony succeeding, nothing ever sticking, and the user bounced back to pair again forever.
      *
+     * [serverName] is authenticated in the same sense, and by the same mechanism: it is the name
+     * bound into the pairing transcript — the string that sat next to the 6-digit code the user
+     * compared, so it is the name they approved — or, on a reconnect, the one stored from that
+     * ceremony. It is *not* the `name` from a discovery reply or a `pair_invite`, which are
+     * arbitrary strings from unauthenticated datagrams. Label a paired device with one of those and
+     * a bystander gets to choose what the user sees a trusted device called.
+     *
      * [videoToken] is the one-time token from `auth_ok`, or null when the pairing completed but the
      * token never arrived (the pairing is still valid — the server persisted before its
      * `pair_confirm`).

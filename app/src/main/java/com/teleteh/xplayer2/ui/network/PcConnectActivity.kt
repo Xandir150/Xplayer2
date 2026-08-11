@@ -93,9 +93,13 @@ class PcConnectActivity : AppCompatActivity() {
     private var pairingDialog: AlertDialog? = null
     private var promptDialog: AlertDialog? = null
 
-    /** Fingerprints of paired PCs, for the "Paired" badge. Refreshed whenever the store changes. */
-    private var pairedIds: Set<String> = emptySet()
-    private var pairedHosts: Set<String> = emptySet()
+    /**
+     * Paired PCs by fingerprint and by last-known address, mapped to their **stored** names — see
+     * [pairedNameFor] for why a badged row must never be labelled from discovery. Refreshed
+     * whenever the store changes.
+     */
+    private var pairedById: Map<String, String> = emptyMap()
+    private var pairedByHost: Map<String, String> = emptyMap()
 
     /**
      * A re-pair the player bounced back to us ([EXTRA_PCLINK_REPAIR]), held until the identity has
@@ -123,7 +127,7 @@ class PcConnectActivity : AppCompatActivity() {
             onClick = { onServerClick(it) },
             onLongClick = { onServerLongClick(it) },
             pairedLabel = getString(R.string.pclink_paired_badge),
-            isPaired = { isPaired(it) }
+            pairedName = { pairedNameFor(it) }
         )
         rv.adapter = adapter
 
@@ -257,8 +261,13 @@ class PcConnectActivity : AppCompatActivity() {
     }
 
     private fun applyPairings(pairings: List<PcLinkPairing>) {
-        pairedIds = pairings.map { it.serverId }.toSet()
-        pairedHosts = pairings.mapNotNull { it.lastHost?.lowercase() }.toSet()
+        pairedById = pairings.associate { it.serverId to it.name }
+        // Newest first (getAll's order), so associateBy's last-wins would pick the *oldest* record
+        // when a regenerated PC has left an orphan on the same address — reverse it so the fresh
+        // pairing's name is the one shown, matching findByHost.
+        pairedByHost = pairings.reversed()
+            .mapNotNull { pairing -> pairing.lastHost?.lowercase()?.let { it to pairing.name } }
+            .toMap()
         adapter.notifyDataSetChanged()
     }
 
@@ -282,9 +291,24 @@ class PcConnectActivity : AppCompatActivity() {
         return if (serverId != null) store.get(serverId) else store.findByHost(server.host)
     }
 
-    private fun isPaired(server: PcLinkServer): Boolean {
+    /**
+     * The **stored** name for a paired PC, or null if we aren't paired with it.
+     *
+     * The stored name is the one bound into the pairing transcript — the string that was on screen
+     * next to the 6-digit code the user compared, so it is the name they actually approved. The
+     * `name` in a discovery reply is neither: it is an arbitrary string from an unauthenticated
+     * datagram that anyone on the LAN can send.
+     *
+     * Which one a row shows matters precisely because the "Paired" badge next to it asserts trust.
+     * `serverId` is public — it is broadcast in the clear — so a bystander can spoof a reply
+     * carrying a paired fingerprint and any name they like, and the row would read as a PC the user
+     * recognizes. The ceremony still can't be faked (tapping it fails the server's proof), but the
+     * label would already have lied, which is enough to get the tap. So a badged row is labelled
+     * from the store, and only an unpaired row shows what the network claimed.
+     */
+    private fun pairedNameFor(server: PcLinkServer): String? {
         val serverId = server.serverId
-        return if (serverId != null) serverId in pairedIds else server.host.lowercase() in pairedHosts
+        return if (serverId != null) pairedById[serverId] else pairedByHost[server.host.lowercase()]
     }
 
     /** Validates the typed host, then probes it directly for a real PC Link reply before connecting
@@ -660,7 +684,8 @@ class PcConnectActivity : AppCompatActivity() {
         private val onClick: (PcLinkServer) -> Unit,
         private val onLongClick: (PcLinkServer) -> Boolean,
         private val pairedLabel: String,
-        private val isPaired: (PcLinkServer) -> Boolean
+        /** The PC's stored name when paired, else null — see [pairedNameFor]. */
+        private val pairedName: (PcLinkServer) -> String?
     ) : RecyclerView.Adapter<ServerAdapter.VH>() {
         private val items = mutableListOf<PcLinkServer>()
 
@@ -677,11 +702,15 @@ class PcConnectActivity : AppCompatActivity() {
 
         override fun onBindViewHolder(holder: VH, position: Int) {
             val item = items[position]
-            holder.title.text = item.name
+            // A paired PC is named from the store, never from the discovery reply: the badge below
+            // asserts trust, and the advertised name is an unauthenticated string anyone on the LAN
+            // can choose. Only an unpaired row shows what the network claimed about itself.
+            val stored = pairedName(item)
+            holder.title.text = stored ?: item.name
             val address = "${item.host}:${item.controlPort}"
             // Badge in the subtitle rather than a new view: it keeps item_pc_server.xml as it is,
             // and "paired" is exactly the sort of detail that belongs next to the address.
-            holder.subtitle.text = if (isPaired(item)) "$address · $pairedLabel" else address
+            holder.subtitle.text = if (stored != null) "$address · $pairedLabel" else address
             holder.itemView.setOnClickListener { onClick(item) }
             holder.itemView.setOnLongClickListener { onLongClick(item) }
         }
