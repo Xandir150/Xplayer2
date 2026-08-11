@@ -28,6 +28,10 @@ sealed interface PairingEffect {
      * Write this pairing to [PcLinkPairingStore] now. Emitted the moment the server's confirmation
      * tag verifies — the server persisted before sending it, so from here on both sides are paired
      * whatever happens to the connection.
+     *
+     * [serverId] is authoritative — the fingerprint of the key just revealed, never a discovery or
+     * invite hint. Store it under exactly this value; see [PairingOutcome.Success] for what goes
+     * wrong when a hint is substituted.
      */
     data class Persist(val serverId: String, val serverName: String, val ltk: ByteArray) : PairingEffect {
         override fun equals(other: Any?): Boolean = other is Persist && serverId == other.serverId &&
@@ -54,9 +58,22 @@ sealed interface PairingEffect {
 sealed interface PairingOutcome {
 
     /**
-     * Authenticated. [videoToken] is the one-time token from `auth_ok`, or null when the pairing
-     * completed but the token never arrived (the pairing is still valid — the server persisted
-     * before its `pair_confirm`).
+     * Authenticated.
+     *
+     * [serverId] is **authoritative, not a hint**: it is the fingerprint of the key the PC actually
+     * proved it holds — the revealed key in a pairing, the matched pairing's key in a reconnect. It
+     * is never the `serverId` from a discovery reply or a `pair_invite`, both of which are
+     * unauthenticated (§8.4). This is the fingerprint the pairing is stored under, so it is the one
+     * to look the pairing up by and the one to pass on.
+     *
+     * That distinction has teeth. When a PC forgets a phone *because it regenerated its identity*,
+     * the authoritative value and any stale hint differ — and preferring the hint means storing the
+     * fresh pairing under one id while the rest of the app looks for it under another: every
+     * ceremony succeeding, nothing ever sticking, and the user bounced back to pair again forever.
+     *
+     * [videoToken] is the one-time token from `auth_ok`, or null when the pairing completed but the
+     * token never arrived (the pairing is still valid — the server persisted before its
+     * `pair_confirm`).
      */
     data class Success(
         val serverId: String,

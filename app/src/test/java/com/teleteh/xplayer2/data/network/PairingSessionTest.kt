@@ -231,6 +231,16 @@ class PairingSessionTest {
 
         val tamperedEffects = session.onLine(tampered.toString())
         val shown = tamperedEffects.filterIsInstance<PairingEffect.ShowSas>().single()
+        // The reported fingerprint follows the key actually revealed, never the PC we thought we
+        // were reaching. Nothing in this FSM can be fed a hint today, so this exists to give a
+        // future refactor that threads one through something to break: substituting a hint for the
+        // authoritative id is what makes a re-paired PC store under one id and be looked up under
+        // another (see PairingOutcome.Success).
+        assertEquals(
+            PcLinkPairingCrypto.fingerprintOf(Hex.decode(tampered.getString("pubkey"))!!),
+            shown.serverId
+        )
+        assertNotEquals(honest.identity.fingerprint, shown.serverId)
         // The MITM forwards the phone's (unchanged) reveal to the real PC, which computes its own
         // code from the key it actually sent.
         honest.onClientReveal(JSONObject(tamperedEffects.sends().single()))
