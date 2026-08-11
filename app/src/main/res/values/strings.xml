@@ -94,6 +94,17 @@
     <string name="dlna_not_found">DLNA: ContentDirectory not found</string>
     <string name="dlna_browse_failed">DLNA browse failed: %1$s</string>
 
+    <!-- PC Link (PC -> glasses desktop streaming) -->
+    <string name="pclink_title">PC Link</string>
+    <string name="pclink_row_subtitle">Stream your computer\'s screen</string>
+    <string name="pclink_manual_ip_hint">PC IP address (e.g. 192.168.1.10)</string>
+    <string name="pclink_connect">Connect</string>
+    <string name="pclink_discovered_label">Discovered on your network</string>
+    <string name="pclink_refresh">Refresh</string>
+    <string name="pclink_empty">Start XPlayer Link on your computer to see it here</string>
+    <string name="pclink_connecting">Connecting…</string>
+    <string name="pclink_invalid_host">Enter a valid IP address or hostname</string>
+
     <!-- Common -->
     <string name="common_add">Add</string>
     <string name="common_cancel">Cancel</string>

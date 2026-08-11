@@ -369,6 +369,10 @@
             android:name=".ui.MailCloudActivity"
             android:exported="false"
             android:theme="@style/Theme.XPlayer2" />
+        <activity
+            android:name=".ui.network.PcConnectActivity"
+            android:exported="false"
+            android:theme="@style/Theme.XPlayer2" />
 
         <service
             android:name=".player.PlaybackService"

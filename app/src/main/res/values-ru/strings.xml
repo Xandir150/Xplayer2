@@ -73,6 +73,17 @@
     <string name="dlna_not_found">DLNA: ContentDirectory не найден</string>
     <string name="dlna_browse_failed">Ошибка DLNA browse: %1$s</string>
 
+    <!-- PC Link (стриминг рабочего стола ПК в очки) -->
+    <string name="pclink_title">PC Link</string>
+    <string name="pclink_row_subtitle">Трансляция экрана компьютера</string>
+    <string name="pclink_manual_ip_hint">IP-адрес ПК (например, 192.168.1.10)</string>
+    <string name="pclink_connect">Подключить</string>
+    <string name="pclink_discovered_label">Найдено в сети</string>
+    <string name="pclink_refresh">Обновить</string>
+    <string name="pclink_empty">Запустите XPlayer Link на компьютере, чтобы он появился здесь</string>
+    <string name="pclink_connecting">Подключение…</string>
+    <string name="pclink_invalid_host">Введите корректный IP-адрес или имя хоста</string>
+
     <!-- Common -->
     <string name="common_add">Добавить</string>
     <string name="common_cancel">Отмена</string>

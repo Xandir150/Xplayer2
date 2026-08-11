@@ -268,6 +268,10 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
                 view?.findViewById<EditText>(R.id.etUrl)?.setText(item.uri)
             }
 
+            is NetworkItem.PcLink -> {
+                startActivity(Intent(requireContext(), PcConnectActivity::class.java))
+            }
+
             is NetworkItem.DlnaUp -> {
                 val control = currentDlnaControlUrl
                 if (control != null && dlnaBackStack.isNotEmpty()) {
@@ -393,8 +397,10 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
     }
 
     private fun rebuildInitialList() {
-        // Order: SMB shares + discovered DLNA devices FIRST, remembered web sources appended at the end.
+        // Order: PC Link (static entry) pinned first, then SMB shares + discovered DLNA devices,
+        // remembered web sources appended at the end.
         items.clear()
+        items.add(NetworkItem.PcLink)
         items.addAll(smbStorage.getAll())
         items.addAll(discoveredDevices)
         items.addAll(webSourceStore.getAll())

@@ -39,6 +39,7 @@ class NetworkAdapter(
                         oldItem.url == newItem.url
 
                     oldItem is NetworkItem.DlnaUp && newItem is NetworkItem.DlnaUp -> true
+                    oldItem is NetworkItem.PcLink && newItem is NetworkItem.PcLink -> true
                     oldItem is NetworkItem.WebSource && newItem is NetworkItem.WebSource -> oldItem.url == newItem.url
                     else -> false
                 }
@@ -148,6 +149,15 @@ class NetworkAdapter(
                     sub.text = sub.context.getString(R.string.dlna_up_subtitle)
                     iconBg.setImageResource(R.drawable.bg_circle_dlna)
                     icon.setImageResource(R.drawable.ic_folder_24)
+                    deleteButton?.visibility = View.GONE
+                }
+
+                is NetworkItem.PcLink -> {
+                    title.text = title.context.getString(R.string.pclink_title)
+                    sub.text = sub.context.getString(R.string.pclink_row_subtitle)
+                    iconBg.setImageResource(R.drawable.bg_circle_pclink)
+                    icon.dispose()
+                    icon.setImageResource(R.drawable.ic_pclink_24)
                     deleteButton?.visibility = View.GONE
                 }
 
