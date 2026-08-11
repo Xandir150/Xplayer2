@@ -218,7 +218,12 @@ class PcConnectActivity : AppCompatActivity() {
                 protocolVersion = intent.getIntExtra(
                     EXTRA_PCLINK_PROTOCOL_VERSION, PcLinkDiscovery.PROTOCOL_VERSION
                 ),
-                serverId = intent.getStringExtra(EXTRA_PCLINK_SERVER_ID)?.takeIf { it.isNotBlank() }
+                // Deliberately not the fingerprint the player bounced back. We are here *because*
+                // that PC refused it, and the reason may be that it regenerated its identity — in
+                // which case the old id names nothing. Carrying it would put a known-suspect value
+                // in a field every reader is entitled to treat as an identity hint; the ceremony
+                // below produces the real one, and [startPlayer] takes it from there.
+                serverId = null
             )
         )
     }
