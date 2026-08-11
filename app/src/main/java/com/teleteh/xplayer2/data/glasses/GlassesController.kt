@@ -653,12 +653,17 @@ class GlassesController(private val appContext: Context) {
         imuReader = reader
         Thread({
             val ok = reader.start { gx, gy, gz, ax, ay, az, temp, t ->
-                headOrientation.accumulate(gx, gy, gz, t)
+                // Gyro *and* accelerometer: the tracker fuses them so pitch/roll stay anchored to
+                // gravity instead of drifting off with the gyro.
+                headOrientation.accumulate(gx, gy, gz, ax, ay, az, t)
                 imuGx = gx; imuGy = gy; imuGz = gz
                 imuAx = ax; imuAy = ay; imuAz = az; imuTemp = temp
                 imuHasSample = true
             }
             if (ok) {
+                // With the glasses' own zero-rate offset applied, the tracker drops its leaky
+                // fallback bias estimate (which also ate slow, genuine head rotation).
+                headOrientation.factoryCalibrated = reader.calibration.isFactory
                 Log.i(TAG, "IMU telemetry streaming")
             } else {
                 Log.w(TAG, "IMU telemetry failed to start")
