@@ -195,6 +195,10 @@ class PairingSessionTest {
         assertEquals(PairingFailure.UNKNOWN_TO_PC, failureFor("unknown_client"))
         assertEquals(PairingFailure.AUTH_FAILED, failureFor("bad_proof"))
         assertEquals(PairingFailure.RATE_LIMITED, failureFor("rate_limited"))
+        // auth_fail carries no "version" reason, so a server that doesn't speak our pairingVersion
+        // says "protocol" — which must not read as "someone is interfering with your network".
+        assertEquals(PairingFailure.PROTOCOL, failureFor("protocol"))
+        // Anything we don't recognise stays in the loud bucket, and still offers no re-pair.
         assertEquals(PairingFailure.AUTH_FAILED, failureFor("who_knows"))
     }
 

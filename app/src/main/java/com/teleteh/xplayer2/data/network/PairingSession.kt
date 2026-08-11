@@ -454,7 +454,15 @@ class PairingSession private constructor(
         val failure = when (message.optString("reason")) {
             "unknown_client" -> PairingFailure.UNKNOWN_TO_PC
             "rate_limited" -> PairingFailure.RATE_LIMITED
-            // "bad_proof" and anything unrecognised: never offer an automatic re-pair.
+            // `auth_fail` has no "version" reason — a server that doesn't speak our pairingVersion
+            // answers an auth_challenge with "protocol" (only pair_start gets the richer
+            // pair_reject{"version", supportedPairingVersions}). So "protocol" here is usually a
+            // mismatch or a bug, and accusing the network of interference would be a lie. It still
+            // gets no re-pair offer, so this only changes which sentence the user reads.
+            REASON_PROTOCOL -> PairingFailure.PROTOCOL
+            // "bad_proof" and anything unrecognised: an impostor until proven otherwise, and never
+            // an automatic re-pair. Erring toward the loud message is the right default for a
+            // failure we don't understand.
             else -> PairingFailure.AUTH_FAILED
         }
         return fail(failure)
