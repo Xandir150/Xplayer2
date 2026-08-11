@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pairing code sheet: the user compares these six digits with the ones on the PC. The code is
+     the whole point of the dialog, so it gets the size, the letter spacing and the monospace face
+     — six digits have to be readable at a glance across a room, and grouped "893 122" so they can
+     be read aloud without losing your place. -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="24dp"
+    android:paddingEnd="24dp"
+    android:paddingTop="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvPairingBody"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="15sp"
+            android:textColor="?android:attr/textColorPrimary"
+            android:text="@string/pclink_pair_body" />
+
+        <TextView
+            android:id="@+id/tvPairingCode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="20dp"
+            android:gravity="center"
+            android:textSize="40sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.12"
+            android:fontFamily="monospace"
+            android:textIsSelectable="false"
+            android:textColor="?android:attr/textColorPrimary"
+            android:contentDescription="@string/pclink_pair_code_description"
+            android:text="000 000" />
+
+        <TextView
+            android:id="@+id/tvPairingHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="13sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:text="@string/pclink_pair_hint" />
+    </LinearLayout>
+</ScrollView>

@@ -10,6 +10,7 @@ import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -18,22 +19,48 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.teleteh.xplayer2.R
+import com.teleteh.xplayer2.data.network.PairingFailure
+import com.teleteh.xplayer2.data.network.PairingOutcome
+import com.teleteh.xplayer2.data.network.PairingSession
+import com.teleteh.xplayer2.data.network.PcLinkPairInvite
+import com.teleteh.xplayer2.data.network.PcLinkPairing
+import com.teleteh.xplayer2.data.network.PcLinkPairingClient
+import com.teleteh.xplayer2.data.network.PcLinkPairingCrypto
+import com.teleteh.xplayer2.data.network.PcLinkPairingStore
+import com.teleteh.xplayer2.data.network.PcLinkPhoneResponder
 import com.teleteh.xplayer2.data.network.PcLinkServer
 import com.teleteh.xplayer2.player.PlayerActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * "Connect to PC" screen for PC Link (PC -> glasses desktop streaming): lists PC servers found on
  * the LAN (via [RealPcLinkDiscoverySource], wrapping `data.network.PcLinkDiscovery`'s UDP
- * broadcast), offers manual IP entry (probed the same way discovery probes a single host), and —
- * for now — hands off to [PlayerActivity] via a placeholder intent carrying the `EXTRA_PCLINK_*`
- * extras. Real PC Link playback wiring (actually opening the stream) lands in a later package;
- * [PlayerActivity] itself isn't touched here.
+ * broadcast), offers manual IP entry (probed the same way discovery probes a single host), and owns
+ * the device-pairing ceremony before handing off to [PlayerActivity] with the `EXTRA_PCLINK_*`
+ * extras.
+ *
+ * Pairing (design doc `xplayer-link-server/docs/pairing-design.md`) sits between "user tapped a PC"
+ * and the hand-off:
+ *
+ * * **Never paired** — run the SAS ceremony: the phone and the PC each show six digits, the user
+ *   compares them and taps Pair here (and Accept on the PC), and only then is a long-term key
+ *   stored on both sides.
+ * * **Already paired** — a silent mutual-HMAC re-authentication behind a spinner. If the PC has
+ *   forgotten us we offer a fresh ceremony, but only behind an explicit tap: re-pairing must always
+ *   resurface the code, so a MITM can't force one invisibly (§8.4). If the PC fails to prove
+ *   itself, we say so and offer nothing.
+ * * **PC-initiated** — while this screen is open, [PcLinkPhoneResponder] answers PC probes and
+ *   turns a `pair_invite` into a prompt that runs the identical ceremony.
+ *
+ * The ceremony's control connection is separate and short-lived ([PcLinkPairingClient]); the player
+ * opens its own and re-authenticates with the key stored here.
  *
  * Discovery is accessed through [PcLinkDiscoverySource] (see PcServerListState.kt) rather than
  * `data.network.PcLinkDiscovery` directly, keeping this screen's dependency on that concurrently-
@@ -47,12 +74,27 @@ class PcConnectActivity : AppCompatActivity() {
     private lateinit var adapter: ServerAdapter
     private lateinit var tvEmpty: TextView
     private lateinit var connectingOverlay: View
+    private lateinit var tvConnecting: TextView
     private lateinit var btnRefresh: View
     private var discoverySource: PcLinkDiscoverySource = NoOpPcLinkDiscovery()
     private var probeSource: PcLinkDiscoverySource = NoOpPcLinkDiscovery()
     private var discoveryLoop: Job? = null
     private var connecting = false
     private var probing = false
+
+    /** Null until the identity has been loaded off the main thread; rows still connect meanwhile. */
+    private var store: PcLinkPairingStore? = null
+    private var identity: PcLinkPairingCrypto.Identity? = null
+    private var responder: PcLinkPhoneResponder? = null
+
+    /** The pairing/auth exchange in flight, if any, and the dialogs belonging to it. */
+    private var pairingClient: PcLinkPairingClient? = null
+    private var pairingDialog: AlertDialog? = null
+    private var promptDialog: AlertDialog? = null
+
+    /** Fingerprints of paired PCs, for the "Paired" badge. Refreshed whenever the store changes. */
+    private var pairedIds: Set<String> = emptySet()
+    private var pairedHosts: Set<String> = emptySet()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,10 +108,16 @@ class PcConnectActivity : AppCompatActivity() {
 
         tvEmpty = findViewById(R.id.tvEmpty)
         connectingOverlay = findViewById(R.id.connectingOverlay)
+        tvConnecting = findViewById(R.id.tvConnecting)
 
         val rv = findViewById<RecyclerView>(R.id.rvPcServers)
         rv.layoutManager = LinearLayoutManager(this)
-        adapter = ServerAdapter { onServerClick(it) }
+        adapter = ServerAdapter(
+            onClick = { onServerClick(it) },
+            onLongClick = { onServerLongClick(it) },
+            pairedLabel = getString(R.string.pclink_paired_badge),
+            isPaired = { isPaired(it) }
+        )
         rv.adapter = adapter
 
         val etHost = findViewById<EditText>(R.id.etManualHost)
@@ -86,7 +134,13 @@ class PcConnectActivity : AppCompatActivity() {
 
         discoverySource = RealPcLinkDiscoverySource(this, lifecycleScope)
         probeSource = RealPcLinkDiscoverySource(this, lifecycleScope)
+        loadIdentity()
         restartDiscovery()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        syncResponder()
     }
 
     override fun onStop() {
@@ -94,12 +148,80 @@ class PcConnectActivity : AppCompatActivity() {
         // repeatOnLifecycle has already parked the loop; this also closes the socket of the pass
         // that was in flight, instead of letting it broadcast out the rest of its window.
         discoverySource.stop()
+        // The phone answers PC probes only while this screen is up: that gate is the privacy story
+        // for a stable, LAN-visible clientId, and it means a stray invite can't interrupt anything.
+        responder?.stop()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         discoverySource.stop()
         probeSource.stop()
+        responder?.stop()
+        pairingClient?.cancel()
+        pairingDialog?.dismiss()
+        promptDialog?.dismiss()
+    }
+
+    /**
+     * Loads (or generates once) this phone's long-term identity. Off the main thread: it touches
+     * SharedPreferences and, on first run, generates a keypair and an AndroidKeyStore key.
+     */
+    private fun loadIdentity() {
+        lifecycleScope.launch {
+            val loaded = withContext(Dispatchers.IO) {
+                val store = PcLinkPairingStore(applicationContext)
+                Triple(store, store.identity(), store.getAll())
+            }
+            store = loaded.first
+            identity = loaded.second
+            applyPairings(loaded.third)
+            syncResponder()
+        }
+    }
+
+    /** Starts/stops the reverse-discovery responder to match the screen's state and readiness. */
+    private fun syncResponder() {
+        val id = identity ?: return
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
+        val existing = responder ?: PcLinkPhoneResponder(
+            context = this,
+            clientName = PcLinkPairingClient.defaultClientName(),
+            clientId = id.fingerprint,
+            onInvite = { onPairInvite(it) }
+        ).also { responder = it }
+        existing.start(lifecycleScope)
+    }
+
+    private fun applyPairings(pairings: List<PcLinkPairing>) {
+        pairedIds = pairings.map { it.serverId }.toSet()
+        pairedHosts = pairings.mapNotNull { it.lastHost?.lowercase() }.toSet()
+        adapter.notifyDataSetChanged()
+    }
+
+    private fun refreshPairings() {
+        val store = store ?: return
+        lifecycleScope.launch {
+            applyPairings(withContext(Dispatchers.IO) { store.getAll() })
+        }
+    }
+
+    /**
+     * The stored pairing for [server], or null if we've never paired with it.
+     *
+     * When the discovery reply carried a `serverId` that is the whole answer — a fingerprint we
+     * don't know means a PC we haven't paired with, even if something else once lived at that
+     * address. Only for a server that didn't advertise one do we fall back to the address.
+     */
+    private fun storedPairingFor(server: PcLinkServer): PcLinkPairing? {
+        val store = store ?: return null
+        val serverId = server.serverId
+        return if (serverId != null) store.get(serverId) else store.findByHost(server.host)
+    }
+
+    private fun isPaired(server: PcLinkServer): Boolean {
+        val serverId = server.serverId
+        return if (serverId != null) serverId in pairedIds else server.host.lowercase() in pairedHosts
     }
 
     /** Validates the typed host, then probes it directly for a real PC Link reply before connecting
@@ -119,8 +241,7 @@ class PcConnectActivity : AppCompatActivity() {
         }
         probing = true
         btnRefresh.isEnabled = false
-        connectingOverlay.visibility = View.VISIBLE
-        tvEmpty.visibility = View.GONE
+        showOverlay(R.string.pclink_connecting)
         // One probe, one outcome: probeHost reports null itself when the host stays silent, so
         // there is no second wall-clock timer here to race it — nor a late reply that could fire
         // connectTo() after "unreachable" was already shown.
@@ -131,8 +252,7 @@ class PcConnectActivity : AppCompatActivity() {
             if (server != null) {
                 connectTo(server)
             } else {
-                connectingOverlay.visibility = View.GONE
-                updateEmptyState()
+                hideOverlay()
                 Toast.makeText(this, R.string.pclink_manual_unreachable, Toast.LENGTH_SHORT).show()
             }
         }
@@ -174,33 +294,298 @@ class PcConnectActivity : AppCompatActivity() {
         tvEmpty.visibility = if (!connecting && !probing && listState.isEmpty()) View.VISIBLE else View.GONE
     }
 
-    private fun onServerClick(server: PcLinkServer) = connectTo(server)
-
-    private fun connectTo(server: PcLinkServer) {
-        if (connecting) return
-        connecting = true
-        discoveryLoop?.cancel()
-        discoverySource.stop()
+    private fun showOverlay(messageRes: Int) {
+        tvConnecting.setText(messageRes)
         connectingOverlay.visibility = View.VISIBLE
         tvEmpty.visibility = View.GONE
-        // Brief "connecting…" beat before the placeholder hand-off — real handshake/progress
-        // reporting belongs to the PC Link playback-wiring package, not this UI shell.
+    }
+
+    private fun hideOverlay() {
+        connectingOverlay.visibility = View.GONE
+        updateEmptyState()
+    }
+
+    private fun onServerClick(server: PcLinkServer) = connectTo(server)
+
+    /** Long-press offers to forget a paired PC; there is nothing to forget about the others. */
+    private fun onServerLongClick(server: PcLinkServer): Boolean {
+        if (connecting || probing) return false
+        val pairing = storedPairingFor(server) ?: return false
+        showPrompt(
+            title = getString(R.string.pclink_forget_title, pairing.name),
+            message = getString(R.string.pclink_forget_body),
+            positiveRes = R.string.pclink_forget,
+            onAccept = { forget(pairing) }
+        )
+        return true
+    }
+
+    private fun forget(pairing: PcLinkPairing) {
+        val store = store ?: return
         lifecycleScope.launch {
-            delay(CONNECTING_DELAY_MS)
-            val intent = Intent(this@PcConnectActivity, PlayerActivity::class.java).apply {
-                putExtra(EXTRA_PCLINK_HOST, server.host)
-                putExtra(EXTRA_PCLINK_CONTROL_PORT, server.controlPort)
-                putExtra(EXTRA_PCLINK_VIDEO_PORT, server.videoPort)
-                putExtra(EXTRA_PCLINK_PROTOCOL_VERSION, server.protocolVersion)
-                putExtra(EXTRA_PCLINK_NAME, server.name)
-            }
-            DisplayUtils.startOnBestDisplay(this@PcConnectActivity, intent)
-            finish()
+            withContext(Dispatchers.IO) { store.forget(pairing.serverId) }
+            refreshPairings()
+            Toast.makeText(
+                this@PcConnectActivity,
+                getString(R.string.pclink_forgotten, pairing.name),
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
+    /**
+     * Entry point for every "connect to this PC" path. Decides between silent re-authentication and
+     * the pairing ceremony, then hands off.
+     */
+    private fun connectTo(server: PcLinkServer) {
+        if (connecting) return
+        val identity = identity
+        if (identity == null) {
+            // The identity is still loading (first launch, generating a keypair). It's a moment,
+            // and the row stays tappable rather than us pairing with no key.
+            Toast.makeText(this, R.string.pclink_connecting, Toast.LENGTH_SHORT).show()
+            return
+        }
+        connecting = true
+        discoveryLoop?.cancel()
+        discoverySource.stop()
+
+        val pairing = storedPairingFor(server)
+        val target = PairingTarget(server.host, server.controlPort, server.name, server)
+        if (pairing != null) {
+            startAuth(identity, target, pairing)
+        } else {
+            startPairing(identity, target)
+        }
+    }
+
+    /** Silent re-authentication with a stored key, behind a spinner (§5). */
+    private fun startAuth(
+        identity: PcLinkPairingCrypto.Identity,
+        target: PairingTarget,
+        pairing: PcLinkPairing
+    ) {
+        showOverlay(R.string.pclink_authenticating)
+        val store = store
+        // The known pairing leads; the rest are only ever tried against the server's own proof, so
+        // a PC whose address changed since we paired still authenticates instead of failing.
+        val candidates = listOf(pairing) +
+            (store?.getAll()?.filter { it.serverId != pairing.serverId } ?: emptyList())
+        runSession(target, PairingSession.authenticate(identity, candidates))
+    }
+
+    /** First-time pairing: the 6-digit comparison ceremony (§4). */
+    private fun startPairing(identity: PcLinkPairingCrypto.Identity, target: PairingTarget) {
+        showOverlay(R.string.pclink_pairing_progress)
+        runSession(
+            target,
+            PairingSession.pair(identity, PcLinkPairingClient.defaultClientName())
+        )
+    }
+
+    private fun runSession(target: PairingTarget, session: PairingSession) {
+        pairingClient?.cancel()
+        val client = PcLinkPairingClient(
+            context = this,
+            host = target.host,
+            controlPort = target.controlPort,
+            session = session,
+            listener = object : PcLinkPairingClient.Listener {
+                override fun onSasReady(sas: String, serverName: String, serverId: String) =
+                    showSasDialog(sas, serverName)
+
+                override fun onPaired(serverId: String, serverName: String, ltk: ByteArray) {
+                    // Stored synchronously: the hand-off below starts a PlayerActivity that reads
+                    // this very record, so it must be on disk before the outcome is reported.
+                    store?.addOrUpdate(serverId, serverName, ltk, target.host)
+                }
+
+                override fun onFinished(outcome: PairingOutcome) = onSessionFinished(target, outcome)
+            }
+        )
+        pairingClient = client
+        client.start(lifecycleScope)
+    }
+
+    private fun showSasDialog(sas: String, serverName: String) {
+        pairingDialog?.dismiss()
+        val view = LayoutInflater.from(this).inflate(R.layout.dialog_pc_pairing, null)
+        view.findViewById<TextView>(R.id.tvPairingCode).text = PcLinkPairingCrypto.formatSas(sas)
+        pairingDialog = AlertDialog.Builder(this)
+            .setTitle(getString(R.string.pclink_pair_title, serverName))
+            .setView(view)
+            .setPositiveButton(R.string.pclink_pair_accept) { _, _ -> pairingClient?.accept() }
+            .setNegativeButton(R.string.common_cancel) { _, _ -> pairingClient?.decline() }
+            // Back/outside tap is a Cancel, not a silent dismissal: telling the PC we're gone takes
+            // its dialog down now instead of leaving it up for the full 90 s timeout.
+            .setOnCancelListener { pairingClient?.decline() }
+            .show()
+    }
+
+    private fun onSessionFinished(target: PairingTarget, outcome: PairingOutcome) {
+        pairingDialog?.dismiss()
+        pairingDialog = null
+        pairingClient = null
+        when (outcome) {
+            is PairingOutcome.Success -> {
+                if (outcome.paired) refreshPairings() else touchPairing(outcome, target)
+                handOff(target, outcome.serverId)
+            }
+
+            is PairingOutcome.Failure -> {
+                connecting = false
+                hideOverlay()
+                restartDiscovery()
+                onPairingFailed(target, outcome.reason)
+            }
+        }
+    }
+
+    private fun touchPairing(outcome: PairingOutcome.Success, target: PairingTarget) {
+        val store = store ?: return
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                store.touch(outcome.serverId, target.host, outcome.serverName)
+            }
+        }
+    }
+
+    private fun onPairingFailed(target: PairingTarget, reason: PairingFailure) {
+        when (reason) {
+            // The user knows: they just tapped Cancel.
+            PairingFailure.DECLINED_LOCALLY -> Unit
+
+            // §8.4: the PC has forgotten us. Offer a fresh ceremony, but only behind a tap — an
+            // automatic re-pair would let a MITM strip the pairing without the code ever resurfacing.
+            PairingFailure.UNKNOWN_TO_PC -> showPrompt(
+                title = getString(R.string.pclink_repair_title),
+                message = getString(R.string.pclink_repair_body),
+                positiveRes = R.string.pclink_repair_accept,
+                onAccept = {
+                    val identity = identity ?: return@showPrompt
+                    connecting = true
+                    discoveryLoop?.cancel()
+                    startPairing(identity, target)
+                }
+            )
+
+            // An impostor or a corrupted pairing. No re-pair button: "Forget this PC" is a
+            // long-press away for someone who has decided it really is corruption.
+            PairingFailure.AUTH_FAILED -> showMessage(R.string.pclink_auth_failed)
+
+            PairingFailure.DECLINED_BY_PC -> toast(R.string.pclink_pair_cancelled)
+            PairingFailure.PC_BUSY -> toast(R.string.pclink_pair_busy)
+            PairingFailure.RATE_LIMITED -> toast(R.string.pclink_pair_rate_limited)
+            PairingFailure.VERSION_UNSUPPORTED -> toast(R.string.pclink_pair_version)
+            PairingFailure.TIMEOUT -> toast(R.string.pclink_pair_timeout)
+            PairingFailure.CONNECTION_LOST -> toast(R.string.pclink_pair_lost)
+            PairingFailure.PROTOCOL, PairingFailure.CONFIRM_MISMATCH -> toast(R.string.pclink_pair_failed)
+        }
+    }
+
+    /**
+     * A PC asked to pair (design §9.2). The invite carries no authority — it only saves the user
+     * finding the PC in the list — so it becomes a prompt, never an action, and one at a time.
+     */
+    private fun onPairInvite(invite: PcLinkPairInvite) {
+        if (connecting || probing || promptDialog != null || pairingDialog != null) return
+        val identity = identity ?: return
+        showPrompt(
+            title = getString(R.string.pclink_invite_title, invite.serverName),
+            message = null,
+            positiveRes = R.string.pclink_invite_accept,
+            negativeRes = R.string.pclink_invite_ignore,
+            onAccept = {
+                connecting = true
+                discoveryLoop?.cancel()
+                discoverySource.stop()
+                // The ceremony runs against the datagram's source address, not anything it claimed.
+                startPairing(
+                    identity,
+                    PairingTarget(invite.host, invite.controlPort, invite.serverName, server = null)
+                )
+            }
+        )
+    }
+
+    /**
+     * Hands off to the player. [PairingTarget.server] is absent when we got here from an invite, so
+     * the ports aren't known yet — probe for them rather than guess, and if the PC doesn't answer,
+     * say the pairing worked and leave the user on the list.
+     */
+    private fun handOff(target: PairingTarget, serverId: String) {
+        val server = target.server
+        if (server != null) {
+            startPlayer(server, serverId)
+            return
+        }
+        probeSource.probeHost(target.host) { probed ->
+            if (probed != null) {
+                startPlayer(probed, serverId)
+            } else {
+                connecting = false
+                hideOverlay()
+                refreshPairings()
+                restartDiscovery()
+            }
+        }
+    }
+
+    private fun startPlayer(server: PcLinkServer, serverId: String) {
+        val intent = Intent(this, PlayerActivity::class.java).apply {
+            putExtra(EXTRA_PCLINK_HOST, server.host)
+            putExtra(EXTRA_PCLINK_CONTROL_PORT, server.controlPort)
+            putExtra(EXTRA_PCLINK_VIDEO_PORT, server.videoPort)
+            putExtra(EXTRA_PCLINK_PROTOCOL_VERSION, server.protocolVersion)
+            putExtra(EXTRA_PCLINK_NAME, server.name)
+            putExtra(EXTRA_PCLINK_SERVER_ID, server.serverId ?: serverId)
+        }
+        DisplayUtils.startOnBestDisplay(this, intent)
+        finish()
+    }
+
+    private fun showPrompt(
+        title: String,
+        message: String?,
+        positiveRes: Int,
+        negativeRes: Int = R.string.common_cancel,
+        onAccept: () -> Unit
+    ) {
+        promptDialog?.dismiss()
+        promptDialog = AlertDialog.Builder(this)
+            .setTitle(title)
+            .apply { if (message != null) setMessage(message) }
+            .setPositiveButton(positiveRes) { _, _ -> promptDialog = null; onAccept() }
+            .setNegativeButton(negativeRes) { _, _ -> promptDialog = null }
+            .setOnDismissListener { promptDialog = null }
+            .show()
+    }
+
+    private fun showMessage(messageRes: Int) {
+        promptDialog?.dismiss()
+        promptDialog = AlertDialog.Builder(this)
+            .setMessage(messageRes)
+            .setPositiveButton(android.R.string.ok, null)
+            .setOnDismissListener { promptDialog = null }
+            .show()
+    }
+
+    private fun toast(messageRes: Int) =
+        Toast.makeText(this, messageRes, Toast.LENGTH_LONG).show()
+
+    /** Where a ceremony is headed. [server] is null for an invite, whose ports we don't know yet. */
+    private data class PairingTarget(
+        val host: String,
+        val controlPort: Int,
+        val displayName: String,
+        val server: PcLinkServer?
+    )
+
     private class ServerAdapter(
-        private val onClick: (PcLinkServer) -> Unit
+        private val onClick: (PcLinkServer) -> Unit,
+        private val onLongClick: (PcLinkServer) -> Boolean,
+        private val pairedLabel: String,
+        private val isPaired: (PcLinkServer) -> Boolean
     ) : RecyclerView.Adapter<ServerAdapter.VH>() {
         private val items = mutableListOf<PcLinkServer>()
 
@@ -218,8 +603,12 @@ class PcConnectActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: VH, position: Int) {
             val item = items[position]
             holder.title.text = item.name
-            holder.subtitle.text = "${item.host}:${item.controlPort}"
+            val address = "${item.host}:${item.controlPort}"
+            // Badge in the subtitle rather than a new view: it keeps item_pc_server.xml as it is,
+            // and "paired" is exactly the sort of detail that belongs next to the address.
+            holder.subtitle.text = if (isPaired(item)) "$address · $pairedLabel" else address
             holder.itemView.setOnClickListener { onClick(item) }
+            holder.itemView.setOnLongClickListener { onLongClick(item) }
         }
 
         class VH(view: View) : RecyclerView.ViewHolder(view) {
@@ -229,15 +618,20 @@ class PcConnectActivity : AppCompatActivity() {
     }
 
     companion object {
-        /** Extras on the placeholder intent toward [PlayerActivity]; real handling of these lands
-         *  with the PC Link playback-wiring package. */
+        /** Extras on the intent toward [PlayerActivity]. */
         const val EXTRA_PCLINK_HOST = "com.teleteh.xplayer2.extra.PCLINK_HOST"
         const val EXTRA_PCLINK_CONTROL_PORT = "com.teleteh.xplayer2.extra.PCLINK_CONTROL_PORT"
         const val EXTRA_PCLINK_VIDEO_PORT = "com.teleteh.xplayer2.extra.PCLINK_VIDEO_PORT"
         const val EXTRA_PCLINK_PROTOCOL_VERSION = "com.teleteh.xplayer2.extra.PCLINK_PROTOCOL_VERSION"
         const val EXTRA_PCLINK_NAME = "com.teleteh.xplayer2.extra.PCLINK_NAME"
 
-        private const val CONNECTING_DELAY_MS = 450L
+        /**
+         * The PC's identity fingerprint, so the player can look up the pairing this screen just
+         * established or verified and authenticate its own connection with it. The video token
+         * issued during pairing is deliberately *not* passed along: it dies with the control
+         * session that minted it (protocol.md §2.13).
+         */
+        const val EXTRA_PCLINK_SERVER_ID = "com.teleteh.xplayer2.extra.PCLINK_SERVER_ID"
 
         /** Breather between discovery passes (each pass listens ~4 s), so a pass starts every ~5 s. */
         private const val DISCOVERY_PASS_GAP_MS = 1000L

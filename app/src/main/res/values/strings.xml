@@ -107,6 +107,42 @@
     <string name="pclink_error_ipv6_unsupported">IPv6 addresses aren\'t supported yet — use the IPv4 address shown in XPlayer Link</string>
     <string name="pclink_manual_unreachable">Couldn\'t reach XPlayer Link at that address</string>
 
+    <!-- PC Link pairing: the 6-digit comparison code (SAS) and the states around it -->
+    <string name="pclink_pair_title">Pair with \"%1$s\"?</string>
+    <string name="pclink_pair_body">Make sure your PC shows the same code:</string>
+    <string name="pclink_pair_hint">If the codes differ, or no code appears on the PC, tap Cancel.</string>
+    <string name="pclink_pair_code_description">Pairing code</string>
+    <string name="pclink_pair_accept">Pair</string>
+    <string name="pclink_pairing_progress">Pairing…</string>
+    <string name="pclink_authenticating">Checking this PC…</string>
+    <string name="pclink_paired_badge">Paired</string>
+
+    <!-- Pairing outcomes -->
+    <string name="pclink_pair_cancelled">Pairing was cancelled.</string>
+    <string name="pclink_pair_failed">Pairing failed. Try again.</string>
+    <string name="pclink_pair_busy">That PC is already pairing with another device.</string>
+    <string name="pclink_pair_rate_limited">Too many attempts. Wait a moment and try again.</string>
+    <string name="pclink_pair_version">This PC needs a newer version of XPlayer.</string>
+    <string name="pclink_pair_timeout">Nobody confirmed in time. Try again.</string>
+    <string name="pclink_pair_lost">Lost the connection to that PC.</string>
+    <string name="pclink_auth_failed">Couldn\'t verify this PC. Someone may be interfering with your network, or the pairing is corrupted.</string>
+
+    <!-- The PC forgot us: re-pairing must always be an explicit choice, never automatic -->
+    <string name="pclink_repair_title">Pair again?</string>
+    <string name="pclink_repair_body">This PC no longer recognizes your device. Pair again?</string>
+    <string name="pclink_repair_accept">Pair again</string>
+
+    <!-- PC-initiated pairing (reverse discovery) -->
+    <string name="pclink_invite_title">\"%1$s\" wants to pair</string>
+    <string name="pclink_invite_accept">Connect</string>
+    <string name="pclink_invite_ignore">Ignore</string>
+
+    <!-- Forgetting a pairing (long-press a PC in the list) -->
+    <string name="pclink_forget_title">Forget \"%1$s\"?</string>
+    <string name="pclink_forget_body">This PC will need to pair again, with a new code, the next time you connect.</string>
+    <string name="pclink_forget">Forget this PC</string>
+    <string name="pclink_forgotten">Forgot \"%1$s\"</string>
+
     <!-- Common -->
     <string name="common_add">Add</string>
     <string name="common_cancel">Cancel</string>

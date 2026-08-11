@@ -86,6 +86,42 @@
     <string name="pclink_error_ipv6_unsupported">Адреса IPv6 пока не поддерживаются — используйте адрес IPv4, показанный в XPlayer Link</string>
     <string name="pclink_manual_unreachable">Не удалось найти XPlayer Link по этому адресу</string>
 
+    <!-- Сопряжение PC Link: код из 6 цифр и всё вокруг него -->
+    <string name="pclink_pair_title">Подключить «%1$s»?</string>
+    <string name="pclink_pair_body">Убедитесь, что на компьютере показан такой же код:</string>
+    <string name="pclink_pair_hint">Если коды не совпадают или на компьютере нет кода — нажмите «Отмена».</string>
+    <string name="pclink_pair_code_description">Код сопряжения</string>
+    <string name="pclink_pair_accept">Подключить</string>
+    <string name="pclink_pairing_progress">Сопряжение…</string>
+    <string name="pclink_authenticating">Проверка компьютера…</string>
+    <string name="pclink_paired_badge">Сопряжён</string>
+
+    <!-- Результаты сопряжения -->
+    <string name="pclink_pair_cancelled">Сопряжение отменено.</string>
+    <string name="pclink_pair_failed">Не удалось выполнить сопряжение. Попробуйте ещё раз.</string>
+    <string name="pclink_pair_busy">Этот компьютер уже подключается к другому устройству.</string>
+    <string name="pclink_pair_rate_limited">Слишком много попыток. Подождите немного и повторите.</string>
+    <string name="pclink_pair_version">Для этого компьютера нужна более новая версия XPlayer.</string>
+    <string name="pclink_pair_timeout">Никто не подтвердил вовремя. Попробуйте ещё раз.</string>
+    <string name="pclink_pair_lost">Связь с компьютером потеряна.</string>
+    <string name="pclink_auth_failed">Не удалось проверить подлинность компьютера. Возможно вмешательство в сеть или повреждено сопряжение.</string>
+
+    <!-- Компьютер нас забыл: повторное сопряжение только по явному выбору -->
+    <string name="pclink_repair_title">Сопрячь заново?</string>
+    <string name="pclink_repair_body">Компьютер больше не узнаёт это устройство. Выполнить сопряжение заново?</string>
+    <string name="pclink_repair_accept">Сопрячь заново</string>
+
+    <!-- Сопряжение по инициативе компьютера (обратное обнаружение) -->
+    <string name="pclink_invite_title">«%1$s» предлагает подключение</string>
+    <string name="pclink_invite_accept">Подключить</string>
+    <string name="pclink_invite_ignore">Игнорировать</string>
+
+    <!-- Забыть сопряжение (долгое нажатие на компьютер в списке) -->
+    <string name="pclink_forget_title">Забыть «%1$s»?</string>
+    <string name="pclink_forget_body">Телефону потребуется новое сопряжение с новым кодом при следующем подключении.</string>
+    <string name="pclink_forget">Забыть этот компьютер</string>
+    <string name="pclink_forgotten">Компьютер «%1$s» забыт</string>
+
     <!-- Common -->
     <string name="common_add">Добавить</string>
     <string name="common_cancel">Отмена</string>
