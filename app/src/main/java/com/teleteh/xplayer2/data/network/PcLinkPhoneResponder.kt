@@ -34,7 +34,14 @@ data class PcLinkPairInvite(
      * ceremony's transcript, which is the one the user compared a code against.
      */
     val serverName: String,
-    /** Also an unauthenticated claim: a hint for picking a stored pairing, never a grant of trust. */
+    /**
+     * Also an unauthenticated claim. Use it to choose which stored pairing to try first, and for
+     * nothing else — in particular, never to badge or label a row.
+     *
+     * "It never grants trust" is too weak a rule to hold onto, because it reads as satisfied by the
+     * thing that actually goes wrong: putting a spoofed id's name under a badge grants no trust by
+     * itself, the badge does that, and the tap follows. State the prohibition, not the principle.
+     */
     val serverId: String?,
     val host: String,
     val controlPort: Int,

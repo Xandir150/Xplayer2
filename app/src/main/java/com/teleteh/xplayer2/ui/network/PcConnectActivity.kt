@@ -726,7 +726,21 @@ class PcConnectActivity : AppCompatActivity() {
     }
 
     companion object {
-        /** Extras on the intent toward [PlayerActivity]. */
+        /**
+         * Extras on the intent toward [PlayerActivity].
+         *
+         * [startPlayer] is the only place in the app that mints these, and that is load-bearing
+         * rather than incidental. It runs only after a completed pairing or re-authentication, so
+         * [EXTRA_PCLINK_NAME] and [EXTRA_PCLINK_SERVER_ID] carry values the *exchange* proved
+         * rather than values a discovery reply claimed — which is what makes them safe for the
+         * player to print. Its status overlay shows that name on "couldn't verify this PC", and a
+         * name an attacker chose is precisely the reassurance that talks someone past a warning.
+         *
+         * So a future "connect without pairing" shortcut must not simply launch [PlayerActivity]
+         * with these extras: it would reintroduce that substitution at the new producer, where
+         * nothing on this side would catch it. Any new producer either completes an exchange first,
+         * or leaves the name and fingerprint out.
+         */
         const val EXTRA_PCLINK_HOST = "com.teleteh.xplayer2.extra.PCLINK_HOST"
         const val EXTRA_PCLINK_CONTROL_PORT = "com.teleteh.xplayer2.extra.PCLINK_CONTROL_PORT"
         const val EXTRA_PCLINK_VIDEO_PORT = "com.teleteh.xplayer2.extra.PCLINK_VIDEO_PORT"
