@@ -243,6 +243,7 @@ class PcStreamDecoder(private val listener: Listener) {
 
     private val queue = PcAuDropPolicy()
     private val freeInputBuffers = ArrayDeque<Int>()
+    private var lastIdrNudgeNs = 0L
 
     /** Frames released to the surface since construction. */
     @Volatile var framesRendered: Long = 0L
@@ -321,6 +322,13 @@ class PcStreamDecoder(private val listener: Listener) {
                 pumpLocked()
             }
             // csd but no codec = no surface right now; the drop policy caps the wait for one.
+            //
+            // Frames arriving while we can't use any of them means our earlier request never
+            // produced a sync frame (lost, rate-limited, or we joined mid-stream and the server is
+            // waiting to be asked). Nudge it again, at most once a second.
+            if (!requestIdr && (csd == null || queue.isWaitingForIdr)) {
+                requestIdr = throttledIdrRequestLocked()
+            }
         }
         if (requestIdr) listener.onRequestIdr()
     }
@@ -452,6 +460,14 @@ class PcStreamDecoder(private val listener: Listener) {
         }
     }
 
+    /** True at most once per [IDR_NUDGE_INTERVAL_NS], so a stalled stream can't spam the server. */
+    private fun throttledIdrRequestLocked(): Boolean {
+        val now = System.nanoTime()
+        if (now - lastIdrNudgeNs < IDR_NUDGE_INTERVAL_NS) return false
+        lastIdrNudgeNs = now
+        return true
+    }
+
     /** Rebuilds the codec after an error and asks for a fresh sync point. */
     private fun recoverLocked(reason: String) {
         releaseCodecLocked()
@@ -507,6 +523,9 @@ class PcStreamDecoder(private val listener: Listener) {
 
     private companion object {
         const val TAG = "PcStreamDecoder"
+
+        /** Minimum gap between "still stuck, please send a sync frame" nudges. */
+        const val IDR_NUDGE_INTERVAL_NS = 1_000_000_000L
 
         val VENDOR_LOW_LATENCY_KEYS = arrayOf(
             "vendor.qti-ext-dec-low-latency.enable",   // Qualcomm

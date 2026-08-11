@@ -682,7 +682,11 @@ class PcLinkClient(
             }
             if (!currentCoroutineContext().isActive) return
 
-            if (sessionStreamed) {
+            // "It worked" means frames actually arrived AND the session lasted: a server that
+            // accepts the video connection and drops it a moment later (spent token, another
+            // client holding the stream) must still reach the error state instead of retrying
+            // twice a second forever.
+            if (sessionStreamed && nowMs() - sessionStartMs >= MIN_GOOD_SESSION_MS) {
                 attempt = 0
                 failingSince = 0L
             }
@@ -707,6 +711,7 @@ class PcLinkClient(
      */
     private suspend fun runSession() {
         sessionStreamed = false
+        sessionStartMs = nowMs()
         idrRequested = false
         pendingPong = null
         unansweredPings = 0
@@ -728,7 +733,6 @@ class PcLinkClient(
             videoSocket = video
             video.getOutputStream().apply { write(preamble); flush() }
 
-            sessionStreamed = true
             lastRxMs = nowMs()
             emitState(PcLinkState.Streaming(config))
 
@@ -850,6 +854,7 @@ class PcLinkClient(
             while (true) {
                 val frame = parser.nextFrame() ?: break
                 videoFrames.incrementAndGet()
+                sessionStreamed = true
                 listener.onVideoFrame(frame)
             }
             if (parser.skippedBytes != lastSkipped) {
@@ -868,6 +873,7 @@ class PcLinkClient(
     @Volatile private var lastRxMs = 0L
     @Volatile private var unansweredPings = 0
     @Volatile private var sessionStreamed = false
+    @Volatile private var sessionStartMs = 0L
 
     private fun effectiveCodecs(): List<PcCodecCapability> =
         codecs.ifEmpty { listOf(PcCodecCapability(MIME_AVC, 1920, 1080, 60)) }
@@ -944,6 +950,9 @@ class PcLinkClient(
 
         /** How long failures may run back-to-back before the error is surfaced to the user. */
         const val MAX_RETRY_WINDOW_MS = 30_000L
+
+        /** Shorter than this (even with frames) counts as a failure, not a working session. */
+        const val MIN_GOOD_SESSION_MS = 3000L
 
         private const val CONTROL_READ_TIMEOUT_MS = 1000
         private const val VIDEO_READ_TIMEOUT_MS = 1000
