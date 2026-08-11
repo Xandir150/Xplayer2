@@ -83,7 +83,10 @@ import com.teleteh.xplayer2.data.depth.DepthFrameWorker
 import com.teleteh.xplayer2.data.depth.DepthModelManager
 import com.teleteh.xplayer2.data.depth.DepthThermalGovernor
 import com.teleteh.xplayer2.data.glasses.GlassesController
+import com.teleteh.xplayer2.data.network.PairingFailure
+import com.teleteh.xplayer2.data.network.PcLinkAuth
 import com.teleteh.xplayer2.data.network.PcLinkClient
+import com.teleteh.xplayer2.data.network.PcLinkPairingStore
 import com.teleteh.xplayer2.data.network.PcLinkState
 import com.teleteh.xplayer2.data.network.PcLinkStreamConfig
 import com.teleteh.xplayer2.data.network.PcVideoFrame
@@ -333,6 +336,10 @@ class PlayerActivity : AppCompatActivity() {
     private var pcLinkControlPort: Int = 0
     private var pcLinkVideoPort: Int = 0
     private var pcLinkServerName: String = ""
+    /** The PC's identity fingerprint, when [PcConnectActivity] paired or re-authenticated with it. */
+    private var pcLinkServerId: String? = null
+    // Built on demand from the PC Link client's IO thread (see [pcLinkAuth]), read from there only.
+    @Volatile private var pcLinkStore: PcLinkPairingStore? = null
     private var pcLinkClient: PcLinkClient? = null
     // Read from the network reader thread (onVideoFrame), so volatile.
     @Volatile private var pcDecoder: PcStreamDecoder? = null
@@ -2992,6 +2999,8 @@ class PlayerActivity : AppCompatActivity() {
         pcLinkVideoPort = intent.getIntExtra(PcConnectActivity.EXTRA_PCLINK_VIDEO_PORT, DEFAULT_VIDEO_PORT)
         pcLinkServerName = intent.getStringExtra(PcConnectActivity.EXTRA_PCLINK_NAME)
             ?.takeIf { it.isNotBlank() } ?: host
+        pcLinkServerId = intent.getStringExtra(PcConnectActivity.EXTRA_PCLINK_SERVER_ID)
+            ?.takeIf { it.isNotBlank() }
         // Not a media item: nothing to resume, nothing to put in Recents (saveProgress() bails on a
         // null sourceUri, which is exactly what we want).
         sourceUri = null
@@ -3033,11 +3042,30 @@ class PlayerActivity : AppCompatActivity() {
             host = host,
             controlPort = pcLinkControlPort,
             videoPort = pcLinkVideoPort,
-            listener = pcLinkListener
+            listener = pcLinkListener,
+            authProvider = { pcLinkAuth() }
         )
         pcLinkClient = client
         client.connect(lifecycleScope)
         if (pcDebugView?.visibility == View.VISIBLE) startPcLinkDebugTicker()
+    }
+
+    /**
+     * The stored pairing this connection should authenticate with, or null to speak the
+     * unauthenticated M1 flow (a PC we've never paired with, or one the user has since forgotten).
+     *
+     * Called by [PcLinkClient] on its IO thread once per connection attempt — which is what it
+     * needs to be: the token [PcConnectActivity] saw during its own handshake died with that
+     * control session (protocol.md §2.13), so the player authenticates its own connection, and
+     * every reconnect authenticates again with a fresh challenge.
+     */
+    private fun pcLinkAuth(): PcLinkAuth? {
+        val serverId = pcLinkServerId ?: return null
+        val store = pcLinkStore ?: PcLinkPairingStore(applicationContext).also { pcLinkStore = it }
+        // Exactly this PC: PcConnectActivity has already resolved which pairing belongs to the
+        // address, so there is nothing here for the FSM's other candidates to rescue.
+        val pairing = store.get(serverId) ?: return null
+        return PcLinkAuth(store.identity(), listOf(pairing))
     }
 
     /**
@@ -3058,6 +3086,8 @@ class PlayerActivity : AppCompatActivity() {
         disconnectPcLink()
         pcLinkHost = null
         pcLinkServerName = ""
+        pcLinkServerId = null
+        pcLinkStore = null
         pcLinkConfig = null
         pcLinkSourceIsSbs = false
         pcVideoWidth = 0
@@ -3115,6 +3145,7 @@ class PlayerActivity : AppCompatActivity() {
                     setPcLinkStatus("$pcLinkServerName — reconnecting (${state.attempt})", dim = false)
                 is PcLinkState.Failed ->
                     setPcLinkStatus("$pcLinkServerName — disconnected: ${state.reason}", dim = false)
+                is PcLinkState.AuthFailed -> onPcLinkAuthFailed(state.reason)
             }
         }
 
@@ -3135,6 +3166,43 @@ class PlayerActivity : AppCompatActivity() {
         override fun onVideoFrame(frame: PcVideoFrame) {
             pcDecoder?.submit(frame)
         }
+    }
+
+    /**
+     * The PC refused our stored key. Two outcomes, and the difference is the whole of §8.4:
+     *
+     * * `unknown_client` — the PC has genuinely forgotten this phone. Nothing here can fix that, so
+     *   we hand the user back to [PcConnectActivity] with [PcConnectActivity.EXTRA_PCLINK_REPAIR],
+     *   which offers a fresh ceremony *behind a tap*. Never automatically: a re-pair must always
+     *   resurface the 6-digit code, or a MITM could strip the pairing invisibly.
+     * * anything else — `bad_proof`, an unverifiable server proof, a `protocol` refusal — is an
+     *   impostor or corruption signal. We say so and offer nothing; the client has already stopped
+     *   retrying, and "Forget this PC" stays a deliberate long-press on the connect screen.
+     */
+    private fun onPcLinkAuthFailed(reason: PairingFailure) {
+        if (!isPcLinkMode) return
+        disconnectPcLink()
+        if (reason == PairingFailure.UNKNOWN_TO_PC) {
+            startActivity(
+                Intent(this, PcConnectActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    putExtra(PcConnectActivity.EXTRA_PCLINK_REPAIR, true)
+                    putExtra(PcConnectActivity.EXTRA_PCLINK_HOST, pcLinkHost)
+                    putExtra(PcConnectActivity.EXTRA_PCLINK_CONTROL_PORT, pcLinkControlPort)
+                    putExtra(PcConnectActivity.EXTRA_PCLINK_VIDEO_PORT, pcLinkVideoPort)
+                    putExtra(PcConnectActivity.EXTRA_PCLINK_NAME, pcLinkServerName)
+                    putExtra(PcConnectActivity.EXTRA_PCLINK_SERVER_ID, pcLinkServerId)
+                }
+            )
+            finish()
+            return
+        }
+        val message = if (reason == PairingFailure.AUTH_FAILED) {
+            R.string.pclink_stream_auth_failed
+        } else {
+            R.string.pclink_stream_auth_error
+        }
+        setPcLinkStatus("$pcLinkServerName — ${getString(message)}", dim = false)
     }
 
     private val pcDecoderListener = object : PcStreamDecoder.Listener {

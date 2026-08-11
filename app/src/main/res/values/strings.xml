@@ -127,6 +127,10 @@
     <string name="pclink_pair_lost">Lost the connection to that PC.</string>
     <string name="pclink_auth_failed">Couldn\'t verify this PC. Someone may be interfering with your network, or the pairing is corrupted.</string>
 
+    <!-- Authentication of the player\'s own streaming connection failed; shown on the video overlay -->
+    <string name="pclink_stream_auth_failed">couldn\'t verify this PC. Someone may be interfering with your network, or the pairing is corrupted.</string>
+    <string name="pclink_stream_auth_error">couldn\'t sign in to this PC. Try connecting again.</string>
+
     <!-- The PC forgot us: re-pairing must always be an explicit choice, never automatic -->
     <string name="pclink_repair_title">Pair again?</string>
     <string name="pclink_repair_body">This PC no longer recognizes your device. Pair again?</string>

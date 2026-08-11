@@ -26,6 +26,7 @@ import com.teleteh.xplayer2.data.network.PcLinkPairInvite
 import com.teleteh.xplayer2.data.network.PcLinkPairing
 import com.teleteh.xplayer2.data.network.PcLinkPairingClient
 import com.teleteh.xplayer2.data.network.PcLinkPairingCrypto
+import com.teleteh.xplayer2.data.network.PcLinkDiscovery
 import com.teleteh.xplayer2.data.network.PcLinkPairingStore
 import com.teleteh.xplayer2.data.network.PcLinkPhoneResponder
 import com.teleteh.xplayer2.data.network.PcLinkServer
@@ -96,6 +97,12 @@ class PcConnectActivity : AppCompatActivity() {
     private var pairedIds: Set<String> = emptySet()
     private var pairedHosts: Set<String> = emptySet()
 
+    /**
+     * A re-pair the player bounced back to us ([EXTRA_PCLINK_REPAIR]), held until the identity has
+     * finished loading — the prompt is worthless without a key to pair with.
+     */
+    private var pendingRepair: PairingTarget? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_pc_connect)
@@ -134,6 +141,7 @@ class PcConnectActivity : AppCompatActivity() {
 
         discoverySource = RealPcLinkDiscoverySource(this, lifecycleScope)
         probeSource = RealPcLinkDiscoverySource(this, lifecycleScope)
+        pendingRepair = repairRequestFrom(intent)
         loadIdentity()
         restartDiscovery()
     }
@@ -177,7 +185,57 @@ class PcConnectActivity : AppCompatActivity() {
             identity = loaded.second
             applyPairings(loaded.third)
             syncResponder()
+            consumePendingRepair()
         }
+    }
+
+    /**
+     * The player's connection was refused with `unknown_client` (protocol.md §2.14): that PC has
+     * forgotten this phone, and only a fresh ceremony can fix it.
+     *
+     * The extras describe the PC the player was talking to, so no discovery pass is needed to find
+     * it again — but nothing starts on its own. §8.4 makes the tap mandatory: a re-pair must always
+     * put the 6-digit code back in front of the user, or an attacker who can drop our packets could
+     * strip the pairing and have us silently re-establish one with them.
+     */
+    private fun repairRequestFrom(intent: Intent?): PairingTarget? {
+        if (intent?.getBooleanExtra(EXTRA_PCLINK_REPAIR, false) != true) return null
+        val host = intent.getStringExtra(EXTRA_PCLINK_HOST)?.takeIf { it.isNotBlank() } ?: return null
+        val controlPort = intent.getIntExtra(EXTRA_PCLINK_CONTROL_PORT, 0)
+        val videoPort = intent.getIntExtra(EXTRA_PCLINK_VIDEO_PORT, 0)
+        if (controlPort <= 0 || videoPort <= 0) return null
+        val name = intent.getStringExtra(EXTRA_PCLINK_NAME)?.takeIf { it.isNotBlank() } ?: host
+        return PairingTarget(
+            host = host,
+            controlPort = controlPort,
+            displayName = name,
+            // Ports we already know, so the hand-off after a successful ceremony needs no probe.
+            server = PcLinkServer(
+                name = name,
+                host = host,
+                controlPort = controlPort,
+                videoPort = videoPort,
+                protocolVersion = intent.getIntExtra(
+                    EXTRA_PCLINK_PROTOCOL_VERSION, PcLinkDiscovery.PROTOCOL_VERSION
+                ),
+                serverId = intent.getStringExtra(EXTRA_PCLINK_SERVER_ID)?.takeIf { it.isNotBlank() }
+            )
+        )
+    }
+
+    private fun consumePendingRepair() {
+        val target = pendingRepair ?: return
+        val identity = identity ?: return
+        pendingRepair = null
+        showPrompt(
+            title = getString(R.string.pclink_repair_title),
+            message = getString(R.string.pclink_repair_body),
+            positiveRes = R.string.pclink_repair_accept,
+            onAccept = {
+                claimScreenForSession()
+                startPairing(identity, target)
+            }
+        )
     }
 
     /** Starts/stops the reverse-discovery responder to match the screen's state and readiness. */
@@ -637,6 +695,13 @@ class PcConnectActivity : AppCompatActivity() {
          * session that minted it (protocol.md §2.13).
          */
         const val EXTRA_PCLINK_SERVER_ID = "com.teleteh.xplayer2.extra.PCLINK_SERVER_ID"
+
+        /**
+         * Set by [PlayerActivity] on the way *back* here, alongside the extras above, when its own
+         * connection was refused with `unknown_client`: this screen reappears and offers a fresh
+         * ceremony for that PC. A request, never an instruction — see [repairRequestFrom].
+         */
+        const val EXTRA_PCLINK_REPAIR = "com.teleteh.xplayer2.extra.PCLINK_REPAIR"
 
         /** Breather between discovery passes (each pass listens ~4 s), so a pass starts every ~5 s. */
         private const val DISCOVERY_PASS_GAP_MS = 1000L

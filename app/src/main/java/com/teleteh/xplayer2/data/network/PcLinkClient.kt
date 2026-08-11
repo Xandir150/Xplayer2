@@ -84,6 +84,19 @@ data class PcLinkStreamConfig(
     val isSbs: Boolean get() = stereo == PcLinkProtocol.STEREO_SBS
 }
 
+/**
+ * The credentials one session authenticates with: this phone's long-term identity and the stored
+ * pairings to offer the server's proof against, most-likely-first.
+ *
+ * Resolved fresh for every connection attempt (see [PcLinkClient]'s `authProvider`) because the
+ * store can change underneath a reconnect loop — the user forgetting the PC, or re-pairing it from
+ * the connect screen, must take effect on the next attempt rather than at the next app launch.
+ */
+class PcLinkAuth(
+    val identity: PcLinkPairingCrypto.Identity,
+    val candidates: List<PcLinkPairing>
+)
+
 /** One desktop window on the canvas, from the server's `windows` message. */
 data class PcLinkWindow(
     val id: Long,
@@ -565,16 +578,29 @@ sealed class PcLinkState {
 
     /** Gave up after [PcLinkClient.MAX_RETRY_WINDOW_MS] of failures. Terminal. */
     data class Failed(val reason: String) : PcLinkState()
+
+    /**
+     * The PC refused our stored pairing. Terminal *without* retrying: another TCP connection would
+     * present the same key and be refused the same way, and each attempt spends the server's
+     * per-IP auth budget (design §8.5).
+     *
+     * [reason] is what the UI must branch on, and only two branches matter:
+     * [PairingFailure.UNKNOWN_TO_PC] may offer a fresh ceremony behind an explicit tap, everything
+     * else — [PairingFailure.AUTH_FAILED] above all — must not (§8.4).
+     */
+    data class AuthFailed(val reason: PairingFailure) : PcLinkState()
 }
 
 /**
  * The PC Link client: owns the control (NDJSON) and video (XPV1) TCP connections for one session
  * and keeps re-establishing them while it runs.
  *
- * Shape of a session (protocol.md §4): connect control → `hello` → wait for `config` → connect
- * video → 36-byte `"XPVT"` + token preamble → frames. Because the token is single-use and bound to
- * the control connection that issued it, losing *either* connection restarts the whole session
- * (fresh control handshake ⇒ fresh token) rather than reconnecting the video socket alone.
+ * Shape of a session (protocol.md §4): connect control → `hello` → [authenticate, when paired] →
+ * wait for `config` → connect video → 36-byte `"XPVT"` + token preamble → frames. Because the token
+ * is single-use and bound to the control connection that issued it, losing *either* connection
+ * restarts the whole session (fresh control handshake ⇒ fresh token) rather than reconnecting the
+ * video socket alone — and, on a paired PC, that means a fresh authentication too: the protocol
+ * allows exactly one attempt per TCP connection.
  *
  * Threading: everything runs on [Dispatchers.IO] under the scope passed to [connect], so
  * cancelling that scope (or calling [close]) tears the session down. [Listener.onState] is
@@ -590,7 +616,14 @@ class PcLinkClient(
     private val clientName: String = Build.MODEL ?: "XPlayer2",
     /** Injectable for tests; defaults to what this device's MediaCodecs can actually decode. */
     private val codecs: List<PcCodecCapability> = deviceCodecs(),
-    private val nowMs: () -> Long = { SystemClock.elapsedRealtime() }
+    private val nowMs: () -> Long = { SystemClock.elapsedRealtime() },
+    /**
+     * The credentials for the next connection attempt, or null to speak the unauthenticated M1
+     * flow. Called on [Dispatchers.IO] immediately after `hello`, once per attempt — so it may
+     * touch the pairing store, and a pairing that appeared or was forgotten since the last attempt
+     * is honoured by the next one.
+     */
+    private val authProvider: () -> PcLinkAuth? = { null }
 ) {
 
     interface Listener {
@@ -675,6 +708,11 @@ class PcLinkClient(
                 runSession()
             } catch (ce: CancellationException) {
                 throw ce
+            } catch (a: AuthRefusedException) {
+                // Not a connectivity problem: the PC looked at our key and said no. Retrying can
+                // only repeat the answer, so this ends the client and the UI takes over.
+                emitState(PcLinkState.AuthFailed(a.failure))
+                return
             } catch (t: Throwable) {
                 reason = t.message ?: t.javaClass.simpleName
             } finally {
@@ -724,10 +762,21 @@ class PcLinkClient(
             writeLine(output, PcLinkProtocol.helloLine(clientName, effectiveCodecs()))
 
             val splitter = PcLinkLineSplitter()
+
+            // Paired PC: authenticate before anything else. A server implementing §2.6 sends no
+            // `config` at all until it has, and §2.2 forbids opening the video connection first.
+            val auth = authProvider()
+            val authToken = if (auth == null) null else authenticate(auth, input, output, splitter)
+
             val config = awaitConfig(input, splitter)
             withContext(Dispatchers.Main) { listener.onConfig(config) }
 
-            val preamble = PcLinkProtocol.videoPreamble(config.videoToken)
+            // "Whichever message most recently carried one" (§2.2): `config` follows `auth_ok`, and
+            // a conforming server either repeats that still-unspent token there — the same token,
+            // not a reuse — or issues a fresh one that supersedes it. `authToken` therefore only
+            // decides the preamble when a `config` arrives without a token of its own.
+            val videoToken = config.videoToken.ifEmpty { authToken.orEmpty() }
+            val preamble = PcLinkProtocol.videoPreamble(videoToken)
                 ?: throw IOException("server sent an invalid videoToken")
             val video = openSocket(videoPort, VIDEO_READ_TIMEOUT_MS)
             videoSocket = video
@@ -747,19 +796,117 @@ class PcLinkClient(
         }
     }
 
+    /**
+     * Runs the reconnect-authentication exchange (§2.11–§2.14) on the control socket and returns
+     * the `auth_ok` video token (null when the server sent none — `config` still carries one).
+     *
+     * Drives the very same [PairingSession] the pairing screen uses, in its `authenticate()` mode:
+     * [PairingEffect.Send] effects become lines, received lines go to [PairingSession.onLine], and
+     * the socket's poll timeout is what lets [PairingSession.onTick] fire the step deadlines. There
+     * is no user in this branch, so there is no [PairingEffect.ShowSas] or [PairingEffect.Persist]
+     * to service — which is exactly why the player can do this behind a spinner.
+     *
+     * Failures split by whether another connection could plausibly do better: a dropped link or a
+     * silent server is an [IOException] and goes back through the normal reconnect backoff, while
+     * an answer — `unknown_client`, `bad_proof`, a proof that didn't verify — is an
+     * [AuthRefusedException] that ends the client.
+     */
+    private suspend fun authenticate(
+        auth: PcLinkAuth,
+        input: InputStream,
+        output: OutputStream,
+        splitter: PcLinkLineSplitter
+    ): String? {
+        val session = PairingSession.authenticate(
+            identity = auth.identity,
+            candidates = auth.candidates,
+            protocolVersion = PcLinkProtocol.PROTOCOL_VERSION,
+            clock = nowMs
+        )
+        val buf = ByteArray(READ_BUFFER)
+        var outcome = applyAuthEffects(session.start(), output)
+
+        while (outcome == null && currentCoroutineContext().isActive) {
+            // Lines the previous read left buffered first — the server may well have packed
+            // `auth_response` and everything after it into one TCP segment.
+            outcome = drainAuthLines(session, splitter, output)
+            if (outcome != null) break
+            outcome = applyAuthEffects(session.onTick(), output)
+            if (outcome != null) break
+
+            val n = try {
+                input.read(buf)
+            } catch (_: SocketTimeoutException) {
+                // Just the poll interval expiring: loop round so onTick() sees the clock.
+                continue
+            }
+            if (n < 0) {
+                outcome = applyAuthEffects(session.onDisconnected(), output)
+                    ?: PairingOutcome.Failure(PairingFailure.CONNECTION_LOST)
+                break
+            }
+            splitter.feed(buf, 0, n)
+        }
+
+        return when (val result = outcome) {
+            is PairingOutcome.Success -> result.videoToken
+            is PairingOutcome.Failure -> throw authFailure(result.reason)
+            // Only reachable by cancellation, which unwinds through the scope anyway.
+            null -> throw CancellationException("cancelled")
+        }
+    }
+
+    private fun drainAuthLines(
+        session: PairingSession,
+        splitter: PcLinkLineSplitter,
+        output: OutputStream
+    ): PairingOutcome? {
+        while (true) {
+            val line = splitter.nextLine() ?: return null
+            if (line.isBlank()) continue
+            applyAuthEffects(session.onLine(line), output)?.let { return it }
+        }
+    }
+
+    /** Performs one batch of effects in order; returns the outcome once the session is done. */
+    private fun applyAuthEffects(effects: List<PairingEffect>, output: OutputStream): PairingOutcome? {
+        var outcome: PairingOutcome? = null
+        for (effect in effects) {
+            when (effect) {
+                is PairingEffect.Send -> writeLine(output, effect.line + "\n")
+                is PairingEffect.Finished -> outcome = effect.outcome
+                // The caller's `finally` closes both sockets on the way out; closing here as well
+                // would only race it. ShowSas/Persist belong to the pairing ceremony, which this
+                // client never runs.
+                else -> Unit
+            }
+        }
+        return outcome
+    }
+
+    /**
+     * Which failures end the client and which go back through the reconnect loop. Only the two
+     * "nothing answered" cases are worth another TCP connection; every reason the PC actually
+     * *gave* us would be given again.
+     */
+    private fun authFailure(reason: PairingFailure): Throwable = when (reason) {
+        PairingFailure.CONNECTION_LOST -> IOException("control connection closed during authentication")
+        PairingFailure.TIMEOUT -> IOException("no authentication reply within " +
+            "${PairingSession.AUTH_TIMEOUT_MS} ms")
+        else -> AuthRefusedException(reason)
+    }
+
+    /** A terminal authentication answer, carried out to [runSessions] to become an error state. */
+    private class AuthRefusedException(val failure: PairingFailure) :
+        IOException("authentication refused: $failure")
+
     /** Waits out the `hello` → `config` exchange, ignoring anything else the server says first. */
     private suspend fun awaitConfig(input: InputStream, splitter: PcLinkLineSplitter): PcLinkStreamConfig {
         val buf = ByteArray(READ_BUFFER)
         val deadline = nowMs() + HANDSHAKE_TIMEOUT_MS
         while (currentCoroutineContext().isActive) {
-            if (nowMs() > deadline) throw IOException("no config within ${HANDSHAKE_TIMEOUT_MS} ms")
-            val n = try {
-                input.read(buf)
-            } catch (_: SocketTimeoutException) {
-                continue
-            }
-            if (n < 0) throw IOException("control connection closed during handshake")
-            splitter.feed(buf, 0, n)
+            // Before reading: on an authenticated session `config` follows `auth_ok` closely enough
+            // to share a TCP segment, so it is often already sitting in the splitter by now.
             while (true) {
                 val line = splitter.nextLine() ?: break
                 when (val msg = PcLinkProtocol.parseControlLine(line)) {
@@ -771,6 +918,14 @@ class PcLinkClient(
                     else -> Unit
                 }
             }
+            if (nowMs() > deadline) throw IOException("no config within ${HANDSHAKE_TIMEOUT_MS} ms")
+            val n = try {
+                input.read(buf)
+            } catch (_: SocketTimeoutException) {
+                continue
+            }
+            if (n < 0) throw IOException("control connection closed during handshake")
+            splitter.feed(buf, 0, n)
         }
         throw CancellationException("cancelled")
     }
