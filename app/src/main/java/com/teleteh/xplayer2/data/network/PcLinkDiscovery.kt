@@ -28,13 +28,20 @@ import java.nio.charset.Charset
 
 /**
  * A PC Link server discovered on the LAN (or reached directly by IP).
+ *
+ * [serverId] is the server's identity fingerprint (64 lowercase-hex chars: SHA-256 of its
+ * long-term X25519 public key) — additive and optional (design doc §9.1), so a server built
+ * before pairing existed still discovers fine with it null. The phone uses it to pick the right
+ * stored pairing before connecting and to badge already-paired PCs in the picker; it is never
+ * trust on its own — a lying fingerprint simply fails authentication downstream.
  */
 data class PcLinkServer(
     val name: String,
     val host: String,
     val controlPort: Int,
     val videoPort: Int,
-    val protocolVersion: Int
+    val protocolVersion: Int,
+    val serverId: String? = null
 )
 
 /**
@@ -281,14 +288,17 @@ class PcLinkDiscovery(
 
         /**
          * Parses a server's probe-reply JSON, e.g.
-         * `{"name": "Alex-PC", "protocolVersion": 1, "controlPort": 48631, "videoPort": 48632}`.
+         * `{"name": "Alex-PC", "protocolVersion": 1, "controlPort": 48631, "videoPort": 48632,
+         * "serverId": "f35e...857b"}`.
          *
          * Validation is kept in lockstep with the reference decoder (Rust `xpl_proto`'s
          * `DiscoveryReply`): `name` is a required non-empty String there (no default — so no
          * "XPlayer Link" fallback here either), both ports are `u16`, and this client only speaks
-         * [PROTOCOL_VERSION]. Unknown fields are ignored, like the reference. Returns null for
-         * malformed JSON or missing/invalid required fields. Extracted as a pure function so it's
-         * directly unit-testable without a socket.
+         * [PROTOCOL_VERSION]. `serverId` is additive/optional there too — absent or blank simply
+         * decodes to null, not a parse failure, so pre-pairing servers stay discoverable. Unknown
+         * fields are ignored, like the reference. Returns null for malformed JSON or missing/invalid
+         * *required* fields. Extracted as a pure function so it's directly unit-testable without a
+         * socket.
          */
         internal fun parseServerResponse(json: String, host: String): PcLinkServer? {
             return try {
@@ -301,13 +311,18 @@ class PcLinkDiscovery(
                 // Bound to real port numbers: an out-of-range controlPort would otherwise ride the
                 // intent extras all the way to a Socket() that throws.
                 if (controlPort !in PORT_RANGE || videoPort !in PORT_RANGE) return null
+                // Opaque hint, not authority (see PcLinkServer.serverId) — no hex/length validation
+                // here, exactly like the reference decoder. A malformed fingerprint just fails
+                // pairing lookup/auth downstream instead of hiding the server from the picker.
+                val serverId = obj.optString("serverId").trim().ifEmpty { null }
 
                 PcLinkServer(
                     name = name,
                     host = host,
                     controlPort = controlPort,
                     videoPort = videoPort,
-                    protocolVersion = PROTOCOL_VERSION
+                    protocolVersion = PROTOCOL_VERSION,
+                    serverId = serverId
                 )
             } catch (_: Exception) {
                 null

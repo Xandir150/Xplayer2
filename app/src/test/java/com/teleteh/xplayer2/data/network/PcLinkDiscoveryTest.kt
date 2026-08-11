@@ -175,6 +175,40 @@ class PcLinkDiscoveryTest {
         assertNull(PcLinkDiscovery.parseServerResponse(PcLinkDiscovery.PROBE_MESSAGE, "192.168.1.42"))
     }
 
+    // --- serverId (design doc §9.1: additive, optional identity fingerprint) --------------
+
+    @Test
+    fun `parses a reply carrying a serverId`() {
+        val id = "f35e5616160a30bf3c6e79fa73c576d40205e8fc3ba4e1c6dcf93e6b98e857b"
+        val json =
+            """{"name":"Alex-PC","protocolVersion":1,"controlPort":48631,"videoPort":48632,"serverId":"$id"}"""
+
+        val server = PcLinkDiscovery.parseServerResponse(json, "192.168.1.42")
+
+        assertEquals(id, server?.serverId)
+    }
+
+    @Test
+    fun `a reply with no serverId still parses, with it null`() {
+        // A server built before pairing existed must stay discoverable — serverId is additive.
+        val json = """{"name":"Alex-PC","protocolVersion":1,"controlPort":48631,"videoPort":48632}"""
+
+        val server = PcLinkDiscovery.parseServerResponse(json, "192.168.1.42")
+
+        assertEquals("Alex-PC", server?.name)
+        assertNull(server?.serverId)
+    }
+
+    @Test
+    fun `a blank serverId is treated as absent`() {
+        val json =
+            """{"name":"Alex-PC","protocolVersion":1,"controlPort":48631,"videoPort":48632,"serverId":"   "}"""
+
+        val server = PcLinkDiscovery.parseServerResponse(json, "192.168.1.42")
+
+        assertNull(server?.serverId)
+    }
+
     // --- per-pass dedupe ------------------------------------------------------------------
 
     private fun server(
