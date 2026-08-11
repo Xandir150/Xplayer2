@@ -601,7 +601,14 @@ class PcConnectActivity : AppCompatActivity() {
             putExtra(EXTRA_PCLINK_VIDEO_PORT, server.videoPort)
             putExtra(EXTRA_PCLINK_PROTOCOL_VERSION, server.protocolVersion)
             putExtra(EXTRA_PCLINK_NAME, server.name)
-            putExtra(EXTRA_PCLINK_SERVER_ID, server.serverId ?: serverId)
+            // [serverId] comes from the exchange we just completed, so it is the fingerprint the
+            // pairing was actually stored under. `server.serverId` is only ever a hint — discovery
+            // is unauthenticated (§8.4), and on the re-pair path it is the *stale* fingerprint the
+            // player bounced back to us, which is precisely the one that no longer works when a PC
+            // forgot us by regenerating its identity. Preferring the hint there would hand the
+            // player an id with no stored pairing, earning another `unknown_client` and another
+            // bounce: a re-pair loop in which every ceremony succeeds.
+            putExtra(EXTRA_PCLINK_SERVER_ID, serverId.ifEmpty { server.serverId.orEmpty() })
         }
         DisplayUtils.startOnBestDisplay(this, intent)
         finish()
