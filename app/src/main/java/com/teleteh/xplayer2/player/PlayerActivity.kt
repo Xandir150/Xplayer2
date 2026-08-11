@@ -83,6 +83,11 @@ import com.teleteh.xplayer2.data.depth.DepthFrameWorker
 import com.teleteh.xplayer2.data.depth.DepthModelManager
 import com.teleteh.xplayer2.data.depth.DepthThermalGovernor
 import com.teleteh.xplayer2.data.glasses.GlassesController
+import com.teleteh.xplayer2.data.network.PcLinkClient
+import com.teleteh.xplayer2.data.network.PcLinkState
+import com.teleteh.xplayer2.data.network.PcLinkStreamConfig
+import com.teleteh.xplayer2.data.network.PcVideoFrame
+import com.teleteh.xplayer2.ui.network.PcConnectActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import com.teleteh.xplayer2.BuildConfig
 import com.teleteh.xplayer2.util.VideoStreamExtractor
@@ -118,9 +123,26 @@ class PlayerActivity : AppCompatActivity() {
         // Current instance for remote control access
         var currentInstance: PlayerActivity? = null
             private set
+
+        // --- PC Link ---
+        // Fallbacks only: the ports actually used are the ones the server advertised in its
+        // discovery reply and carried on the intent (the spec forbids hardcoding them).
+        private const val DEFAULT_CONTROL_PORT = 48631
+        private const val DEFAULT_VIDEO_PORT = 48632
+        private const val PCLINK_DEBUG_INTERVAL_MS = 500L
     }
 
     private fun navigateBackToPrimary() {
+        // PC Link goes back where it came from — the PC picker — not to the media library.
+        if (isPcLinkMode) {
+            exitPcLink()
+            val pcIntent = Intent(this, PcConnectActivity::class.java)
+            pcIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            DisplayUtils.startOnPrimaryDisplay(this, pcIntent)
+            dismissPresentation()
+            finish()
+            return
+        }
         // Bring MainActivity to foreground on primary display then finish this player
         val intent = Intent(this, MainActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -304,6 +326,37 @@ class PlayerActivity : AppCompatActivity() {
     private var selectedVariantIndex: Int = 0
     private var btnQualityRef: ImageButton? = null
 
+    // --- PC Link (M1): the PC streams its desktop here, so there is no media item and no
+    // ExoPlayer at all — a socket feeds MediaCodec, which renders into the same GL surface the
+    // file path uses. Everything below is null/0 in every other mode; [isPcLinkMode] is the switch.
+    private var pcLinkHost: String? = null
+    private var pcLinkControlPort: Int = 0
+    private var pcLinkVideoPort: Int = 0
+    private var pcLinkServerName: String = ""
+    private var pcLinkClient: PcLinkClient? = null
+    // Read from the network reader thread (onVideoFrame), so volatile.
+    @Volatile private var pcDecoder: PcStreamDecoder? = null
+    private var pcLinkConfig: PcLinkStreamConfig? = null
+    private var pcLinkSourceIsSbs = false
+    private var pcVideoWidth = 0
+    private var pcVideoHeight = 0
+    private var pcStatusView: TextView? = null
+    private var pcDebugView: TextView? = null
+    private var pcDebugTicker: Runnable? = null
+    // Latency estimate. The server's pts_us is on ITS monotonic clock, so an absolute delay is not
+    // computable; the running minimum of (our clock - pts) is the best-case one-way delay of this
+    // session, and what we show is how far above that floor we currently are.
+    @Volatile private var pcLatencyFloorUs = Long.MAX_VALUE
+    @Volatile private var pcLatencyUs = 0L
+    private var pcStatsAtMs = 0L
+    private var pcStatsFrames = 0L
+    private var pcStatsBytes = 0L
+    private var pcStatsFps = 0f
+    private var pcStatsMbps = 0f
+
+    /** True once this activity was launched (or re-launched) with the PC Link extras. */
+    private val isPcLinkMode: Boolean get() = pcLinkHost != null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         currentInstance = this
@@ -468,6 +521,16 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun loadFromIntent(intent: Intent?) {
+        // PC Link hands us a host instead of a URI. Checked first: such an intent carries no data
+        // URI at all, which everything below would read as "nothing to play" and finish().
+        val pcHost = intent?.getStringExtra(PcConnectActivity.EXTRA_PCLINK_HOST)?.takeIf { it.isNotBlank() }
+        if (pcHost != null) {
+            startPcLink(intent, pcHost)
+            return
+        }
+        // A file/stream intent arriving while PC Link is up (singleTop → onNewIntent) ends it.
+        if (isPcLinkMode) exitPcLink()
+
         val action = intent?.action
         sourceUri = when (action) {
             Intent.ACTION_SEND -> {
@@ -1001,6 +1064,8 @@ class PlayerActivity : AppCompatActivity() {
         super.onStart()
         // Don't initialize player if stream extraction is in progress
         if (player == null && sourceUri != null && !isExtractingStream) initializePlayer()
+        // Coming back to the foreground with the link torn down (see onStop): re-open it.
+        if (isPcLinkMode) connectPcLink()
         // Try to show Presentation on external display
         tryShowExternalPresentation()
         // If the picture is on the goggles, bring the phone-side remote to the front.
@@ -1016,6 +1081,9 @@ class PlayerActivity : AppCompatActivity() {
      */
     private fun showRemoteControlFront() {
         if (presentation == null) return
+        // The remote drives an ExoPlayer; PC Link has none, and its own status overlay lives on
+        // this activity's window, so the phone stays here.
+        if (isPcLinkMode) return
         startActivity(Intent(this, RemoteControlActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         })
@@ -1036,6 +1104,10 @@ class PlayerActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         saveProgress()
+        // PC Link follows the same rule as the player: keep streaming while the picture is on the
+        // glasses (the phone screen going dark is not a reason to stop), otherwise drop the
+        // sockets and the codec — nothing should decode a desktop nobody is looking at.
+        if (isPcLinkMode && !(presentation != null || isOnExternalDisplay())) disconnectPcLink()
         // If external Presentation is active or activity is on external display, keep the player alive to continue playback on the secondary display
         if (!(presentation != null || isOnExternalDisplay())) {
             // Release audio-side resources FIRST. LoudnessEnhancer is attached to the player's
@@ -1135,6 +1207,7 @@ class PlayerActivity : AppCompatActivity() {
             currentInstance = null
         }
         saveProgress()
+        exitPcLink()
         if (lazy3dEnabled) stopLazy3d()
         unregisterDisplayListener()
         getSystemService(android.media.AudioManager::class.java)
@@ -1624,6 +1697,13 @@ class PlayerActivity : AppCompatActivity() {
         // Create Presentation and route video there
         val pres = ExternalPlayerPresentation(this, ext) { surface ->
             presentationSurface = surface
+            if (isPcLinkMode) {
+                // PC Link has no ExoPlayer to re-target: the decoder takes the new surface (and
+                // detaches on null, when the goggles' panel powers down).
+                if (surface != null) glView?.visibility = View.GONE
+                updatePcLinkSurface()
+                return@ExternalPlayerPresentation
+            }
             if (surface != null) {
                 player?.let { exo ->
                     exo.setVideoSurface(surface)
@@ -1648,6 +1728,8 @@ class PlayerActivity : AppCompatActivity() {
             // current render config (SBS / source-layout / resize / aspect) and re-derive
             // the mode for this display so resize, OU/SBS and parallax all take effect.
             applyRenderMode()
+            // Same for PC Link: the decoder must follow the render target that just changed.
+            if (isPcLinkMode) updatePcLinkSurface()
             if (lazy3dEnabled) reapplyLazy3dToActiveView()
         } catch (e: Throwable) {
             android.util.Log.e("XPlayer2", "Failed to show Presentation", e)
@@ -1656,6 +1738,7 @@ class PlayerActivity : AppCompatActivity() {
             // Restore local rendering
             glView?.visibility = View.VISIBLE
             glSurface?.let { player?.setVideoSurface(it) }
+            if (isPcLinkMode) updatePcLinkSurface()
         }
         updatePlaybackService()
     }
@@ -1671,6 +1754,8 @@ class PlayerActivity : AppCompatActivity() {
             glSurface?.let { player?.setVideoSurface(it) }
             // Local glView is the active target again — re-push render config to it.
             applyRenderMode()
+            // …and hand the decoder the local surface, for the same reason.
+            if (isPcLinkMode) updatePcLinkSurface()
             if (lazy3dEnabled && !hasLazy3dDisplay()) {
                 // The glasses were the only stereo target (phone screen isn't ultrawide):
                 // an SBS pair has nowhere to go now, so shut Lazy 3D down instead of burning
@@ -1877,6 +1962,12 @@ class PlayerActivity : AppCompatActivity() {
      * for the clip and is persisted.
      */
     private fun applyRenderMode() {
+        // PC Link picks its layout from the server's `config`, never from aspect-ratio detection:
+        // the desktop canvas is ultrawide by design, which the heuristic below would read as SBS.
+        if (isPcLinkMode) {
+            applyPcLinkRenderConfig()
+            return
+        }
         if (!sbsExplicitlyConfigured) {
             // Auto: derive the stereo mode from the detected source layout.
             val layout = detectSourceLayout()
@@ -2880,5 +2971,311 @@ class PlayerActivity : AppCompatActivity() {
     fun finishAndClose() {
         dismissPresentation()
         finish()
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // PC Link — desktop streaming from a PC (milestone M1)
+    // ------------------------------------------------------------------------------------------
+    //
+    // An additive branch that shares only the *output* half of this activity: the decoded picture
+    // goes to whichever OuToSbsGlView is live — the Presentation's when the glasses are connected,
+    // the activity's own otherwise — exactly like a file. Everything upstream of the surface is
+    // different: no ExoPlayer, no MediaItem, no track selection, no recents, no resume position.
+    // The video arrives as Annex-B access units over TCP (PcLinkClient) and is decoded straight to
+    // that surface with no pacing (PcStreamDecoder); the PC does the pacing.
+
+    /** One-time setup for a PC Link session, then [connectPcLink]. */
+    private fun startPcLink(intent: Intent, host: String) {
+        exitPcLink()
+        pcLinkHost = host
+        pcLinkControlPort = intent.getIntExtra(PcConnectActivity.EXTRA_PCLINK_CONTROL_PORT, DEFAULT_CONTROL_PORT)
+        pcLinkVideoPort = intent.getIntExtra(PcConnectActivity.EXTRA_PCLINK_VIDEO_PORT, DEFAULT_VIDEO_PORT)
+        pcLinkServerName = intent.getStringExtra(PcConnectActivity.EXTRA_PCLINK_NAME)
+            ?.takeIf { it.isNotBlank() } ?: host
+        // Not a media item: nothing to resume, nothing to put in Recents (saveProgress() bails on a
+        // null sourceUri, which is exactly what we want).
+        sourceUri = null
+        recentKeyUri = null
+        currentResolvedTitle = pcLinkServerName
+        // Stand the whole ExoPlayer UI down. PlayerView with no player closes its shutter — an
+        // opaque black view drawn ON TOP of glView — so leaving it visible would hide the stream.
+        playerView.player = null
+        playerView.visibility = View.GONE
+        // Only claim the local view when the glasses aren't already showing the picture.
+        if (presentation == null) glView?.visibility = View.VISIBLE
+        // A remote left over from a previous file session drives an ExoPlayer that no longer
+        // exists, and there is no PC Link transport for it to control.
+        RemoteControlActivity.currentInstance?.finish()
+        applyPcLinkRenderConfig()
+        // Our own surface listener replaces the one initializePlayer() installs; in PC Link mode
+        // that never runs, and on a mode switch the other side re-installs its own.
+        glView?.setOnSurfaceReadyListener { surface ->
+            glSurface = surface
+            if (isPcLinkMode) updatePcLinkSurface()
+        }
+        ensurePcLinkOverlay()
+        setPcLinkStatus(getString(R.string.pclink_connecting), dim = false)
+        connectPcLink()
+    }
+
+    /** Opens (or re-opens, after a background trip) the link. */
+    private fun connectPcLink() {
+        val host = pcLinkHost ?: return
+        if (pcLinkClient != null) return
+        pcLatencyFloorUs = Long.MAX_VALUE
+        pcLatencyUs = 0L
+        val decoder = PcStreamDecoder(pcDecoderListener)
+        pcDecoder = decoder
+        pcLinkConfig?.let { decoder.configure(it.mime, it.width, it.height) }
+        updatePcLinkSurface()
+        val client = PcLinkClient(
+            context = applicationContext,
+            host = host,
+            controlPort = pcLinkControlPort,
+            videoPort = pcLinkVideoPort,
+            listener = pcLinkListener
+        )
+        pcLinkClient = client
+        client.connect(lifecycleScope)
+        if (pcDebugView?.visibility == View.VISIBLE) startPcLinkDebugTicker()
+    }
+
+    /**
+     * Drops the sockets and the codec but stays in PC Link mode — what backgrounding does, so a
+     * phone in a pocket isn't decoding a desktop nobody is looking at.
+     */
+    private fun disconnectPcLink() {
+        stopPcLinkDebugTicker()
+        pcLinkClient?.close()
+        pcLinkClient = null
+        pcDecoder?.release()
+        pcDecoder = null
+    }
+
+    /** Leaves PC Link mode entirely and gives the normal player UI its window back. */
+    private fun exitPcLink() {
+        if (!isPcLinkMode) return
+        disconnectPcLink()
+        pcLinkHost = null
+        pcLinkServerName = ""
+        pcLinkConfig = null
+        pcLinkSourceIsSbs = false
+        pcVideoWidth = 0
+        pcVideoHeight = 0
+        stopPcLinkDebugTicker()
+        (pcStatusView?.parent as? ViewGroup)?.removeView(pcStatusView)
+        (pcDebugView?.parent as? ViewGroup)?.removeView(pcDebugView)
+        pcStatusView = null
+        pcDebugView = null
+        playerView.visibility = View.VISIBLE
+    }
+
+    /**
+     * The surface handoff, and the single place that decides which one is live:
+     *
+     * * glasses connected → the [ExternalPlayerPresentation]'s GL view owns the picture, so the
+     *   decoder renders into [presentationSurface];
+     * * no glasses (or the panel just went away) → the activity's own glView, [glSurface].
+     *
+     * Both surfaces arrive asynchronously (GLSurfaceView creates them on its own thread) and can
+     * disappear at any moment when the goggles are taken off; passing null detaches the codec
+     * until one comes back. The decoder rebuilds itself and asks for a fresh IDR on every change,
+     * so a swap costs one sync frame and nothing else.
+     */
+    private fun updatePcLinkSurface() {
+        val surface = if (presentation != null) presentationSurface else glSurface
+        pcDecoder?.setSurface(surface)
+    }
+
+    /**
+     * M1 renders the desktop as a plain full-screen picture: no OU→SBS conversion, no mono
+     * duplication, no auto-detection (which would read a 32:9 canvas as side-by-side content).
+     * The one thing honoured is the server saying its stream *is* already SBS.
+     */
+    private fun applyPcLinkRenderConfig() {
+        val v = activeGlView() ?: return
+        v.setSbsEnabled(pcLinkSourceIsSbs)
+        v.setSourceIsSbs(pcLinkSourceIsSbs)
+        v.setDuplicateMonoToSbs(false)
+        v.setSwapEyes(false)
+        v.updateResizeMode(0)
+        if (pcVideoWidth > 0 && pcVideoHeight > 0) {
+            v.updateVideoAspectRatio(pcVideoWidth, pcVideoHeight)
+        }
+    }
+
+    private val pcLinkListener = object : PcLinkClient.Listener {
+        override fun onState(state: PcLinkState) {
+            when (state) {
+                is PcLinkState.Connecting ->
+                    setPcLinkStatus(getString(R.string.pclink_connecting), dim = false)
+                is PcLinkState.Streaming ->
+                    setPcLinkStatus(pcLinkServerName, dim = true)
+                is PcLinkState.Reconnecting ->
+                    setPcLinkStatus("$pcLinkServerName — reconnecting (${state.attempt})", dim = false)
+                is PcLinkState.Failed ->
+                    setPcLinkStatus("$pcLinkServerName — disconnected: ${state.reason}", dim = false)
+            }
+        }
+
+        override fun onConfig(config: PcLinkStreamConfig) {
+            pcLinkConfig = config
+            pcLinkSourceIsSbs = config.isSbs
+            pcVideoWidth = config.width
+            pcVideoHeight = config.height
+            pcDecoder?.configure(config.mime, config.width, config.height)
+            applyPcLinkRenderConfig()
+            android.util.Log.i(
+                "XPlayer2",
+                "PC Link config: ${config.mime} ${config.width}x${config.height}@${config.fps} ${config.stereo}"
+            )
+        }
+
+        /** Network thread — straight into the decoder, no main-thread hop. */
+        override fun onVideoFrame(frame: PcVideoFrame) {
+            pcDecoder?.submit(frame)
+        }
+    }
+
+    private val pcDecoderListener = object : PcStreamDecoder.Listener {
+        override fun onRequestIdr() {
+            pcLinkClient?.requestIdr()
+        }
+
+        override fun onDecoderError(message: String) {
+            runOnUiThread {
+                if (isPcLinkMode) setPcLinkStatus("$pcLinkServerName — decoder: $message", dim = false)
+            }
+        }
+
+        /** Codec callback thread: volatile writes only. */
+        override fun onFrameRendered(ptsUs: Long) {
+            val delta = android.os.SystemClock.elapsedRealtimeNanos() / 1000L - ptsUs
+            if (delta < pcLatencyFloorUs) pcLatencyFloorUs = delta
+            pcLatencyUs = delta - pcLatencyFloorUs
+        }
+
+        override fun onVideoSize(width: Int, height: Int) {
+            runOnUiThread {
+                if (!isPcLinkMode || width <= 0 || height <= 0) return@runOnUiThread
+                pcVideoWidth = width
+                pcVideoHeight = height
+                applyPcLinkRenderConfig()
+            }
+        }
+    }
+
+    // --- overlay: connection state + a tappable latency/throughput readout ---------------------
+
+    private fun ensurePcLinkOverlay() {
+        if (pcStatusView != null) return
+        val root = findViewById<ViewGroup>(android.R.id.content) ?: return
+        val pad = (12 * resources.displayMetrics.density).toInt()
+        val status = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            setBackgroundColor("#B0000000".toColorInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setPadding(pad, pad / 2, pad, pad / 2)
+            isClickable = true
+            // The overlay is also the toggle: there is no other UI in this mode, and the debug
+            // readout is exactly what a "why is it laggy?" report needs.
+            setOnClickListener { togglePcLinkDebug() }
+        }
+        root.addView(
+            status,
+            android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = android.view.Gravity.TOP or android.view.Gravity.START
+                setMargins(pad, pad, pad, pad)
+            }
+        )
+        val debug = TextView(this).apply {
+            setTextColor("#80FF80".toColorInt())
+            setBackgroundColor("#B0000000".toColorInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            typeface = Typeface.MONOSPACE
+            setPadding(pad, pad / 2, pad, pad / 2)
+            visibility = View.GONE
+        }
+        root.addView(
+            debug,
+            android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = android.view.Gravity.BOTTOM or android.view.Gravity.START
+                setMargins(pad, pad, pad, pad)
+            }
+        )
+        pcStatusView = status
+        pcDebugView = debug
+    }
+
+    private fun setPcLinkStatus(text: String, dim: Boolean) {
+        val view = pcStatusView ?: return
+        view.text = text
+        // Dimmed = "everything is fine": still there (and still tappable) but out of the way of
+        // the picture. Anything else stays fully legible.
+        view.alpha = if (dim) 0.35f else 1f
+    }
+
+    private fun togglePcLinkDebug() {
+        val debug = pcDebugView ?: return
+        if (debug.visibility == View.VISIBLE) {
+            debug.visibility = View.GONE
+            stopPcLinkDebugTicker()
+        } else {
+            debug.visibility = View.VISIBLE
+            startPcLinkDebugTicker()
+        }
+    }
+
+    private fun startPcLinkDebugTicker() {
+        stopPcLinkDebugTicker()
+        pcStatsAtMs = 0L
+        val tick = object : Runnable {
+            override fun run() {
+                updatePcLinkDebugText()
+                uiHandler.postDelayed(this, PCLINK_DEBUG_INTERVAL_MS)
+            }
+        }
+        pcDebugTicker = tick
+        uiHandler.post(tick)
+    }
+
+    private fun stopPcLinkDebugTicker() {
+        pcDebugTicker?.let { uiHandler.removeCallbacks(it) }
+        pcDebugTicker = null
+    }
+
+    private fun updatePcLinkDebugText() {
+        val view = pcDebugView ?: return
+        val client = pcLinkClient
+        val decoder = pcDecoder
+        val now = android.os.SystemClock.elapsedRealtime()
+        val frames = decoder?.framesRendered ?: 0L
+        val bytes = client?.videoBytes?.get() ?: 0L
+        if (pcStatsAtMs > 0L && now > pcStatsAtMs) {
+            val dt = (now - pcStatsAtMs) / 1000f
+            pcStatsFps = (frames - pcStatsFrames) / dt
+            pcStatsMbps = (bytes - pcStatsBytes) * 8f / dt / 1_000_000f
+        }
+        pcStatsAtMs = now
+        pcStatsFrames = frames
+        pcStatsBytes = bytes
+        val config = pcLinkConfig
+        view.text = buildString {
+            append(config?.let { "${it.mime.removePrefix("video/")} ${it.width}x${it.height} ${it.stereo}" }
+                ?: "no config")
+            append("\nfps ").append("%.1f".format(pcStatsFps))
+            append("  drop ").append(decoder?.droppedFrames ?: 0L)
+            append("  frames ").append(frames)
+            append("\nrate ").append("%.1f".format(pcStatsMbps)).append(" Mbps")
+            append("  resync ").append(client?.resyncBytes?.get() ?: 0L).append(" B")
+            append("\nlat +").append(pcLatencyUs / 1000L).append(" ms")
+            append("  rtt ").append("%.1f".format((client?.lastRttUs ?: 0L) / 1000f)).append(" ms")
+        }
     }
 }
