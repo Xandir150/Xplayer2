@@ -150,6 +150,33 @@ class PcLinkPairingStoreTest {
         assertEquals("PC A", s.findByHost("192.168.1.10")?.name)
     }
 
+    /**
+     * A PC that forgot us by **regenerating its identity** re-pairs under a new fingerprint, so the
+     * store ends up holding two records for the same machine at the same address: the fresh pairing
+     * and an orphan whose LTK the PC no longer has.
+     *
+     * The orphan is deliberately not swept — nothing here can tell "this PC replaced its identity"
+     * from "two PCs took turns on one DHCP lease", and deleting a pairing on a guess is worse than
+     * keeping a dead one. What must hold is that the *fresh* record wins the host lookup, so the
+     * connect screen leads with a key that can actually authenticate. (Even if it didn't, the auth
+     * FSM tries every stored key, so this is a "leads with the right one" contract rather than a
+     * correctness cliff — but it is the contract [PcLinkPairingStore.findByHost] documents.)
+     */
+    @Test
+    fun aRegeneratedPcsFreshPairingWinsTheHostLookup() {
+        val s = store()
+        s.addOrUpdate("a".repeat(64), "Living Room PC", ltk(0x01), host = "192.168.1.10")
+        clock = clock.plusSeconds(86_400)
+        s.addOrUpdate("b".repeat(64), "Living Room PC", ltk(0x02), host = "192.168.1.10")
+
+        val found = s.findByHost("192.168.1.10")!!
+        assertEquals("b".repeat(64), found.serverId)
+        assertArrayEquals(ltk(0x02), found.ltk)
+        // The orphan stays, and stays available as a fallback auth candidate.
+        assertEquals(2, s.getAll().size)
+        assertEquals("b".repeat(64), s.getAll().first().serverId)
+    }
+
     /** Newest contact first: the PC you used last is the one you're most likely reconnecting to. */
     @Test
     fun getAllOrdersByLastSeenDescending() {
