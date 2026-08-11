@@ -957,6 +957,11 @@ class PcLinkClient(
                         emitState(PcLinkState.Streaming(msg.config))
                     }
                     // `windows` (per-window depth) is M2 — ignored for now, like any unknown type.
+                    // When M2 starts rendering these: `title` is peer-supplied, but it arrives only
+                    // after `auth_ok`, so it comes from the PC the user approved against a 6-digit
+                    // code — not a spoofable string like an unauthenticated discovery reply, and
+                    // distrusting it would only mangle legitimate window titles. What it does want
+                    // is rendering hygiene: a length cap, control characters stripped, no markup.
                     else -> Unit
                 }
             }
