@@ -104,6 +104,7 @@
     <string name="pclink_empty">Start XPlayer Link on your computer to see it here</string>
     <string name="pclink_connecting">Connecting…</string>
     <string name="pclink_invalid_host">Enter a valid IP address or hostname</string>
+    <string name="pclink_manual_unreachable">Couldn\'t reach XPlayer Link at that address</string>
 
     <!-- Common -->
     <string name="common_add">Add</string>

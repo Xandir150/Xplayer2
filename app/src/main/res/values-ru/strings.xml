@@ -83,6 +83,7 @@
     <string name="pclink_empty">Запустите XPlayer Link на компьютере, чтобы он появился здесь</string>
     <string name="pclink_connecting">Подключение…</string>
     <string name="pclink_invalid_host">Введите корректный IP-адрес или имя хоста</string>
+    <string name="pclink_manual_unreachable">Не удалось найти XPlayer Link по этому адресу</string>
 
     <!-- Common -->
     <string name="common_add">Добавить</string>

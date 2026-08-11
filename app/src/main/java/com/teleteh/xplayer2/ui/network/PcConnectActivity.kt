@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.teleteh.xplayer2.R
+import com.teleteh.xplayer2.data.network.PcLinkServer
 import com.teleteh.xplayer2.player.PlayerActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import kotlinx.coroutines.delay
@@ -23,15 +24,15 @@ import kotlinx.coroutines.launch
 
 /**
  * "Connect to PC" screen for PC Link (PC -> glasses desktop streaming): lists PC servers found on
- * the LAN, offers manual IP entry, and — for now — hands off to [PlayerActivity] via a placeholder
- * intent carrying the `EXTRA_PCLINK_*` extras. Real PC Link playback wiring (actually opening the
- * stream) lands in a later package; [PlayerActivity] itself isn't touched here.
+ * the LAN (via [RealPcLinkDiscoverySource], wrapping `data.network.PcLinkDiscovery`'s UDP
+ * broadcast), offers manual IP entry (probed the same way discovery probes a single host), and —
+ * for now — hands off to [PlayerActivity] via a placeholder intent carrying the `EXTRA_PCLINK_*`
+ * extras. Real PC Link playback wiring (actually opening the stream) lands in a later package;
+ * [PlayerActivity] itself isn't touched here.
  *
- * Discovery is accessed through [PcLinkDiscoverySource] (see PcServerListState.kt) rather than the
- * real `com.teleteh.xplayer2.data.network.PcLinkDiscovery` directly, so this screen — and its unit
- * test — compile and work (manual-IP path, list state) independent of when that concurrent package
- * lands. [NoOpPcLinkDiscovery] is the placeholder in the meantime; swap it for a real adapter once
- * PcLinkDiscovery exists.
+ * Discovery is accessed through [PcLinkDiscoverySource] (see PcServerListState.kt) rather than
+ * `data.network.PcLinkDiscovery` directly, keeping this screen's dependency on that concurrently-
+ * owned package to a single adapter class.
  */
 class PcConnectActivity : AppCompatActivity() {
 
@@ -41,6 +42,7 @@ class PcConnectActivity : AppCompatActivity() {
     private lateinit var connectingOverlay: View
     private var discovery: PcLinkDiscoverySource = NoOpPcLinkDiscovery()
     private var connecting = false
+    private var probing = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,21 +81,33 @@ class PcConnectActivity : AppCompatActivity() {
         discovery.stop()
     }
 
+    /** Validates the typed host, then probes it directly for a real PC Link reply before connecting
+     *  (so we hand PlayerActivity the server's actual ports, not a guess). */
     private fun tryConnectManual(etHost: EditText) {
+        if (connecting || probing) return
         val host = PcServerListState.validateHost(etHost.text?.toString().orEmpty())
         if (host == null) {
             Toast.makeText(this, R.string.pclink_invalid_host, Toast.LENGTH_SHORT).show()
             return
         }
-        connectTo(
-            PcLinkServer(
-                name = host,
-                host = host,
-                controlPort = DEFAULT_CONTROL_PORT,
-                videoPort = DEFAULT_VIDEO_PORT,
-                protocolVersion = DEFAULT_PROTOCOL_VERSION,
-            )
-        )
+        probing = true
+        connectingOverlay.visibility = View.VISIBLE
+        tvEmpty.visibility = View.GONE
+        var responded = false
+        discovery.probeHost(host) { server ->
+            responded = true
+            probing = false
+            connectTo(server)
+        }
+        lifecycleScope.launch {
+            delay(MANUAL_PROBE_TIMEOUT_MS)
+            if (!responded) {
+                probing = false
+                connectingOverlay.visibility = View.GONE
+                updateEmptyState()
+                Toast.makeText(this@PcConnectActivity, R.string.pclink_manual_unreachable, Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     /** (Re)starts discovery: clears the current list and asks [discovery] to look again. */
@@ -102,10 +116,7 @@ class PcConnectActivity : AppCompatActivity() {
         listState.clear()
         adapter.submitList(listState.snapshot())
         updateEmptyState()
-        // TODO(PC Link wiring): swap in a real com.teleteh.xplayer2.data.network.PcLinkDiscovery
-        // (wrapped behind PcLinkDiscoverySource) once agent A2 lands it. Until then this finds
-        // nothing on its own — manual IP entry above still works.
-        discovery = NoOpPcLinkDiscovery()
+        discovery = RealPcLinkDiscoverySource(lifecycleScope)
         discovery.discover { server -> onServerDiscovered(server) }
     }
 
@@ -119,7 +130,7 @@ class PcConnectActivity : AppCompatActivity() {
     }
 
     private fun updateEmptyState() {
-        tvEmpty.visibility = if (!connecting && listState.isEmpty()) View.VISIBLE else View.GONE
+        tvEmpty.visibility = if (!connecting && !probing && listState.isEmpty()) View.VISIBLE else View.GONE
     }
 
     private fun onServerClick(server: PcLinkServer) = connectTo(server)
@@ -175,13 +186,6 @@ class PcConnectActivity : AppCompatActivity() {
     }
 
     companion object {
-        // Placeholder default ports for manually-entered hosts, until the PC Link wire protocol's
-        // real defaults are settled by the server/discovery packages. Discovered servers carry
-        // their own ports and never use these.
-        const val DEFAULT_CONTROL_PORT = 7890
-        const val DEFAULT_VIDEO_PORT = 7891
-        const val DEFAULT_PROTOCOL_VERSION = 1
-
         /** Extras on the placeholder intent toward [PlayerActivity]; real handling of these lands
          *  with the PC Link playback-wiring package. */
         const val EXTRA_PCLINK_HOST = "com.teleteh.xplayer2.extra.PCLINK_HOST"
@@ -191,5 +195,6 @@ class PcConnectActivity : AppCompatActivity() {
         const val EXTRA_PCLINK_NAME = "com.teleteh.xplayer2.extra.PCLINK_NAME"
 
         private const val CONNECTING_DELAY_MS = 450L
+        private const val MANUAL_PROBE_TIMEOUT_MS = 2500L
     }
 }

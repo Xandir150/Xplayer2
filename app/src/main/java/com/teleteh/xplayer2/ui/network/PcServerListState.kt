@@ -1,34 +1,17 @@
 package com.teleteh.xplayer2.ui.network
 
-/**
- * A PC-side "XPlayer Link" server, as announced by discovery or entered manually.
- *
- * This mirrors the shape of `com.teleteh.xplayer2.data.network.PcLinkDiscovery`'s
- * `PcLinkServer` (owned by a concurrent package — LAN discovery/mDNS). Kept as our own copy here
- * so this UI package compiles standalone; once discovery lands, the two should be unified (either
- * by having that package's type implement/replace this one, or by mapping between them at the call
- * site) — not done here to keep this package's boundary strict.
- */
-data class PcLinkServer(
-    val name: String,
-    val host: String,
-    val controlPort: Int,
-    val videoPort: Int,
-    val protocolVersion: Int,
-)
+import com.teleteh.xplayer2.data.network.PcLinkDiscovery
+import com.teleteh.xplayer2.data.network.PcLinkServer
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 
 /**
- * Thin contract for PC discovery so [PcConnectActivity] compiles and works (manual IP entry, list
- * state) independent of when `data.network.PcLinkDiscovery` lands. Expected real shape (per the
- * PC Link project plan):
- * ```
- * class PcLinkDiscovery(scope/context) {
- *     fun discover(onServer: (PcLinkServer) -> Unit)
- *     fun probeHost(host: String, onServer: (PcLinkServer) -> Unit)
- *     fun stop()
- * }
- * ```
- * A small adapter can wrap the real class behind this interface once it exists.
+ * Thin contract for PC discovery so [PcConnectActivity] doesn't call
+ * `com.teleteh.xplayer2.data.network.PcLinkDiscovery` (owned by a concurrent package) directly.
+ * [RealPcLinkDiscoverySource] below adapts the real thing; [NoOpPcLinkDiscovery] is a harmless
+ * default for the moment between `onCreate` and the first `startDiscovery()` call.
  */
 interface PcLinkDiscoverySource {
     /** Starts (or restarts) LAN discovery; [onServer] fires once per server found. */
@@ -37,19 +20,40 @@ interface PcLinkDiscoverySource {
     /** Probes a single host directly (used for manual-IP entry that isn't on the discovered list). */
     fun probeHost(host: String, onServer: (PcLinkServer) -> Unit)
 
-    /** Stops any in-flight discovery/probing. */
+    /** Stops any in-flight discovery/probing owned by this instance. */
     fun stop()
 }
 
-/**
- * Placeholder discovery source: finds nothing on its own. Used until the real
- * `data.network.PcLinkDiscovery` (agent A2) is wired in — manual IP entry in [PcConnectActivity]
- * doesn't depend on it, so the screen is still fully usable in the meantime.
- */
+/** Finds nothing on its own; manual IP entry in [PcConnectActivity] doesn't depend on it. */
 class NoOpPcLinkDiscovery : PcLinkDiscoverySource {
     override fun discover(onServer: (PcLinkServer) -> Unit) { /* no-op */ }
     override fun probeHost(host: String, onServer: (PcLinkServer) -> Unit) { /* no-op */ }
     override fun stop() { /* no-op */ }
+}
+
+/**
+ * Adapts the real `com.teleteh.xplayer2.data.network.PcLinkDiscovery` (UDP broadcast discovery +
+ * unicast host probing) to [PcLinkDiscoverySource]. That class takes a [CoroutineScope] per call
+ * rather than owning one, and has no `stop()` of its own (its coroutines just run their
+ * listen/timeout window) — so this wraps [parentScope] in a child [Job] we can cancel on [stop],
+ * without touching the parent scope (e.g. the activity's `lifecycleScope`) itself.
+ */
+class RealPcLinkDiscoverySource(parentScope: CoroutineScope) : PcLinkDiscoverySource {
+    private val discovery = PcLinkDiscovery()
+    private val job = SupervisorJob(parentScope.coroutineContext[Job])
+    private val scope = CoroutineScope(parentScope.coroutineContext + job)
+
+    override fun discover(onServer: (PcLinkServer) -> Unit) {
+        discovery.discover(scope, onServer = onServer)
+    }
+
+    override fun probeHost(host: String, onServer: (PcLinkServer) -> Unit) {
+        discovery.probeHost(scope, host, onServer = onServer)
+    }
+
+    override fun stop() {
+        job.cancel()
+    }
 }
 
 /**
