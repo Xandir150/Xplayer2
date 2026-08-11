@@ -1701,13 +1701,20 @@ class PlayerActivity : AppCompatActivity() {
             dismissPresentation()
             return
         }
-        // Already showing on this display
-        if (presentation?.display?.displayId == ext.displayId) return
-        
+        // World-fixed desktop only makes sense head-mounted: PC Link on the glasses hosts a
+        // VirtualDesktopGlView; everything else (files, and PC Link's phone-local fallback)
+        // keeps the flat OuToSbsGlView. The choice is baked into the presentation, so a mode
+        // switch (file session → PC Link or back) recreates it.
+        val wantWorldFixed = isPcLinkMode
+        // Already showing on this display in the right mode
+        if (presentation?.display?.displayId == ext.displayId &&
+            presentation?.isWorldFixedDesktop == wantWorldFixed
+        ) return
+
         dismissPresentation()
-        
+
         // Create Presentation and route video there
-        val pres = ExternalPlayerPresentation(this, ext) { surface ->
+        val pres = ExternalPlayerPresentation(this, ext, wantWorldFixed) { surface ->
             presentationSurface = surface
             if (isPcLinkMode) {
                 // PC Link has no ExoPlayer to re-target: the decoder takes the new surface (and
@@ -1736,12 +1743,17 @@ class PlayerActivity : AppCompatActivity() {
             glView?.visibility = View.GONE
 
             pres.setPlayer(player)
+            // World-fixed desktop: head orientation is polled straight off the glasses IMU each
+            // rendered frame (volatile reads; null until telemetry flows, which renders the
+            // canvas head-fixed dead ahead — a graceful stand-in, not an error).
+            pres.desktopView?.setOrientationProvider { acquiredGlasses?.headOrientationDegrees() }
             // The Presentation's glView is now the active render target — push the full
             // current render config (SBS / source-layout / resize / aspect) and re-derive
             // the mode for this display so resize, OU/SBS and parallax all take effect.
             applyRenderMode()
             // Same for PC Link: the decoder must follow the render target that just changed.
             if (isPcLinkMode) updatePcLinkSurface()
+            updatePcLinkImu()
             if (lazy3dEnabled) reapplyLazy3dToActiveView()
         } catch (e: Throwable) {
             android.util.Log.e("XPlayer2", "Failed to show Presentation", e)
@@ -1778,6 +1790,8 @@ class PlayerActivity : AppCompatActivity() {
             } else if (lazy3dEnabled) {
                 reapplyLazy3dToActiveView()
             }
+            // No presentation → no world-fixed desktop → the IMU has nothing to feed.
+            updatePcLinkImu()
             updatePlaybackService()
         }
     }
@@ -3020,6 +3034,15 @@ class PlayerActivity : AppCompatActivity() {
         // A remote left over from a previous file session drives an ExoPlayer that no longer
         // exists, and there is no PC Link transport for it to control.
         RemoteControlActivity.currentInstance?.finish()
+        // A presentation carried over from a file session hosts the flat OuToSbsGlView; PC Link
+        // on the glasses wants the world-fixed VirtualDesktopGlView. The mode is baked into the
+        // presentation, so recreate it (only when we're in a state to show one — otherwise
+        // onStart/onResume's tryShowExternalPresentation does it).
+        if (presentation != null && presentation?.isWorldFixedDesktop != true &&
+            lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        ) {
+            tryShowExternalPresentation()
+        }
         applyPcLinkRenderConfig()
         // Our own surface listener replaces the one initializePlayer() installs; in PC Link mode
         // that never runs, and on a mode switch the other side re-installs its own.
@@ -3089,6 +3112,10 @@ class PlayerActivity : AppCompatActivity() {
     private fun exitPcLink() {
         if (!isPcLinkMode) return
         disconnectPcLink()
+        // A world-fixed presentation is PC Link-only: drop it so whatever comes next (a file, or
+        // nothing) gets the normal OuToSbsGlView presentation recreated by the usual lifecycle
+        // paths. This also turns the IMU off via updatePcLinkImu() inside dismissPresentation().
+        if (presentation?.isWorldFixedDesktop == true) dismissPresentation()
         pcLinkHost = null
         pcLinkServerName = ""
         pcLinkServerId = null
@@ -3124,11 +3151,24 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * M1 renders the desktop as a plain full-screen picture: no OU→SBS conversion, no mono
-     * duplication, no auto-detection (which would read a 32:9 canvas as side-by-side content).
-     * The one thing honoured is the server saying its stream *is* already SBS.
+     * Pushes the server's `config` into whichever renderer is live:
+     *
+     * * glasses presentation → the world-fixed [VirtualDesktopGlView]: canvas geometry
+     *   (angular width / distance), stereo packing and frame size — head tracking does the rest;
+     * * phone-local fallback → the flat [OuToSbsGlView] (a phone isn't head-tracked): a plain
+     *   full-screen picture, no OU→SBS conversion, no mono duplication, no auto-detection (which
+     *   would read a 32:9 canvas as side-by-side content). The one thing honoured is the server
+     *   saying its stream *is* already SBS.
      */
     private fun applyPcLinkRenderConfig() {
+        presentation?.desktopView?.let { desktop ->
+            pcLinkConfig?.let { c -> desktop.setCanvas(c.canvasAngularWidthDeg, c.canvasDistanceM) }
+            desktop.setSourceIsSbs(pcLinkSourceIsSbs)
+            if (pcVideoWidth > 0 && pcVideoHeight > 0) {
+                desktop.setVideoSize(pcVideoWidth, pcVideoHeight)
+            }
+            return
+        }
         val v = activeGlView() ?: return
         v.setSbsEnabled(pcLinkSourceIsSbs)
         v.setSourceIsSbs(pcLinkSourceIsSbs)
@@ -3138,6 +3178,37 @@ class PlayerActivity : AppCompatActivity() {
         if (pcVideoWidth > 0 && pcVideoHeight > 0) {
             v.updateVideoAspectRatio(pcVideoWidth, pcVideoHeight)
         }
+    }
+
+    /**
+     * Re-anchors the virtual desktop dead ahead of wherever the user is looking right now —
+     * gyro-only yaw drifts over a long session, and this is the one-gesture fix. Reached from
+     * the phone remote's touchpad long-press and a long-press on the PC Link status overlay.
+     */
+    fun recenterPcLink() {
+        if (!isPcLinkMode) return
+        presentation?.desktopView?.recenter()
+    }
+
+    /** Whether this player is running a PC Link session (for the phone remote's gesture routing). */
+    fun isPcLinkActive(): Boolean = isPcLinkMode
+
+    // Last IMU state we asked GlassesController for, so lifecycle churn doesn't spam USB
+    // start/stop commands (setImuStreaming is idempotent but each start is blocking USB I/O).
+    private var pcImuStreaming = false
+
+    /**
+     * The on-demand IMU discipline (CLAUDE.md): stream head telemetry ONLY while the world-fixed
+     * desktop is actually on the glasses — same rule as MainActivity's head-gesture menu. Called
+     * from every place the answer can change: presentation created/dismissed, PC Link entered/
+     * exited. No-op without a glasses controller (player launched with no MainActivity), in which
+     * case the desktop renders head-fixed until one exists.
+     */
+    private fun updatePcLinkImu() {
+        val want = isPcLinkMode && presentation?.isWorldFixedDesktop == true
+        if (want == pcImuStreaming) return
+        pcImuStreaming = want
+        acquiredGlasses?.setImuStreaming(want)
     }
 
     private val pcLinkListener = object : PcLinkClient.Listener {
@@ -3276,6 +3347,17 @@ class PlayerActivity : AppCompatActivity() {
             // The overlay is also the toggle: there is no other UI in this mode, and the debug
             // readout is exactly what a "why is it laggy?" report needs.
             setOnClickListener { togglePcLinkDebug() }
+            // …and the re-center handle: long-press snaps the world-fixed desktop back to dead
+            // ahead (gyro yaw drifts over a long session). Harmless no-op on the phone fallback.
+            setOnLongClickListener {
+                if (presentation?.desktopView == null) return@setOnLongClickListener false
+                recenterPcLink()
+                setPcLinkStatus(getString(R.string.pclink_recentered), dim = false)
+                uiHandler.postDelayed({
+                    if (isPcLinkMode && pcLinkClient != null) setPcLinkStatus(pcLinkServerName, dim = true)
+                }, 1200L)
+                true
+            }
         }
         root.addView(
             status,

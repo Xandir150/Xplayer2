@@ -106,6 +106,7 @@
     <string name="pclink_invalid_host">Enter a valid IP address or hostname</string>
     <string name="pclink_error_ipv6_unsupported">IPv6 addresses aren\'t supported yet — use the IPv4 address shown in XPlayer Link</string>
     <string name="pclink_manual_unreachable">Couldn\'t reach XPlayer Link at that address</string>
+    <string name="pclink_recentered">Screen re-centered</string>
 
     <!-- PC Link pairing: the 6-digit comparison code (SAS) and the states around it -->
     <string name="pclink_pair_title">Pair with \"%1$s\"?</string>

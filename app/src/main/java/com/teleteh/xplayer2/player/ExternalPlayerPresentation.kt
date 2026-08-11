@@ -20,19 +20,29 @@ import com.teleteh.xplayer2.R
 class ExternalPlayerPresentation(
     context: Context,
     display: Display,
+    /**
+     * PC Link world-fixed mode: host a [VirtualDesktopGlView] (head-tracked virtual monitor)
+     * instead of the [OuToSbsGlView] the file player uses. Fixed for the lifetime of the
+     * presentation — PlayerActivity recreates the presentation when the mode changes.
+     */
+    val isWorldFixedDesktop: Boolean = false,
     private val surfaceListener: (Surface?) -> Unit
 ) : Presentation(context, display) {
 
     private var glView: OuToSbsGlView? = null
     private var playerView: PlayerView? = null
+    private var desktopGlView: VirtualDesktopGlView? = null
 
     /**
      * The GL view that actually renders video on the external display. PlayerActivity routes
      * all render-state (SBS / source-layout / resize / parallax / depth) to this view when a
      * presentation is active, because the decoded frames go to *its* surface, not the
-     * activity's local glView.
+     * activity's local glView. Null in world-fixed desktop mode ([desktopView] renders instead).
      */
-    val renderView: OuToSbsGlView? get() = glView
+    val renderView: OuToSbsGlView? get() = if (isWorldFixedDesktop) null else glView
+
+    /** The world-fixed desktop view, when this presentation was created in that mode. */
+    val desktopView: VirtualDesktopGlView? get() = desktopGlView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,11 +61,36 @@ class ExternalPlayerPresentation(
         // Keep the on-glasses transport flash short: it's feedback for a remote action the user
         // just made, not a control surface they interact with (there's no touch on the glasses).
         playerView?.controllerShowTimeoutMs = 2000
-        glView?.setOnSurfaceReadyListener { surface ->
-            surfaceListener(surface)
+        if (isWorldFixedDesktop) {
+            // PC Link world-fixed: swap the flat OuToSbsGlView out for the head-tracked virtual
+            // desktop. Same slot in the tree (index 0, under the mirror overlay), same surface
+            // contract — PcStreamDecoder renders into whichever surface arrives via the listener.
+            // The hidden OuToSbsGlView never creates its GL surface (GONE = no SurfaceHolder), so
+            // exactly one GL pipeline runs.
+            glView?.visibility = View.GONE
+            // No ExoPlayer in PC Link mode; a PlayerView with no player can shutter opaque black
+            // over the GL view, so stand it down entirely.
+            playerView?.visibility = View.GONE
+            val desktop = VirtualDesktopGlView(context)
+            desktopGlView = desktop
+            (findViewById<View>(R.id.presentationGlView).parent as? android.view.ViewGroup)
+                ?.addView(
+                    desktop, 0,
+                    android.view.ViewGroup.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                )
+            desktop.setOnSurfaceReadyListener { surface ->
+                surfaceListener(surface)
+            }
+        } else {
+            glView?.setOnSurfaceReadyListener { surface ->
+                surfaceListener(surface)
+            }
+            // Mirror SBS state defaults: OFF swap, actual SBS set from Activity after show
+            glView?.setSwapEyes(false)
         }
-        // Mirror SBS state defaults: OFF swap, actual SBS set from Activity after show
-        glView?.setSwapEyes(false)
         glView?.isFocusableInTouchMode = true
         glView?.requestFocus()
         hideSystemBars()
@@ -99,12 +134,14 @@ class ExternalPlayerPresentation(
     override fun onStop() {
         super.onStop()
         glView?.onPause()
+        desktopGlView?.onPause()
         surfaceListener(null)
     }
 
     override fun onStart() {
         super.onStart()
         glView?.onResume()
+        desktopGlView?.onResume()
         hideSystemBars()
     }
 

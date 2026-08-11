@@ -343,10 +343,18 @@ class RemoteControlActivity : AppCompatActivity() {
             }
 
             override fun onLongPress(e: MotionEvent) {
+                hapticHeavy()
+                val player = PlayerActivity.currentInstance
+                if (player?.isPcLinkActive() == true) {
+                    // PC Link: long-press re-centers the world-fixed virtual desktop to wherever
+                    // the head points right now (gyro yaw drifts over a long session).
+                    player.recenterPcLink()
+                    showTouchFeedback("⌖")
+                    return
+                }
                 // Placeholder until the glasses OSD menu lands: long-press just flashes the
                 // transport OSD in the goggles so the user can check position without acting.
-                hapticHeavy()
-                PlayerActivity.currentInstance?.flashGlassesOsd()
+                player?.flashGlassesOsd()
                 showTouchFeedback("ⓘ")
             }
         })
