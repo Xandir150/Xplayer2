@@ -3459,7 +3459,12 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         return PcLinkSession.Stats(
             sessionId = pcSessionId,
             serverName = pcLinkServerName,
-            link = pcLinkLink,
+            // A session with no client is parked, not streaming: with no glasses attached, this
+            // activity drops the sockets when it stops (see onStop) and rebuilds them when it comes
+            // back. Reporting the last state it saw would leave the tab saying "streaming" over a
+            // frozen zero. With the glasses on — the case this tab is for — nothing is dropped and
+            // this is the client's own state.
+            link = if (client == null) PcLinkSession.Link.FAILED else pcLinkLink,
             // Both restart at zero when a dropped link is rebuilt (a new decoder, a new client),
             // which is why the contract tells readers to floor a negative difference at zero.
             framesRendered = pcDecoder?.framesRendered ?: 0L,
