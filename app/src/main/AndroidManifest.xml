@@ -53,6 +53,7 @@
         tools:replace="android:theme">
         <activity
             android:name=".MainActivity"
+            android:screenOrientation="nosensor"
             android:exported="true"
             android:banner="@drawable/tv_banner"
             android:resizeableActivity="true">
@@ -369,18 +370,22 @@
 
         <activity
             android:name=".ui.VkClubActivity"
+            android:screenOrientation="nosensor"
             android:exported="false"
             android:theme="@style/Theme.XPlayer2" />
         <activity
             android:name=".ui.YaDiskActivity"
+            android:screenOrientation="nosensor"
             android:exported="false"
             android:theme="@style/Theme.XPlayer2" />
         <activity
             android:name=".ui.MailCloudActivity"
+            android:screenOrientation="nosensor"
             android:exported="false"
             android:theme="@style/Theme.XPlayer2" />
         <activity
             android:name=".ui.network.PcConnectActivity"
+            android:screenOrientation="nosensor"
             android:exported="false"
             android:theme="@style/Theme.XPlayer2" />
 
