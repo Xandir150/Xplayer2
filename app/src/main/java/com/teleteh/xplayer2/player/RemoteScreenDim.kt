@@ -109,12 +109,26 @@ class RemoteScreenDim(
 
     /**
      * Leaving the screen: stop the timer, drop any animation, and hand the window back as we found
-     * it — full brightness and the system bars visible. Whatever comes next must not inherit a
-     * blacked-out window.
+     * it — full brightness, the system bars visible, and *lit*. Whatever comes next must not
+     * inherit a blacked-out window.
+     *
+     * The overlay is part of "as we found it". Restoring the backlight while leaving an opaque
+     * black View at alpha 1 over the content is how a remote came back from a phone call or a
+     * lock/unlock as a full-brightness black screen with the status bar floating above it —
+     * indistinguishable from a crash, and clearable only by a blind tap, since the first touch is
+     * swallowed into a wake. Both remotes re-arm from `onResume`, so the screen simply dims again
+     * after the usual idle.
      */
     fun onPause() {
-        cancel()
+        // The animator first: ValueAnimator.cancel() synchronously fires wake()'s end listener,
+        // which calls schedule() — disarming before that would re-arm the timer we just dropped and
+        // the phone would fade itself to black while stopped.
         animator?.cancel()
+        animator = null
+        cancel()
+        isDimmed = false
+        overlay?.alpha = 0f
+        overlay?.visibility = View.GONE
         setSystemBarsHidden(false)
         restoreBrightness()
     }
