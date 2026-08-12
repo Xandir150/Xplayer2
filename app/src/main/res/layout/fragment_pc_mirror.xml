@@ -1,240 +1,182 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The PC-Mirror tab: PC Link's own home, separate from the film player and its remote.
+<!-- The PC-Mirror tab: where a cast starts, and the only place it can start.
 
-     Two states, one above the other, exactly one visible at a time:
-       * nothing streaming — the connect card, which opens the pairing screen;
-       * a session running — the remote: two live chips, a shut "Details" door, and the switch
-         that says where the PC's sound is going. -->
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+     Two states, exactly one visible at a time:
+       * a session running — a short card saying so, with the way back to its remote;
+       * nothing running — the computers this phone is already paired with, one tap each, and
+         "Find your PC" underneath for a new one.
+
+     What a session *is* — frames, bitrate, sound, the debugging door — is not here. That belongs to
+     the remote (PcLinkRemoteActivity), which is what the user is holding while it runs; keeping a
+     second copy of it in the tab is how the two drifted apart the last time. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:orientation="vertical"
+    android:padding="12dp">
 
-    <LinearLayout
+    <!-- ============================ a session is running ============================ -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardSession"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="12dp">
+        android:visibility="gone"
+        app:cardCornerRadius="14dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="1dp">
 
-        <!-- ============================ no session: connect ============================ -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardConnect"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardCornerRadius="14dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="1dp">
+            android:orientation="vertical"
+            android:padding="16dp">
 
-            <LinearLayout
+            <TextView
+                android:id="@+id/tvServerName"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
+                android:textSize="16sp"
+                android:textColor="?android:attr/textColorPrimary"
+                android:maxLines="1"
+                android:ellipsize="end" />
 
-                <LinearLayout
+            <TextView
+                android:id="@+id/tvLinkState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="12sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnOpenRemote"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="@string/pclink_open_remote"
+                android:textAllCaps="false"
+                android:focusable="true"
+                app:icon="@drawable/ic_remote_gen_24"
+                app:iconGravity="textStart" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDisconnect"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/pclink_disconnect"
+                android:textAllCaps="false"
+                android:focusable="true" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- ============================ nothing running: the way in ============================ -->
+    <LinearLayout
+        android:id="@+id/boxIdle"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:paddingBottom="8dp">
+
+            <FrameLayout
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginEnd="12dp">
+
+                <ImageView
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical">
+                    android:layout_height="match_parent"
+                    android:scaleType="centerInside"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/bg_circle_pclink" />
 
-                    <FrameLayout
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:layout_marginEnd="12dp">
+                <ImageView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:padding="8dp"
+                    android:scaleType="centerInside"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_pclink_24" />
+            </FrameLayout>
 
-                        <ImageView
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:scaleType="centerInside"
-                            android:importantForAccessibility="no"
-                            android:src="@drawable/bg_circle_pclink" />
-
-                        <ImageView
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:padding="8dp"
-                            android:scaleType="centerInside"
-                            android:importantForAccessibility="no"
-                            android:src="@drawable/ic_pclink_24" />
-                    </FrameLayout>
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="@string/pclink_title"
-                            android:textSize="16sp"
-                            android:textColor="?android:attr/textColorPrimary" />
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:text="@string/pclink_row_subtitle"
-                            android:textSize="12sp"
-                            android:textColor="?android:attr/textColorSecondary" />
-                    </LinearLayout>
-                </LinearLayout>
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/pclink_empty"
-                    android:textSize="13sp"
-                    android:textColor="?android:attr/textColorSecondary" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnFindPc"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/pclink_find_pc"
-                    android:textAllCaps="false"
-                    android:focusable="true"
-                    app:icon="@drawable/ic_pclink_24"
-                    app:iconGravity="textStart" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- ============================ session: the remote ============================ -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/cardSession"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:visibility="gone"
-            app:cardCornerRadius="14dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="1dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
-
-                <TextView
-                    android:id="@+id/tvServerName"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:text="@string/pclink_title"
                     android:textSize="16sp"
-                    android:textColor="?android:attr/textColorPrimary"
-                    android:maxLines="1"
-                    android:ellipsize="end" />
+                    android:textColor="?android:attr/textColorPrimary" />
 
                 <TextView
-                    android:id="@+id/tvLinkState"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textSize="12sp"
-                    android:textColor="?android:attr/textColorSecondary"
-                    android:maxLines="1"
-                    android:ellipsize="end" />
-
-                <!-- The two numbers that answer "is it working right now". Everything else about
-                     the stream answers "why isn't it" and lives behind the door below. -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:baselineAligned="false"
-                    android:layout_marginTop="14dp">
-
-                    <include
-                        android:id="@+id/chipFps"
-                        layout="@layout/view_pclink_stat_chip"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:layout_marginEnd="8dp" />
-
-                    <include
-                        android:id="@+id/chipBitrate"
-                        layout="@layout/view_pclink_stat_chip"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:layout_marginStart="8dp" />
-                </LinearLayout>
-
-                <!-- The door. Shut by default, and remembered: someone who opens it once is
-                     usually debugging something that outlasts one session. -->
-                <LinearLayout
-                    android:id="@+id/rowDetails"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:minHeight="48dp"
-                    android:layout_marginTop="10dp"
-                    android:background="?attr/selectableItemBackground"
-                    android:clickable="true"
-                    android:focusable="true">
-
-                    <TextView
-                        android:id="@+id/tvDetailsLabel"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/pclink_stats_details"
-                        android:textSize="14sp"
-                        android:textColor="?android:attr/textColorPrimary" />
-
-                    <ImageView
-                        android:id="@+id/ivDetailsChevron"
-                        android:layout_width="24dp"
-                        android:layout_height="24dp"
-                        android:importantForAccessibility="no"
-                        android:src="@drawable/ic_chevron_down_24" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/boxDetails"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone" />
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="1dp"
-                    android:layout_marginTop="10dp"
-                    android:background="?android:attr/listDivider"
-                    android:alpha="0.5" />
-
-                <!-- Not a mute: it says where the sound goes. -->
-                <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/swAudioToGlasses"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:minHeight="48dp"
-                    android:text="@string/pclink_audio_to_glasses"
-                    android:textSize="15sp"
-                    android:focusable="true" />
-
-                <TextView
-                    android:id="@+id/tvAudioHint"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:text="@string/pclink_row_subtitle"
                     android:textSize="12sp"
                     android:textColor="?android:attr/textColorSecondary" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnDisconnect"
-                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:text="@string/pclink_disconnect"
-                    android:textAllCaps="false"
-                    android:focusable="true" />
             </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvPairedLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:text="@string/pclink_paired_label"
+            android:textSize="12sp"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvPairedPcs"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false" />
+
+            <TextView
+                android:id="@+id/tvEmpty"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:gravity="center"
+                android:padding="24dp"
+                android:text="@string/pclink_empty"
+                android:textSize="13sp"
+                android:textColor="?android:attr/textColorSecondary" />
+        </FrameLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnFindPc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/pclink_find_pc"
+            android:textAllCaps="false"
+            android:focusable="true"
+            app:icon="@drawable/ic_pclink_24"
+            app:iconGravity="textStart" />
     </LinearLayout>
-</ScrollView>
+</LinearLayout>

@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.teleteh.xplayer2.R
+import com.teleteh.xplayer2.data.glasses.GlassesPresence
 import com.teleteh.xplayer2.data.network.PairingFailure
 import com.teleteh.xplayer2.data.network.PairingOutcome
 import com.teleteh.xplayer2.data.network.PairingSession
@@ -149,6 +150,12 @@ class PcConnectActivity : AppCompatActivity() {
         pendingRepair = repairRequestFrom(intent)
         loadIdentity()
         restartDiscovery()
+        // The PC-Mirror tab sent the user straight at a PC they are already paired with: go for it
+        // rather than making them find it in a list they didn't ask to see. The list is still
+        // filling up underneath, so a failed probe lands somewhere useful.
+        intent.getStringExtra(EXTRA_PCLINK_AUTOCONNECT_HOST)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { probeAndConnect(it, R.string.pclink_paired_unreachable) }
     }
 
     override fun onStart() {
@@ -245,6 +252,7 @@ class PcConnectActivity : AppCompatActivity() {
             message = getString(R.string.pclink_repair_body),
             positiveRes = R.string.pclink_repair_accept,
             onAccept = {
+                if (!requireGlasses()) return@showPrompt
                 claimScreenForSession()
                 startPairing(identity, target)
             }
@@ -330,12 +338,22 @@ class PcConnectActivity : AppCompatActivity() {
                 return
             }
         }
+        probeAndConnect(host, R.string.pclink_manual_unreachable)
+    }
+
+    /**
+     * Probes one address for a real PC Link reply and connects to whatever answers, so the hand-off
+     * gets the server's actual ports rather than a guess. Shared by manual IP entry and by the
+     * tab's one-tap re-connect to a known PC.
+     *
+     * One probe, one outcome: probeHost reports null itself when the host stays silent, so there is
+     * no second wall-clock timer here to race it — nor a late reply that could fire connectTo()
+     * after "unreachable" was already shown.
+     */
+    private fun probeAndConnect(host: String, unreachableMessage: Int) {
         probing = true
         btnRefresh.isEnabled = false
         showOverlay(R.string.pclink_connecting)
-        // One probe, one outcome: probeHost reports null itself when the host stays silent, so
-        // there is no second wall-clock timer here to race it — nor a late reply that could fire
-        // connectTo() after "unreachable" was already shown.
         probeSource.probeHost(host) { server ->
             if (!probing) return@probeHost
             probing = false
@@ -344,7 +362,7 @@ class PcConnectActivity : AppCompatActivity() {
                 connectTo(server)
             } else {
                 hideOverlay()
-                Toast.makeText(this, R.string.pclink_manual_unreachable, Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, unreachableMessage, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -430,6 +448,10 @@ class PcConnectActivity : AppCompatActivity() {
      */
     private fun connectTo(server: PcLinkServer) {
         if (connecting) return
+        if (!requireGlasses()) {
+            hideOverlay()
+            return
+        }
         val identity = identity
         if (identity == null) {
             // The identity is still loading (first launch, generating a keypair). It's a moment,
@@ -575,6 +597,7 @@ class PcConnectActivity : AppCompatActivity() {
                 positiveRes = R.string.pclink_repair_accept,
                 onAccept = {
                     val identity = identity ?: return@showPrompt
+                    if (!requireGlasses()) return@showPrompt
                     claimScreenForSession()
                     startPairing(identity, target)
                 }
@@ -607,6 +630,7 @@ class PcConnectActivity : AppCompatActivity() {
             positiveRes = R.string.pclink_invite_accept,
             negativeRes = R.string.pclink_invite_ignore,
             onAccept = {
+                if (!requireGlasses()) return@showPrompt
                 claimScreenForSession()
                 // The ceremony runs against the datagram's source address, not anything it claimed.
                 startPairing(
@@ -641,6 +665,16 @@ class PcConnectActivity : AppCompatActivity() {
     }
 
     private fun startPlayer(server: PcLinkServer, serverId: String, serverName: String) {
+        // Last line: the ceremony has a human in it and takes seconds, and the glasses can come off
+        // inside that window. The pairing that just completed is kept — it is worth having — but
+        // the session is not started, because there would be nowhere to put the desktop.
+        if (!requireGlasses()) {
+            connecting = false
+            hideOverlay()
+            refreshPairings()
+            restartDiscovery()
+            return
+        }
         val intent = Intent(this, PlayerActivity::class.java).apply {
             putExtra(EXTRA_PCLINK_HOST, server.host)
             putExtra(EXTRA_PCLINK_CONTROL_PORT, server.controlPort)
@@ -692,6 +726,36 @@ class PcConnectActivity : AppCompatActivity() {
 
     private fun toast(messageRes: Int) =
         Toast.makeText(this, messageRes, Toast.LENGTH_LONG).show()
+
+    /**
+     * **PC Link requires the glasses**, and this is the door it is asked at.
+     *
+     * A cast has exactly one destination. Without a pair of glasses there is nothing to put the
+     * desktop on, so a session started anyway is a socket costing the PC its bitrate and holding
+     * its speakers silent for a picture nobody can see — and the phone, mirroring a stream it never
+     * decodes into its own window, shows grey. So this refuses rather than starts, and says the one
+     * thing the user can act on.
+     *
+     * The presence test is vendor-agnostic on purpose — see [GlassesPresence]. Every ceremony path
+     * asks: a tapped row, a typed address, the tab's one-tap re-connect, an invite from a PC, a
+     * re-pair, and once more immediately before the hand-off, since a ceremony has a human in it
+     * and the glasses can come off while it runs.
+     */
+    private fun requireGlasses(): Boolean {
+        if (GlassesPresence.present(this)) return true
+        showMessageWithTitle(R.string.pclink_needs_glasses_title, R.string.pclink_needs_glasses_body)
+        return false
+    }
+
+    private fun showMessageWithTitle(titleRes: Int, messageRes: Int) {
+        promptDialog?.dismiss()
+        promptDialog = AlertDialog.Builder(this)
+            .setTitle(titleRes)
+            .setMessage(messageRes)
+            .setPositiveButton(android.R.string.ok, null)
+            .setOnDismissListener { promptDialog = null }
+            .show()
+    }
 
     /** Where a ceremony is headed. [server] is null for an invite, whose ports we don't know yet. */
     private data class PairingTarget(
@@ -778,6 +842,14 @@ class PcConnectActivity : AppCompatActivity() {
          * ceremony for that PC. A request, never an instruction — see [repairRequestFrom].
          */
         const val EXTRA_PCLINK_REPAIR = "com.teleteh.xplayer2.extra.PCLINK_REPAIR"
+
+        /**
+         * A PC the PC-Mirror tab already knows about, by its last-known address: this screen opens
+         * straight onto it with a spinner instead of a list. Carries no authority whatsoever — the
+         * address is probed and then re-authenticated exactly as a tapped row would be, so the worst
+         * a wrong value can do is fail to find anything.
+         */
+        const val EXTRA_PCLINK_AUTOCONNECT_HOST = "com.teleteh.xplayer2.extra.PCLINK_AUTOCONNECT_HOST"
 
         /** Breather between discovery passes (each pass listens ~4 s), so a pass starts every ~5 s. */
         private const val DISCOVERY_PASS_GAP_MS = 1000L

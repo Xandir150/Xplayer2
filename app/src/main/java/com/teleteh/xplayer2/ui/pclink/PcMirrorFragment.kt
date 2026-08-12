@@ -1,72 +1,73 @@
 package com.teleteh.xplayer2.ui.pclink
 
-import android.content.Context
 import android.content.Intent
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
-import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
-import com.google.android.material.switchmaterial.SwitchMaterial
+import com.google.android.material.snackbar.Snackbar
 import com.teleteh.xplayer2.R
+import com.teleteh.xplayer2.data.glasses.GlassesPresence
+import com.teleteh.xplayer2.data.network.PcLinkPairing
+import com.teleteh.xplayer2.data.network.PcLinkPairingStore
 import com.teleteh.xplayer2.player.PcLinkSession
 import com.teleteh.xplayer2.ui.network.PcConnectActivity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
- * **The PC-Mirror tab — PC Link's own screen**, next to Recent and Sources.
+ * **The PC-Mirror tab — where a cast starts.**
  *
- * The desktop is not a film, and it does not belong inside the film player's remote: it has its own
- * way in (find a PC, compare six digits) and its own things to say while it runs (how many frames
- * are arriving, how many megabits, where the sound is going). So it gets a tab.
+ * The desktop is not a film: it has its own way in (find a PC, compare six digits) and its own
+ * hardware requirement (the glasses, which is the whole point of it), so it gets a tab rather than
+ * a corner of the player's.
  *
- * Two states, and the tab picks between them on its own clock:
+ * What this screen is *for* is getting a session going, and it is the only place that can:
  *
- * * **nothing streaming** — the connect card, whose button opens [PcConnectActivity]. The pairing
- *   ceremony stays exactly where it was: it is security-sensitive, already tested, and reproducing
- *   it here would have bought nothing but a second copy to keep right.
- * * **a session running** — the remote. Two live numbers out front, each over a minute of itself;
- *   everything that answers "why isn't it working" behind a shut, remembered door; and a switch
- *   that names where the PC's sound is going rather than claiming to be a mute.
- *
- * The session itself lives in `PlayerActivity` (the picture is on the glasses, and that is the
- * activity holding the panel) and is reached through [PcLinkSession] — see there for why this is a
- * pull on a one-second clock rather than a subscription.
+ * * **the computers already paired with**, read straight out of [PcLinkPairingStore] — a return
+ *   visit is one tap on a name, not a trip through discovery. Rows are forgotten by a swipe or a
+ *   long press, exactly as Recent's rows are deleted, down to the undo;
+ * * **Find your PC**, which opens [PcConnectActivity] — that screen is for *new* computers now,
+ *   not the toll on every visit. The pairing ceremony stays there and only there: it is
+ *   security-sensitive and already tested, and a second copy would be a second thing to keep right;
+ * * **a session that is already running**, reduced to a card saying so and the way back to its
+ *   remote. Nothing about how it is doing — frames, bitrate, sound, the debugging door — lives
+ *   here. That belongs to [PcLinkRemoteActivity], which is what the user is actually holding while
+ *   a cast runs, and keeping a second copy in the tab is how the two drifted apart before.
  */
 class PcMirrorFragment : Fragment() {
 
-    private val history = PcLinkStatsHistory()
     private val ticker = Handler(Looper.getMainLooper())
 
-    private lateinit var cardConnect: MaterialCardView
     private lateinit var cardSession: MaterialCardView
+    private lateinit var boxIdle: View
     private lateinit var tvServerName: TextView
     private lateinit var tvLinkState: TextView
-    private lateinit var chevron: ImageView
-    private lateinit var detailsBox: LinearLayout
-    private lateinit var audioSwitch: SwitchMaterial
-    private lateinit var tvAudioHint: TextView
-    private lateinit var fpsChip: Chip
-    private lateinit var bitrateChip: Chip
+    private lateinit var tvPairedLabel: TextView
+    private lateinit var tvEmpty: TextView
+    private lateinit var recycler: RecyclerView
+    private lateinit var adapter: PairedAdapter
 
-    /** The detail rows, built once and then only re-texted — a row per line of [detailLines]. */
-    private val detailRows = ArrayList<Pair<TextView, TextView>>()
-
-    private var detailsOpen = false
-
-    /** Set while [applyAudioState] is writing the switch, so its listener doesn't echo back. */
-    private var bindingAudioSwitch = false
+    private var store: PcLinkPairingStore? = null
 
     private val tick = object : Runnable {
         override fun run() {
-            sample()
+            applySessionState()
             ticker.postDelayed(this, SAMPLE_INTERVAL_MS)
         }
     }
@@ -79,78 +80,59 @@ class PcMirrorFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        cardConnect = view.findViewById(R.id.cardConnect)
         cardSession = view.findViewById(R.id.cardSession)
+        boxIdle = view.findViewById(R.id.boxIdle)
         tvServerName = view.findViewById(R.id.tvServerName)
         tvLinkState = view.findViewById(R.id.tvLinkState)
-        chevron = view.findViewById(R.id.ivDetailsChevron)
-        detailsBox = view.findViewById(R.id.boxDetails)
-        // The rows belong to the view that has just been thrown away (a rotation, a tab that was
-        // scrolled far enough off the pager to be destroyed): rebuild them into the new box rather
-        // than writing text into views nobody is showing.
-        detailRows.clear()
-        audioSwitch = view.findViewById(R.id.swAudioToGlasses)
-        tvAudioHint = view.findViewById(R.id.tvAudioHint)
+        tvPairedLabel = view.findViewById(R.id.tvPairedLabel)
+        tvEmpty = view.findViewById(R.id.tvEmpty)
+        recycler = view.findViewById(R.id.rvPairedPcs)
 
-        fpsChip = Chip(view.findViewById(R.id.chipFps), getString(R.string.pclink_stat_fps), history.fps)
-        bitrateChip =
-            Chip(view.findViewById(R.id.chipBitrate), getString(R.string.pclink_stat_bitrate), history.mbps)
+        adapter = PairedAdapter(
+            onClick = { connectTo(it) },
+            onLongClick = { confirmForget(it) },
+            notSeenLabel = getString(R.string.pclink_paired_no_address)
+        )
+        recycler.layoutManager = LinearLayoutManager(requireContext())
+        recycler.adapter = adapter
+        recycler.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        attachSwipeToForget()
 
         view.findViewById<MaterialButton>(R.id.btnFindPc).setOnClickListener {
+            if (!requireGlasses()) return@setOnClickListener
             startActivity(Intent(requireContext(), PcConnectActivity::class.java))
+        }
+        view.findViewById<MaterialButton>(R.id.btnOpenRemote).setOnClickListener {
+            startActivity(Intent(requireContext(), PcLinkRemoteActivity::class.java))
         }
         view.findViewById<MaterialButton>(R.id.btnDisconnect).setOnClickListener {
             PcLinkSession.end()
             // Don't wait for the next tick to admit it's gone.
-            sample()
-        }
-
-        detailsOpen = prefs().getBoolean(PREF_DETAILS_OPEN, false)
-        applyDetailsOpen(animate = false)
-        view.findViewById<View>(R.id.rowDetails).setOnClickListener {
-            detailsOpen = !detailsOpen
-            prefs().edit().putBoolean(PREF_DETAILS_OPEN, detailsOpen).apply()
-            applyDetailsOpen(animate = true)
-        }
-
-        audioSwitch.setOnCheckedChangeListener { _, checked ->
-            if (bindingAudioSwitch) return@setOnCheckedChangeListener
-            PcLinkSession.setAudioToGlasses(checked)
-            sample()
+            applySessionState()
         }
     }
 
     override fun onResume() {
         super.onResume()
-        // Sampling only while the tab is actually in front: nobody is watching a sparkline they
-        // can't see, and the numbers themselves live in the session either way.
+        // Only while the tab is actually in front: nobody is watching a card they can't see, and
+        // the session's state lives in the session either way.
         ticker.removeCallbacks(tick)
         ticker.post(tick)
+        loadPairings()
     }
 
     override fun onPause() {
         super.onPause()
         ticker.removeCallbacks(tick)
-        // What was collected describes seconds that were being watched; splicing across the gap
-        // would draw a minute that never happened.
-        history.reset()
     }
 
-    /**
-     * One reading, on our own clock. Deliberately not driven by the session telling us something
-     * changed: a desktop nobody is touching stops changing, and "0 fps" is the answer then.
-     */
-    private fun sample() {
+    /** Which of the two states this screen is in — asked on a clock, like the remote's numbers. */
+    private fun applySessionState() {
         if (view == null) return
         val stats = PcLinkSession.stats()
-        history.sample(stats, SystemClock.elapsedRealtime())
-        if (stats == null) {
-            cardConnect.visibility = View.VISIBLE
-            cardSession.visibility = View.GONE
-            return
-        }
-        cardConnect.visibility = View.GONE
-        cardSession.visibility = View.VISIBLE
+        cardSession.visibility = if (stats == null) View.GONE else View.VISIBLE
+        boxIdle.visibility = if (stats == null) View.VISIBLE else View.GONE
+        if (stats == null) return
         tvServerName.text = stats.serverName
         tvLinkState.setText(
             when (stats.link) {
@@ -160,166 +142,183 @@ class PcMirrorFragment : Fragment() {
                 PcLinkSession.Link.FAILED -> R.string.pclink_state_failed
             }
         )
-        // A dash until the second reading: one counter is not a rate, and a made-up zero in the
-        // first second of a session would be the one lie this screen exists to avoid.
-        val fps = history.fps.latest()
-        val mbps = history.mbps.latest()
-        fpsChip.render(
-            if (fps == null) getString(R.string.pclink_value_none)
-            else getString(R.string.pclink_value_fps, "%.0f".format(fps))
-        )
-        bitrateChip.render(
-            if (mbps == null) getString(R.string.pclink_value_none)
-            else getString(R.string.pclink_value_mbps, "%.1f".format(mbps))
-        )
-        applyAudioState(stats)
-        if (detailsOpen) applyDetails(stats)
     }
 
-    private fun applyAudioState(stats: PcLinkSession.Stats) {
-        bindingAudioSwitch = true
-        audioSwitch.isChecked = stats.audioToGlasses
-        bindingAudioSwitch = false
-        // The switch names the destination; the line under it names the other one, so neither
-        // state has to be guessed at.
-        tvAudioHint.setText(
-            when {
-                !stats.audioAvailable -> R.string.pclink_audio_none
-                stats.audioToGlasses -> R.string.pclink_audio_hint_glasses
-                else -> R.string.pclink_audio_hint_computer
+    // --- the computers we know --------------------------------------------------------------
+
+    private fun loadPairings() {
+        lifecycleScope.launch {
+            val loaded = withContext(Dispatchers.IO) {
+                val store = store ?: PcLinkPairingStore(requireContext().applicationContext)
+                store to store.getAll()
             }
-        )
-        audioSwitch.isEnabled = stats.audioAvailable
+            if (view == null) return@launch
+            store = loaded.first
+            showPairings(loaded.second)
+        }
     }
 
-    // --- the door ------------------------------------------------------------------------------
-
-    private fun applyDetailsOpen(animate: Boolean) {
-        detailsBox.visibility = if (detailsOpen) View.VISIBLE else View.GONE
-        val rotation = if (detailsOpen) 180f else 0f
-        if (animate) chevron.animate().rotation(rotation).setDuration(150).start()
-        else chevron.rotation = rotation
-        // The visible label stays "Details"; a screen reader is told which way the door goes,
-        // since the chevron it would otherwise read is decorative.
-        view?.findViewById<View>(R.id.rowDetails)?.contentDescription = getString(
-            if (detailsOpen) R.string.pclink_details_hide else R.string.pclink_details_show
-        )
-        if (detailsOpen) PcLinkSession.stats()?.let { applyDetails(it) }
+    private fun showPairings(pairings: List<PcLinkPairing>) {
+        adapter.submitList(pairings)
+        val empty = pairings.isEmpty()
+        tvEmpty.visibility = if (empty) View.VISIBLE else View.GONE
+        tvPairedLabel.visibility = if (empty) View.GONE else View.VISIBLE
     }
 
-    /** Everything that answers "why isn't it working" — the seven rows behind the door. */
-    private fun applyDetails(stats: PcLinkSession.Stats) {
-        val lines = detailLines(stats)
-        while (detailRows.size < lines.size) detailRows.add(addDetailRow())
-        detailRows.forEachIndexed { index, (label, value) ->
-            val line = lines.getOrNull(index)
-            val row = label.parent as View
-            if (line == null) {
-                row.visibility = View.GONE
-            } else {
-                row.visibility = View.VISIBLE
-                label.text = line.first
-                value.text = line.second
+    /**
+     * A known PC, one tap.
+     *
+     * The tap still goes through [PcConnectActivity], which owns re-authentication: the stored key
+     * proves who is on the other end, and skipping that here would mean a second implementation of
+     * the one exchange that must never be got wrong. What the tap saves is the *browsing* — that
+     * screen opens straight onto this PC with a spinner, and drops back to its list only if the
+     * address it was given no longer answers.
+     */
+    private fun connectTo(pairing: PcLinkPairing) {
+        if (!requireGlasses()) return
+        val host = pairing.lastHost
+        val intent = Intent(requireContext(), PcConnectActivity::class.java)
+        if (host != null) intent.putExtra(PcConnectActivity.EXTRA_PCLINK_AUTOCONNECT_HOST, host)
+        startActivity(intent)
+    }
+
+    /**
+     * PC Link needs the glasses, and says so here rather than letting the user get all the way
+     * through a pairing ceremony first. The same rule guards [PcConnectActivity] itself — this is
+     * only the earlier, kinder half of it.
+     */
+    private fun requireGlasses(): Boolean {
+        if (GlassesPresence.present(requireContext())) return true
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.pclink_needs_glasses_title)
+            .setMessage(R.string.pclink_needs_glasses_body)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+        return false
+    }
+
+    /**
+     * Swipe a row either direction to forget that PC — the same gesture, the same red-and-trash
+     * backdrop and the same undo Recent's rows have, because they are the same kind of list and
+     * nobody should have to learn it twice.
+     */
+    private fun attachSwipeToForget() {
+        val bg = ColorDrawable(ContextCompat.getColor(requireContext(), R.color.rc_danger))
+        val trash = ContextCompat.getDrawable(requireContext(), android.R.drawable.ic_menu_delete)
+            ?.mutate()?.apply { setTint(Color.WHITE) }
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val cb = object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT) {
+            override fun onMove(r: RecyclerView, v: RecyclerView.ViewHolder, t: RecyclerView.ViewHolder) = false
+
+            override fun onSwiped(vh: RecyclerView.ViewHolder, direction: Int) {
+                val pos = vh.bindingAdapterPosition
+                if (pos == RecyclerView.NO_POSITION) return
+                val pairing = adapter.itemAt(pos) ?: return
+                forget(pairing, withUndo = true)
+            }
+
+            override fun onChildDraw(
+                c: Canvas, rv: RecyclerView, vh: RecyclerView.ViewHolder,
+                dX: Float, dY: Float, actionState: Int, isActive: Boolean
+            ) {
+                val v = vh.itemView
+                when {
+                    dX > 0 -> bg.setBounds(v.left, v.top, v.left + dX.toInt(), v.bottom)
+                    dX < 0 -> bg.setBounds(v.right + dX.toInt(), v.top, v.right, v.bottom)
+                    else -> bg.setBounds(0, 0, 0, 0)
+                }
+                bg.draw(c)
+                trash?.let { ic ->
+                    val ih = ic.intrinsicHeight
+                    val iw = ic.intrinsicWidth
+                    val top = v.top + (v.height - ih) / 2
+                    if (dX > 0) ic.setBounds(v.left + pad, top, v.left + pad + iw, top + ih)
+                    else ic.setBounds(v.right - pad - iw, top, v.right - pad, top + ih)
+                    if (dX != 0f) ic.draw(c)
+                }
+                super.onChildDraw(c, rv, vh, dX, dY, actionState, isActive)
             }
         }
+        ItemTouchHelper(cb).attachToRecyclerView(recycler)
     }
 
-    private fun detailLines(stats: PcLinkSession.Stats): List<Pair<String, String>> {
-        val none = getString(R.string.pclink_value_none)
-        val format = if (stats.codec != null && stats.width > 0) {
-            getString(
-                R.string.pclink_value_format,
-                stats.codec, stats.width, stats.height, stats.stereo.orEmpty()
-            )
-        } else {
-            none
-        }
-        val audioOut = if (stats.audioRateHz > 0) {
-            getString(
-                R.string.pclink_value_audio_format,
-                stats.audioRateHz / 1000, stats.audioChannels
-            )
-        } else {
-            none
-        }
-        return listOf(
-            getString(R.string.pclink_stat_latency) to
-                getString(R.string.pclink_value_ms, format0(stats.rttMs)),
-            getString(R.string.pclink_stat_format) to format,
-            getString(R.string.pclink_stat_dropped) to stats.droppedFrames.toString(),
-            getString(R.string.pclink_stat_audio_output) to audioOut,
-            getString(R.string.pclink_stat_audio_buffer) to
-                getString(R.string.pclink_value_ms, stats.audioBufferedMs.toString()),
-            getString(R.string.pclink_stat_skew) to
-                (stats.audioSkewMs?.let { getString(R.string.pclink_value_ms, it.toString()) } ?: none),
-            getString(R.string.pclink_stat_audio_dropouts) to stats.audioDropouts.toString()
-        )
+    /** Long-press forget (touch or D-pad) — a confirm dialog, since there's no swipe-undo for it. */
+    private fun confirmForget(pairing: PcLinkPairing): Boolean {
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+            .setTitle(getString(R.string.pclink_forget_title, pairing.name))
+            .setMessage(R.string.pclink_forget_body)
+            .setPositiveButton(R.string.pclink_forget) { _, _ -> forget(pairing, withUndo = false) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+        return true
     }
 
-    private fun addDetailRow(): Pair<TextView, TextView> {
-        val context = requireContext()
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = dp(6) }
-        }
-        val label = TextView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-            textSize = 13f
-            setTextColor(secondaryTextColor())
-        }
-        val value = TextView(context).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            textSize = 13f
-            maxLines = 1
-        }
-        row.addView(label)
-        row.addView(value)
-        detailsBox.addView(row)
-        return label to value
-    }
-
-    private fun secondaryTextColor(): Int {
-        val out = android.util.TypedValue()
-        requireContext().theme.resolveAttribute(android.R.attr.textColorSecondary, out, true)
-        return if (out.resourceId != 0) {
-            androidx.core.content.ContextCompat.getColor(requireContext(), out.resourceId)
-        } else {
-            out.data
+    /**
+     * Removal goes through the store, so the key is really gone and the PC's next approach earns a
+     * fresh six-digit ceremony rather than a silent reconnection. Undo puts the same record back —
+     * the long-term key included, which is why the row must be held whole until the Snackbar goes.
+     */
+    private fun forget(pairing: PcLinkPairing, withUndo: Boolean) {
+        val store = store ?: return
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) { store.forget(pairing.serverId) }
+            loadPairings()
+            if (!withUndo) return@launch
+            Snackbar.make(recycler, getString(R.string.pclink_forgotten, pairing.name), Snackbar.LENGTH_LONG)
+                .setAction(R.string.undo) {
+                    lifecycleScope.launch {
+                        withContext(Dispatchers.IO) {
+                            store.addOrUpdate(pairing.serverId, pairing.name, pairing.ltk, pairing.lastHost)
+                        }
+                        loadPairings()
+                    }
+                }.show()
         }
     }
 
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+    private class PairedAdapter(
+        private val onClick: (PcLinkPairing) -> Unit,
+        private val onLongClick: (PcLinkPairing) -> Boolean,
+        /** Shown instead of an address for a PC we have never recorded one for. */
+        private val notSeenLabel: String
+    ) : RecyclerView.Adapter<PairedAdapter.VH>() {
 
-    private fun prefs() = requireContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        private val items = mutableListOf<PcLinkPairing>()
 
-    /** One chip: the title, the number, and the minute of itself under it. */
-    private class Chip(private val root: View, private val title: String, window: SparklineWindow) {
-        private val value: TextView = root.findViewById(R.id.tvChipValue)
-        private val sparkline: SparklineView = root.findViewById(R.id.sparkline)
-
-        init {
-            root.findViewById<TextView>(R.id.tvChipTitle).text = title
-            sparkline.setWindow(window)
+        fun submitList(list: List<PcLinkPairing>) {
+            items.clear()
+            items.addAll(list)
+            notifyDataSetChanged()
         }
 
-        fun render(text: String) {
-            value.text = text
-            // The label and the number are one fact to a screen reader, and the chart is that same
-            // fact drawn again (which is why the chart itself is hidden from it).
-            root.contentDescription = "$title: $text"
-            sparkline.invalidate()
+        fun itemAt(position: Int): PcLinkPairing? = items.getOrNull(position)
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
+            VH(LayoutInflater.from(parent.context).inflate(R.layout.item_pc_server, parent, false))
+
+        override fun getItemCount(): Int = items.size
+
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val item = items[position]
+            // The stored name, always: it is the string that was on screen next to the code the
+            // user compared, so it is the name they actually approved. Nothing here comes off the
+            // network, so there is nothing for a bystander to spoof into this list.
+            holder.title.text = item.name
+            // The last address we successfully used, stated as exactly that. Whether the PC is
+            // awake and reachable right now is a question this screen has not asked, so it does
+            // not answer it.
+            holder.subtitle.text = item.lastHost ?: notSeenLabel
+            holder.itemView.setOnClickListener { onClick(item) }
+            holder.itemView.setOnLongClickListener { onLongClick(item) }
+        }
+
+        class VH(view: View) : RecyclerView.ViewHolder(view) {
+            val title: TextView = view.findViewById(R.id.tvTitle)
+            val subtitle: TextView = view.findViewById(R.id.tvSubtitle)
         }
     }
 
     private companion object {
         const val SAMPLE_INTERVAL_MS = 1_000L
-        const val PREFS = "pc_mirror"
-        const val PREF_DETAILS_OPEN = "details_open"
-
-        fun format0(value: Float): String = "%.0f".format(value)
     }
 }
