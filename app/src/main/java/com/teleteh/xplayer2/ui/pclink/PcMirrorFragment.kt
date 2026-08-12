@@ -14,8 +14,10 @@ import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
@@ -103,7 +105,13 @@ class PcMirrorFragment : Fragment() {
             startActivity(Intent(requireContext(), PcConnectActivity::class.java))
         }
         view.findViewById<MaterialButton>(R.id.btnOpenRemote).setOnClickListener {
-            startActivity(Intent(requireContext(), PcLinkRemoteActivity::class.java))
+            // The same flags the player brings it up with, so a remote that already exists in the
+            // task resurfaces instead of a second one landing on top of it.
+            startActivity(
+                Intent(requireContext(), PcLinkRemoteActivity::class.java).addFlags(
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                )
+            )
         }
         view.findViewById<MaterialButton>(R.id.btnDisconnect).setOnClickListener {
             PcLinkSession.end()
@@ -147,9 +155,13 @@ class PcMirrorFragment : Fragment() {
     // --- the computers we know --------------------------------------------------------------
 
     private fun loadPairings() {
+        // Resolved here, on the main thread and while we are certainly attached: requireContext()
+        // inside the IO block would throw if the tab were swiped away mid-read.
+        val appContext = context?.applicationContext ?: return
+        val existing = store
         lifecycleScope.launch {
             val loaded = withContext(Dispatchers.IO) {
-                val store = store ?: PcLinkPairingStore(requireContext().applicationContext)
+                val store = existing ?: PcLinkPairingStore(appContext)
                 store to store.getAll()
             }
             if (view == null) return@launch
@@ -276,30 +288,36 @@ class PcMirrorFragment : Fragment() {
         }
     }
 
+    /**
+     * A [ListAdapter] with a diff, like Recent's — not for the animation but because the swipe
+     * depends on it: `notifyDataSetChanged` after a dismissal rebinds the swiped holder without
+     * telling ItemTouchHelper its item is gone, and the row comes back still translated off the
+     * side of the screen.
+     */
     private class PairedAdapter(
         private val onClick: (PcLinkPairing) -> Unit,
         private val onLongClick: (PcLinkPairing) -> Boolean,
         /** Shown instead of an address for a PC we have never recorded one for. */
         private val notSeenLabel: String
-    ) : RecyclerView.Adapter<PairedAdapter.VH>() {
+    ) : ListAdapter<PcLinkPairing, PairedAdapter.VH>(Diff) {
 
-        private val items = mutableListOf<PcLinkPairing>()
+        object Diff : DiffUtil.ItemCallback<PcLinkPairing>() {
+            // A PC is its fingerprint; the name and the address around it are just what we know
+            // about it today.
+            override fun areItemsTheSame(oldItem: PcLinkPairing, newItem: PcLinkPairing): Boolean =
+                oldItem.serverId == newItem.serverId
 
-        fun submitList(list: List<PcLinkPairing>) {
-            items.clear()
-            items.addAll(list)
-            notifyDataSetChanged()
+            override fun areContentsTheSame(oldItem: PcLinkPairing, newItem: PcLinkPairing): Boolean =
+                oldItem == newItem
         }
 
-        fun itemAt(position: Int): PcLinkPairing? = items.getOrNull(position)
+        fun itemAt(position: Int): PcLinkPairing? = currentList.getOrNull(position)
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH =
             VH(LayoutInflater.from(parent.context).inflate(R.layout.item_pc_server, parent, false))
 
-        override fun getItemCount(): Int = items.size
-
         override fun onBindViewHolder(holder: VH, position: Int) {
-            val item = items[position]
+            val item = getItem(position)
             // The stored name, always: it is the string that was on screen next to the code the
             // user compared, so it is the name they actually approved. Nothing here comes off the
             // network, so there is nothing for a bystander to spoof into this list.

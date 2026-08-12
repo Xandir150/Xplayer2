@@ -455,7 +455,10 @@ class PcConnectActivity : AppCompatActivity() {
         val identity = identity
         if (identity == null) {
             // The identity is still loading (first launch, generating a keypair). It's a moment,
-            // and the row stays tappable rather than us pairing with no key.
+            // and the row stays tappable rather than us pairing with no key. The overlay comes
+            // down with it: on the tab's one-tap path there is no list underneath to tap again,
+            // and a spinner over nothing is how a screen looks hung.
+            hideOverlay()
             Toast.makeText(this, R.string.pclink_connecting, Toast.LENGTH_SHORT).show()
             return
         }
