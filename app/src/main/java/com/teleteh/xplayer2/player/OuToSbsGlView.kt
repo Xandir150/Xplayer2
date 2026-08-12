@@ -1120,3 +1120,16 @@ private const val READBACK_SIZE = 256
 // Default (and fastest) readback pacing, ~30 Hz. The runtime interval can only be lengthened
 // from here — see setDepthReadbackIntervalNanos (thermal throttling).
 private const val READBACK_INTERVAL_NANOS = 33_000_000L
+
+/**
+ * Fit the picture to the source's own shape, letterboxing rather than stretching it.
+ *
+ * Deliberately outside the 0..6 the player's aspect button cycles through: those are a viewer's
+ * overrides for a film whose container lies about its shape, and 0 — what that button calls
+ * "auto" — means stretch to the panel, which for a film is close enough to right.
+ *
+ * A cast is not a film. A desktop has one true shape and it is known exactly, so stretching it is
+ * never right: a 16:10 Mac desktop on a 16:9 pair of glasses arrives visibly squashed, which is
+ * what this exists to stop. iOS never had the fault because it never stretched.
+ */
+const val RESIZE_MODE_SOURCE_ASPECT = 7

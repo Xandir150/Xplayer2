@@ -3552,7 +3552,9 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         v.setSourceIsSbs(pcLinkSourceIsSbs)
         v.setDuplicateMonoToSbs(false)
         v.setSwapEyes(false)
-        v.updateResizeMode(0)
+        // The desktop's shape is known exactly, so stretching it to the panel is never right —
+        // mode 0 is precisely "stretch". A 16:10 Mac desktop on 16:9 glasses came out squashed.
+        v.updateResizeMode(RESIZE_MODE_SOURCE_ASPECT)
         if (pcVideoWidth > 0 && pcVideoHeight > 0) {
             v.updateVideoAspectRatio(pcVideoWidth, pcVideoHeight)
         }
