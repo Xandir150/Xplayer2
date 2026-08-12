@@ -510,8 +510,12 @@ class PcLinkRemoteActivity : AppCompatActivity() {
             none
         }
         return listOf(
+            // A dash until a pong has actually come back, for the same reason the two chips above
+            // show one until the second reading: "0 ms" to a PC across a LAN is not a measurement,
+            // it is the sentinel for never having taken one — and the door is opened precisely in
+            // the two states where that is what it means (the first seconds, and after a drop).
             getString(R.string.pclink_stat_latency) to
-                getString(R.string.pclink_value_ms, "%.0f".format(stats.rttMs)),
+                (stats.rttMs?.let { getString(R.string.pclink_value_ms, "%.0f".format(it)) } ?: none),
             getString(R.string.pclink_stat_format) to format,
             getString(R.string.pclink_stat_dropped) to stats.droppedFrames.toString(),
             getString(R.string.pclink_stat_audio_output) to audioOut,

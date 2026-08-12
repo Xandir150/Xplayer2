@@ -48,8 +48,13 @@ object PcLinkSession {
         val videoBytes: Long,
         /** Frames thrown away to catch up, cumulative. */
         val droppedFrames: Long,
-        /** Round trip to the PC on the control connection. */
-        val rttMs: Float,
+        /**
+         * Round trip to the PC on the control connection; null until a pong has actually come back,
+         * and again whenever there is no client to ask (parked, refused, failed). Never faked as a
+         * zero — the clock behind it is millisecond-granular, so a real 0 is a same-millisecond LAN
+         * round trip and has to stay tellable from "no reading yet".
+         */
+        val rttMs: Float?,
         /** Codec short name (`avc`, `hevc`), or null before the server's `config` arrives. */
         val codec: String?,
         val width: Int,

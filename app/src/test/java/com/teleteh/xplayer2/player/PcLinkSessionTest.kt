@@ -29,7 +29,7 @@ class PcLinkSessionTest {
         framesRendered = 0L,
         videoBytes = 0L,
         droppedFrames = 0L,
-        rttMs = 0f,
+        rttMs = null,
         codec = "avc",
         width = 1920,
         height = 1080,

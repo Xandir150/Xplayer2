@@ -3666,7 +3666,9 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             framesRendered = pcDecoder?.framesRendered ?: 0L,
             videoBytes = client?.videoBytes?.get() ?: 0L,
             droppedFrames = pcDecoder?.droppedFrames ?: 0L,
-            rttMs = (client?.lastRttUs ?: 0L) / 1000f,
+            // Null all the way through rather than a zero: a parked or refused session has no client
+            // to ask, and until the first pong lands the client has no answer either.
+            rttMs = client?.lastRttUs?.div(1000f),
             codec = pcLinkConfig?.mime?.removePrefix("video/"),
             width = pcLinkConfig?.width ?: 0,
             height = pcLinkConfig?.height ?: 0,

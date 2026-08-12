@@ -856,8 +856,16 @@ class PcLinkClient(
      */
     val audioDropped = AtomicLong(0)
 
-    /** Round-trip time of the most recent ping/pong pair, microseconds (0 = none yet). */
-    @Volatile var lastRttUs: Long = 0L
+    /**
+     * Round-trip time of the most recent ping/pong pair, microseconds; **null until a pong has come
+     * back**, which is at least one [PING_INTERVAL_MS] into a session (nothing pings at connect).
+     *
+     * Not a zero sentinel: `nowMs()` is millisecond-granular, so a same-millisecond round trip on a
+     * LAN genuinely measures 0 µs, and a reader that treated 0 as "unknown" would hide the fastest
+     * links forever while reporting an impossible perfect zero for every link that has never been
+     * measured at all.
+     */
+    @Volatile var lastRttUs: Long? = null
         private set
 
     private var job: Job? = null
