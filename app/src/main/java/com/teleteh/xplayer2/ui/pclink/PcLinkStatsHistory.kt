@@ -40,8 +40,9 @@ class PcLinkStatsHistory(capacity: Int = SparklineWindow.DEFAULT_CAPACITY) {
      * is still a different session.
      *
      * The first reading of a session yields no point: one counter is not a rate. From the second
-     * onward each reading contributes one, including a reading identical to the last, which is a
-     * zero and the whole reason for sampling on a clock.
+     * onward each reading a second or so apart contributes one, including a reading identical to
+     * the last, which is a zero and the whole reason for sampling on a clock. A reading that
+     * arrives sooner than that contributes none — see the interval guard below.
      */
     fun sample(stats: PcLinkSession.Stats?, atMs: Long) {
         if (stats == null) {
@@ -56,7 +57,17 @@ class PcLinkStatsHistory(capacity: Int = SparklineWindow.DEFAULT_CAPACITY) {
             return
         }
         val elapsedMs = atMs - lastAtMs
-        if (elapsedMs <= 0L) return
+        // A rate for a one-second slot needs about a second behind it. Readings do not only arrive
+        // on the ticker: the remote re-reads the moment the sound switch is tapped, so it can show
+        // what the tap did without waiting out the second — and one frame over 20 ms is "50 fps", a
+        // number that never happened, drawn on the minute for a minute (SparklineWindow scales the
+        // whole window to its own min and max, so one outlier flattens everything else).
+        //
+        // Dropped without touching the baseline, so the next scheduled reading still measures a
+        // whole second from the last real one and the axis loses no slot. The caller loses nothing
+        // either: it repaints from `latest()`, which is the last honest number rather than a
+        // fabricated one.
+        if (elapsedMs < MIN_SAMPLE_INTERVAL_MS) return
         val seconds = elapsedMs / 1000f
         // Floored at zero: a reconnect inside one session rebuilds the client and the decoder, and
         // their counters start again from zero. That is "nothing arrived", not a negative rate.
@@ -82,5 +93,13 @@ class PcLinkStatsHistory(capacity: Int = SparklineWindow.DEFAULT_CAPACITY) {
         lastAtMs = atMs
         lastFrames = stats.framesRendered
         lastBytes = stats.videoBytes
+    }
+
+    private companion object {
+        /**
+         * Half the callers' one-second cadence: comfortably rejects a reading taken because
+         * something was tapped, and never a tick that ran late (`postDelayed` cannot run early).
+         */
+        const val MIN_SAMPLE_INTERVAL_MS = 500L
     }
 }

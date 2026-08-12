@@ -118,6 +118,39 @@ class PcLinkStatsHistoryTest {
     }
 
     @Test
+    fun `a reading taken because something was tapped is not a second's worth of rate`() {
+        val h = PcLinkStatsHistory()
+        h.sample(stats(frames = 0, bytes = 0), atMs = 1_000)
+        h.sample(stats(frames = 60, bytes = 1_000_000), atMs = 2_000)
+        assertEquals(60f, h.fps.latest()!!, eps)
+
+        // The remote re-reads the instant the sound switch is tapped, 20 ms into the second. One
+        // frame has arrived in that time, which is not "50 fps" — and a strip whose axis is one
+        // second per slot has no slot to spend on 20 ms.
+        h.sample(stats(frames = 61, bytes = 1_020_000), atMs = 2_020)
+        assertEquals(1, h.fps.size)
+        assertEquals(60f, h.fps.latest()!!, eps)
+
+        // And the baseline is untouched, so the next scheduled reading still measures a whole
+        // second from the last real one rather than the 980 ms left over.
+        h.sample(stats(frames = 120, bytes = 2_000_000), atMs = 3_000)
+        assertEquals(2, h.fps.size)
+        assertEquals(60f, h.fps.latest()!!, eps)
+        assertEquals(8f, h.mbps.latest()!!, eps)
+    }
+
+    @Test
+    fun `a tick that ran late is still a tick`() {
+        // `postDelayed` cannot fire early but is free to fire late; the guard must reject taps, not
+        // a busy main thread.
+        val h = PcLinkStatsHistory()
+        h.sample(stats(frames = 0), atMs = 1_000)
+        h.sample(stats(frames = 90), atMs = 2_500)
+        assertEquals(1, h.fps.size)
+        assertEquals(60f, h.fps.latest()!!, eps)
+    }
+
+    @Test
     fun `the window never outgrows a minute`() {
         val h = PcLinkStatsHistory()
         var frames = 0L
