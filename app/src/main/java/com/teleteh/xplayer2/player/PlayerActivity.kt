@@ -109,6 +109,15 @@ import kotlinx.coroutines.withContext
 class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession.Host {
 
     companion object {
+        /**
+         * Whether the desktop is hung in the world instead of filling the panel.
+         *
+         * Off until the spaces mode exists — see [tryShowExternalPresentation]. This is a build
+         * constant rather than a setting on purpose: a half-built mode behind a switch is a
+         * support burden, and the honest state today is "not yet".
+         */
+        const val SPACES_MODE = false
+
         // Spatial audio. The same key name the iOS build uses, so the two stay recognisably the
         // same setting when someone reads either side — though the defaults differ on purpose:
         // iOS has to synthesise a scene itself and asks first, while here the platform is doing
@@ -1895,11 +1904,22 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             dismissPresentation()
             return
         }
-        // World-fixed desktop only makes sense head-mounted: PC Link on the glasses hosts a
-        // VirtualDesktopGlView; everything else (files, and PC Link's phone-local fallback)
-        // keeps the flat OuToSbsGlView. The choice is baked into the presentation, so a mode
-        // switch (file session → PC Link or back) recreates it.
-        val wantWorldFixed = isPcLinkMode
+        // The desktop is shown as it arrives, filling the panel — the same thing iOS does — and
+        // NOT hung in the world.
+        //
+        // `VirtualDesktopGlView` and its head tracking work and are kept, but a screen fixed in
+        // the world is only worth its cost as part of the spaces mode that is not built yet:
+        // several windows placed around the viewer, which is what makes looking around mean
+        // something. On its own it bought one screen you have to turn your head to read, and it
+        // brought both of that idea's unsolved problems with it — a canvas that has to fit inside
+        // roughly 40°×23° to be seen whole, and a yaw that drifts because a gyro with no absolute
+        // reference always drifts. Neither is worth solving for a single window; both have to be
+        // solved for spaces, and that is when this comes back.
+        //
+        // The flag stays where the decision belongs, so turning it on is one line and the
+        // presentation is still rebuilt when the mode changes.
+        val wantWorldFixed = isPcLinkMode && SPACES_MODE
+
         // Already showing on this display in the right mode
         if (presentation?.display?.displayId == ext.displayId &&
             presentation?.isWorldFixedDesktop == wantWorldFixed
