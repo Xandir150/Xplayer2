@@ -3084,6 +3084,10 @@ class PlayerActivity : AppCompatActivity() {
             authProvider = { pcLinkAuth() }
         )
         pcLinkClient = client
+        // A reconnect (this is a fresh client — backgrounding tore the last one down) starts out
+        // asking for audio, because `hello` carrying caps is itself the request. Re-assert a mute
+        // the user made before, or the PC would resume spending 1.5 Mbit/s on sound we discard.
+        if (pcAudioMuted) client.setAudioEnabled(false)
         client.connect(lifecycleScope)
         // Tell the PC what the glasses are showing, now and whenever it changes (protocol.md
         // §2.16). The PC decides what to do with it — with its own setting on "follow the
@@ -3241,8 +3245,7 @@ class PlayerActivity : AppCompatActivity() {
                 android.util.Log.w("XPlayer2", "PC Link audio: $message")
                 pcAudio?.release()
                 pcAudio = null
-                pcLinkClient?.setAudioEnabled(false)
-                updatePcLinkAudioButton()
+                failPcLinkAudio()
             }
         }
         pcAudio = player
@@ -3250,9 +3253,21 @@ class PlayerActivity : AppCompatActivity() {
         if (!player.start()) {
             player.release()
             pcAudio = null
-            // Nothing on this phone can play it: stop paying for the bytes.
-            pcLinkClient?.setAudioEnabled(false)
+            failPcLinkAudio()
         }
+        updatePcLinkAudioButton()
+    }
+
+    /**
+     * This phone couldn't play what the PC offered (§12: no output device, an engine error).
+     *
+     * Tell the PC to stop spending the bandwidth, and show the same muted state a deliberate mute
+     * shows — which is honest (there is no sound) and, unlike a vanished button, leaves the user a
+     * way back: unmuting asks for audio again, and the PC answers with a fresh `config`.
+     */
+    private fun failPcLinkAudio() {
+        pcAudioMuted = true
+        pcLinkClient?.setAudioEnabled(false)
         updatePcLinkAudioButton()
     }
 
@@ -3619,7 +3634,9 @@ class PlayerActivity : AppCompatActivity() {
             .append(audio.format.channels).append("ch")
         if (audio.isMuted) append(" muted")
         append("  buf ").append(buffer.bufferedMs).append(" ms")
-        append("  under ").append(buffer.underruns)
+        // Ours (the stream ran dry) and the platform's (the track ran dry, which our silence is
+        // there to prevent) — a rising second number means the feeder isn't keeping up locally.
+        append("  under ").append(buffer.underruns).append("/").append(audio.platformUnderruns)
         append("\ncorr -").append(buffer.driftDrops).append("/+").append(buffer.driftInserts)
         append("  resync ").append(buffer.hardResyncs)
         append("  gap ").append(buffer.discontinuities)
