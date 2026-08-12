@@ -7,6 +7,7 @@ import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.format.DateUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -31,6 +32,7 @@ import com.teleteh.xplayer2.ui.network.PcConnectActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.Instant
 
 /**
  * **The PC-Mirror tab — where a cast starts.**
@@ -67,6 +69,9 @@ class PcMirrorFragment : Fragment() {
 
     private var store: PcLinkPairingStore? = null
 
+    /** One connect screen at a time — see [ConnectLaunchLatch]. */
+    private val connectLaunch = ConnectLaunchLatch()
+
     private val tick = object : Runnable {
         override fun run() {
             applySessionState()
@@ -102,7 +107,7 @@ class PcMirrorFragment : Fragment() {
 
         view.findViewById<MaterialButton>(R.id.btnFindPc).setOnClickListener {
             if (!requireGlasses()) return@setOnClickListener
-            startActivity(Intent(requireContext(), PcConnectActivity::class.java))
+            openConnect(Intent(requireContext(), PcConnectActivity::class.java))
         }
         view.findViewById<MaterialButton>(R.id.btnOpenRemote).setOnClickListener {
             // The same flags the player brings it up with, so a remote that already exists in the
@@ -122,6 +127,8 @@ class PcMirrorFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        // Back on the tab: whatever a previous tap opened is behind us now, so rows are live again.
+        connectLaunch.release()
         // Only while the tab is actually in front: nobody is watching a card they can't see, and
         // the session's state lives in the session either way.
         ticker.removeCallbacks(tick)
@@ -191,6 +198,18 @@ class PcMirrorFragment : Fragment() {
         val host = pairing.lastHost
         val intent = Intent(requireContext(), PcConnectActivity::class.java)
         if (host != null) intent.putExtra(PcConnectActivity.EXTRA_PCLINK_AUTOCONNECT_HOST, host)
+        openConnect(intent)
+    }
+
+    /**
+     * Every way into [PcConnectActivity] from this tab, so the second tap of a double tap does
+     * nothing. A row's ripple is feedback, not a state change: nothing on screen says a connection
+     * is on its way until the next window animates in, which is a quarter of a second of a live,
+     * repeatable button. The latch is claimed only after the glasses check, so a refused tap leaves
+     * the rows working.
+     */
+    private fun openConnect(intent: Intent) {
+        if (!connectLaunch.claim()) return
         startActivity(intent)
     }
 
@@ -256,9 +275,17 @@ class PcMirrorFragment : Fragment() {
 
     /** Long-press forget (touch or D-pad) — a confirm dialog, since there's no swipe-undo for it. */
     private fun confirmForget(pairing: PcLinkPairing): Boolean {
+        // The row's own second line goes in the message: with two records for the same machine the
+        // title alone ("Forget \"Living Room PC\"?") is the same sentence for both of them.
+        val subtitle = pairedRowSubtitle(
+            pairing.lastHost,
+            pairing.lastSeenAt,
+            getString(R.string.pclink_paired_no_address),
+            ::relativeSeen
+        )
         com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
             .setTitle(getString(R.string.pclink_forget_title, pairing.name))
-            .setMessage(R.string.pclink_forget_body)
+            .setMessage("$subtitle\n\n${getString(R.string.pclink_forget_body)}")
             .setPositiveButton(R.string.pclink_forget) { _, _ -> forget(pairing, withUndo = false) }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
@@ -322,10 +349,11 @@ class PcMirrorFragment : Fragment() {
             // user compared, so it is the name they actually approved. Nothing here comes off the
             // network, so there is nothing for a bystander to spoof into this list.
             holder.title.text = item.name
-            // The last address we successfully used, stated as exactly that. Whether the PC is
-            // awake and reachable right now is a question this screen has not asked, so it does
-            // not answer it.
-            holder.subtitle.text = item.lastHost ?: notSeenLabel
+            // The last address we successfully used and when, stated as exactly that. Whether the
+            // PC is awake and reachable right now is a question this screen has not asked, so it
+            // does not answer it.
+            holder.subtitle.text =
+                pairedRowSubtitle(item.lastHost, item.lastSeenAt, notSeenLabel, ::relativeSeen)
             holder.itemView.setOnClickListener { onClick(item) }
             holder.itemView.setOnLongClickListener { onLongClick(item) }
         }
@@ -340,3 +368,64 @@ class PcMirrorFragment : Fragment() {
         const val SAMPLE_INTERVAL_MS = 1_000L
     }
 }
+
+/**
+ * One connect screen at a time.
+ *
+ * [PcConnectActivity] is a `standard` activity that starts probing its host from `onCreate`, so a
+ * second tap before its window animates in opens a second copy authenticating against the same PC.
+ * Both reach the player, and the loser evicts the session the winner started. A row's ripple is not
+ * a state change, and two *different* rows tapped in quick succession is the same fault without
+ * needing a double tap at all — so the guard belongs to the screen, not to a widget.
+ *
+ * Claimed by the tap, released when the tab is resumed, which is exactly when tapping again should
+ * work: the connect screen was dismissed, or a cast ran and ended and the user is back.
+ */
+internal class ConnectLaunchLatch {
+
+    private var claimed = false
+
+    /** True if this tap owns the launch; false if one is already on its way. */
+    fun claim(): Boolean {
+        if (claimed) return false
+        claimed = true
+        return true
+    }
+
+    fun release() {
+        claimed = false
+    }
+}
+
+/**
+ * What a paired row says under the PC's name: where we last reached it, and when.
+ *
+ * The address alone is not enough to tell two rows apart. A PC that regenerates its identity — a
+ * reinstall, a wiped config, a different OS user — re-pairs under a new fingerprint and leaves the
+ * old record behind: same hostname, same address, two rows, one of them holding a key the PC no
+ * longer has. The store deliberately does not sweep the orphan (it cannot tell that case from two
+ * PCs taking turns on one DHCP lease), so the row has to say which is which, and `lastSeenAt` is
+ * the field that differs: refreshed on every successful authentication, frozen on the orphan at the
+ * moment the PC changed identity. It is also the sort key, so the live one is already on top.
+ *
+ * [relativeTime] is passed in rather than called here so this stays a plain string decision.
+ */
+internal fun pairedRowSubtitle(
+    lastHost: String?,
+    lastSeenAt: String,
+    notSeenLabel: String,
+    relativeTime: (epochMillis: Long) -> CharSequence
+): String {
+    val address = lastHost ?: notSeenLabel
+    // A record written before the field existed, or by a version that words it differently: say
+    // what we do know rather than guessing a date.
+    val seen = runCatching { Instant.parse(lastSeenAt).toEpochMilli() }.getOrNull() ?: return address
+    return "$address · ${relativeTime(seen)}"
+}
+
+/** "2 minutes ago" / "3 weeks ago", in the user's language — [DateUtils] already knows how. */
+internal fun relativeSeen(epochMillis: Long): CharSequence = DateUtils.getRelativeTimeSpanString(
+    epochMillis,
+    System.currentTimeMillis(),
+    DateUtils.MINUTE_IN_MILLIS
+)
