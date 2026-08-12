@@ -20,6 +20,8 @@
 
     <!-- Volume boost -->
     <string name="volume_boost_off">Усиление: выкл</string>
+    <string name="spatial_audio_on">Объёмный звук: вкл</string>
+    <string name="spatial_audio_off">Объёмный звук: выкл</string>
     <string name="volume_boost_with_value">Усиление: +%1$d дБ</string>
 
     <!-- Stereo modes -->
@@ -89,8 +91,8 @@
     <string name="pclink_manual_unreachable">Не удалось найти XPlayer Link по этому адресу</string>
     <string name="pclink_recentered">Экран отцентрирован</string>
     <!-- Кнопка звука на оверлее: звук компьютера, который играют очки -->
-    <string name="pclink_audio_on">Звук включён</string>
-    <string name="pclink_audio_muted">Звук выключен</string>
+    <string name="pclink_audio_on">Звук: очки</string>
+    <string name="pclink_audio_muted">Звук: компьютер</string>
     <string name="pclink_ended_for_playback">PC Link отключён</string>
 
     <!-- Вкладка PC-Mirror: вход, когда ничего не транслируется. -->

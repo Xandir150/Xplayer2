@@ -1,7 +1,9 @@
 package com.teleteh.xplayer2.player
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioDeviceInfo
+import android.media.AudioFormat
 import android.media.AudioManager
 import android.os.Build
 import androidx.media3.common.C
@@ -22,11 +24,18 @@ import java.nio.ByteBuffer
  * inaudible, only music and effects" / "everything too quiet" on phone speakers, while glasses
  * (no fold-down) sound fine. VLC avoids all of this by downmixing itself — so do we now.
  *
- * Activation is decided per configure(): only when the input is 5.1/7.1 16-bit PCM AND
- * [multichannelSinkAvailable] says there is NO multichannel-capable output attached. When a
- * multichannel sink (HDMI / USB-DAC / dock reporting ≥6 channels) is present, the processor stays
- * inactive and the untouched 6/8-channel stream reaches it exactly as before — nobody with real
- * surround output loses anything.
+ * Activation is decided per configure(): only when the input is 5.1/7.1 16-bit PCM and nobody
+ * downstream can use the surround channels. Two parties can, and either one stands this processor
+ * down:
+ *  * [multichannelSinkAvailable] — a real surround sink (HDMI / USB-DAC / dock reporting ≥6
+ *    channels) is attached, and the untouched 6/8-channel stream reaches it exactly as before;
+ *  * [spatializerWillRender] — the platform's own spatialiser will render the track on this route
+ *    (see [platformWillSpatialize]). Folding first would leave it a stereo pair and nothing to
+ *    place, which is precisely how this processor was suppressing Android's spatial audio on XR
+ *    glasses until it was measured.
+ *
+ * Neither is a blanket exemption: both are asked again at every configure(), so a route that stops
+ * being able to use six channels gets the fold-down back.
  *
  * Mixing matrix (ITU-R BS.775 style, LFE omitted as per ATSC practice):
  *   L = FL + 0.707·FC + 0.707·Ls(+0.707·Lb for 7.1)
@@ -41,6 +50,8 @@ import java.nio.ByteBuffer
 @UnstableApi
 class StereoFolddownAudioProcessor(
     private val multichannelSinkAvailable: () -> Boolean,
+    private val spatializerWillRender: (channelCount: Int, sampleRate: Int) -> Boolean =
+        { _, _ -> false },
 ) : BaseAudioProcessor() {
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
@@ -56,6 +67,15 @@ class StereoFolddownAudioProcessor(
         }
         if (multichannelSinkAvailable()) {
             // A real surround sink is attached — hand the full multichannel stream through.
+            return AudioProcessor.AudioFormat.NOT_SET
+        }
+        if (spatializerWillRender(inputAudioFormat.channelCount, inputAudioFormat.sampleRate)) {
+            // The platform will spatialise this track on the route it is going out on, and it
+            // needs the surround channels to do it — folding here would hand it a stereo pair
+            // and leave it nothing to place. Stand aside, exactly as for a real surround sink:
+            // this is the same "somebody downstream can use all six" case, and the somebody is
+            // the OS. Not a blanket removal — [platformWillSpatialize] asks about *this* format
+            // on *this* route, so the moment the answer is no the fold-down is back.
             return AudioProcessor.AudioFormat.NOT_SET
         }
         return AudioProcessor.AudioFormat(inputAudioFormat.sampleRate, 2, C.ENCODING_PCM_16BIT)
@@ -134,6 +154,64 @@ class StereoFolddownAudioProcessor(
                             (explicitlyMultichannel || d.channelCounts.isEmpty())
                 }
             }
+        }
+
+        /**
+         * The output channel mask a [channelCount] of decoded PCM would be played with, or null
+         * for a count this processor has no business speaking for.
+         *
+         * Only the two layouts [onConfigure] already accepts: the mask is what the platform is
+         * asked about, so answering for a layout we would not pass through anyway could only
+         * produce a yes we then ignore.
+         */
+        fun spatialChannelMask(channelCount: Int): Int? = when (channelCount) {
+            6 -> AudioFormat.CHANNEL_OUT_5POINT1
+            8 -> AudioFormat.CHANNEL_OUT_7POINT1_SURROUND
+            else -> null
+        }
+
+        /**
+         * True when the platform's own spatialiser will render this track on the route it is
+         * about to go out on — i.e. when handing it the surround channels buys something.
+         *
+         * Measured on the owner's XREAL Air 2 Pro on a Galaxy S23 Ultra: the glasses enumerate as
+         * `TYPE_USB_HEADSET`, which AOSP's `SpatializerHelper` maps to the BINAURAL mode, the
+         * phone's effect supports binaural, and the routing update says in as many words
+         * `can spatialize media 5.1:true on device: type:usb_headset`. So USB glasses are not the
+         * excluded case one might assume from iOS, where AVFoundation disqualifies them for being
+         * USB rather than a headphone jack — here they are treated as the headset they are.
+         *
+         * What the platform does NOT do is turn the scene with the head: `mIsHeadTrackingSupported`
+         * is false for anything without its own motion sensors, which is every pair of glasses we
+         * support (we read their IMU ourselves, over USB HID, and Android has no way to be handed
+         * it). So this is a fixed virtual speaker bed, the same shape as the iOS side.
+         *
+         * Everything here is asked fresh per configure(): the answer depends on the current route,
+         * and a route can change under a running clip.
+         */
+        fun platformWillSpatialize(context: Context, channelCount: Int, sampleRate: Int): Boolean {
+            // Spatializer arrived in 12L. Below it the question has no answer and the fold-down
+            // is simply what happens, as it always did.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S_V2) return false
+            val mask = spatialChannelMask(channelCount) ?: return false
+            val spatializer =
+                context.getSystemService(AudioManager::class.java)?.spatializer ?: return false
+            // `isEnabled` is the user's switch in system settings, `isAvailable` is whether the
+            // current output can be spatialised at all. Both, or there is nothing to stand aside
+            // for — and `canBeSpatialized` below can still say no for this particular format.
+            if (!spatializer.isEnabled || !spatializer.isAvailable) return false
+            // The same attributes the player builds its ExoPlayer with; asking under different
+            // ones would be asking about a different track than the one we are about to send.
+            val attributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+                .build()
+            val format = AudioFormat.Builder()
+                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                .setSampleRate(sampleRate)
+                .setChannelMask(mask)
+                .build()
+            return spatializer.canBeSpatialized(attributes, format)
         }
     }
 }

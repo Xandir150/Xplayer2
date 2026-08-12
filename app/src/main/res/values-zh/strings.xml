@@ -18,6 +18,8 @@
 
     <!-- Volume boost -->
     <string name="volume_boost_off">音量增强：关闭</string>
+    <string name="spatial_audio_on">空间音频：开启</string>
+    <string name="spatial_audio_off">空间音频：关闭</string>
     <string name="volume_boost_with_value">音量增强：+%1$d dB</string>
 
     <!-- Stereo modes -->

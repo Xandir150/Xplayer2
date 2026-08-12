@@ -107,6 +107,12 @@ import kotlinx.coroutines.withContext
 class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession.Host {
 
     companion object {
+        // Spatial audio. The same key name the iOS build uses, so the two stay recognisably the
+        // same setting when someone reads either side — though the defaults differ on purpose:
+        // iOS has to synthesise a scene itself and asks first, while here the platform is doing
+        // it and has already said it can, so the honest default is on.
+        const val SPATIAL_PREFS = "audio"
+        const val SPATIAL_KEY = "spatial_audio"
         const val EXTRA_START_POSITION_MS = "start_position_ms"
         const val EXTRA_TITLE = "title"
         // Durable identity for the Recent list when the played URI is ephemeral (e.g. a Yandex Disk
@@ -339,10 +345,45 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         override fun onAudioDevicesRemoved(removed: Array<out android.media.AudioDeviceInfo>) = onAudioRouteMaybeChanged()
     }
 
-    private fun onAudioRouteMaybeChanged() {
-        val mc = StereoFolddownAudioProcessor.multichannelSinkAvailable(applicationContext)
-        if (mc == lastMultichannelSink) return
-        lastMultichannelSink = mc
+    // The same staleness applies to the platform-spatialiser answer, and for a sharper reason:
+    // plugging the glasses in is exactly the event that turns it from false to true, and it is
+    // also exactly the moment the user is about to watch something. Tracked separately from the
+    // multichannel-sink flag because the two can move independently — glasses are a stereo sink
+    // that can be spatialised, a dock is a multichannel sink that cannot be.
+    private var lastSpatialAnswer = false
+
+    /**
+     * Whether the fold-down should stand aside and let the platform spatialise this track.
+     *
+     * **Automatic, and safe because of what the second condition is.** The worry with passing
+     * six channels on is the two-channel sink that then has to cope; but `canBeSpatialized` is
+     * not a guess about the sink, it is the platform stating it will render this exact format on
+     * this exact route. Where it says no — a phone speaker, a plain stereo DAC, an old Android —
+     * the fold-down happens exactly as before. So there is no route on which this can quietly
+     * hand somebody a stream they cannot play.
+     *
+     * The switch in front of it defaults to on for the same reason, and exists so the difference
+     * can be heard both ways rather than because the automatic answer needs supervising.
+     */
+    private fun spatialAudioWanted(channelCount: Int, sampleRate: Int): Boolean =
+        isSpatialAudioEnabled() &&
+            StereoFolddownAudioProcessor.platformWillSpatialize(
+                applicationContext, channelCount, sampleRate
+            )
+
+    private fun isSpatialAudioEnabled(): Boolean =
+        getSharedPreferences(SPATIAL_PREFS, MODE_PRIVATE).getBoolean(SPATIAL_KEY, true)
+
+    private fun setSpatialAudioEnabled(on: Boolean) {
+        getSharedPreferences(SPATIAL_PREFS, MODE_PRIVATE).edit().putBoolean(SPATIAL_KEY, on).apply()
+        // The sink decided fold-vs-passthrough at its last configure(); the switch has just
+        // changed that answer, so put it through the same brief renderer toggle a route change
+        // uses rather than making the user seek or re-open the film.
+        reconfigureAudioSink()
+    }
+
+    /** ~100 ms of silence, in exchange for the sink re-deciding on the current facts. */
+    private fun reconfigureAudioSink() {
         val exo = player ?: return
         val params = exo.trackSelectionParameters
         exo.trackSelectionParameters =
@@ -353,6 +394,19 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                     p.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false).build()
             }
         }, 100)
+    }
+
+    private fun onAudioRouteMaybeChanged() {
+        val mc = StereoFolddownAudioProcessor.multichannelSinkAvailable(applicationContext)
+        // Asked with a 5.1 at the commonest rate purely as a probe of the route: this is a
+        // "has anything changed" test, and the sink asks again for real with the actual format
+        // when it reconfigures below.
+        val spatial = isSpatialAudioEnabled() &&
+            StereoFolddownAudioProcessor.platformWillSpatialize(applicationContext, 6, 48_000)
+        if (mc == lastMultichannelSink && spatial == lastSpatialAnswer) return
+        lastMultichannelSink = mc
+        lastSpatialAnswer = spatial
+        reconfigureAudioSink()
     }
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -558,8 +612,11 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         registerDisplayListener()
 
         // Watch audio outputs so the 5.1→stereo fold-down re-decides when a multichannel
-        // sink (dock/HDMI/USB-DAC) comes or goes mid-playback.
+        // sink (dock/HDMI/USB-DAC) comes or goes mid-playback — or when a route the platform
+        // can spatialise, which is what the glasses are, arrives or leaves.
         lastMultichannelSink = StereoFolddownAudioProcessor.multichannelSinkAvailable(applicationContext)
+        lastSpatialAnswer = isSpatialAudioEnabled() &&
+            StereoFolddownAudioProcessor.platformWillSpatialize(applicationContext, 6, 48_000)
         getSystemService(android.media.AudioManager::class.java)
             ?.registerAudioDeviceCallback(audioDeviceCallback, Handler(mainLooper))
 
@@ -848,9 +905,12 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                 .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
                 .setAudioProcessorChain(
                     DefaultAudioSink.DefaultAudioProcessorChain(
-                        StereoFolddownAudioProcessor {
-                            StereoFolddownAudioProcessor.multichannelSinkAvailable(applicationContext)
-                        }
+                        StereoFolddownAudioProcessor(
+                            {
+                                StereoFolddownAudioProcessor.multichannelSinkAvailable(applicationContext)
+                            },
+                            { channels, rate -> spatialAudioWanted(channels, rate) },
+                        )
                     )
                 )
                 .build()
@@ -1415,6 +1475,11 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         else getString(R.string.volume_boost_with_value, db)
     }
 
+    /** Current spatial-audio row label, e.g. "Объёмный звук: выкл." */
+    private fun spatialLabel(on: Boolean): String = getString(
+        if (on) R.string.spatial_audio_on else R.string.spatial_audio_off
+    )
+
     /** Current volume-boost button label, e.g. "Boost: off" / "Boost: +12 dB". */
     fun getVolumeBoostLabel(): String = boostLabel(getVolumeBoostMb())
 
@@ -1579,6 +1644,28 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                 com.teleteh.xplayer2.ui.util.TvFocus.makeFocusableItem(boostTv)
                 if (firstFocusable == null) firstFocusable = boostTv
                 inner.addView(boostTv)
+
+                // Spatial audio, on the routes that can do it. The row is only drawn where it
+                // would do something: on a phone speaker or a plain stereo sink the platform
+                // answers no, and a switch that visibly does nothing is worse than no switch.
+                if (StereoFolddownAudioProcessor.platformWillSpatialize(applicationContext, 6, 48_000)) {
+                    val spatialTv = TextView(this).apply {
+                        text = spatialLabel(isSpatialAudioEnabled())
+                        setPadding(dp(16), dp(10), dp(16), dp(10))
+                        setTextColor(Color.WHITE)
+                        textSize = 14f
+                        isAllCaps = false
+                        alpha = 0.95f
+                        setOnClickListener {
+                            val on = !isSpatialAudioEnabled()
+                            setSpatialAudioEnabled(on)
+                            text = spatialLabel(on)
+                            Toast.makeText(this@PlayerActivity, spatialLabel(on), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    com.teleteh.xplayer2.ui.util.TvFocus.makeFocusableItem(spatialTv)
+                    inner.addView(spatialTv)
+                }
             }
             items.forEach { item ->
                 val isSelected = when {

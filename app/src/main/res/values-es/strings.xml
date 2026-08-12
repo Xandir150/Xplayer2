@@ -18,6 +18,8 @@
 
     <!-- Volume boost -->
     <string name="volume_boost_off">Amplificación: apagada</string>
+    <string name="spatial_audio_on">Sonido espacial: activado</string>
+    <string name="spatial_audio_off">Sonido espacial: desactivado</string>
     <string name="volume_boost_with_value">Amplificación: +%1$d dB</string>
 
     <!-- Stereo modes -->

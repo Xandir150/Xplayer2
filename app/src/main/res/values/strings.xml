@@ -25,6 +25,8 @@
 
     <!-- Volume boost -->
     <string name="volume_boost_off">Boost volume: off</string>
+    <string name="spatial_audio_on">Spatial audio: on</string>
+    <string name="spatial_audio_off">Spatial audio: off</string>
     <string name="volume_boost_with_value">Boost volume: +%1$d dB</string>
 
     <!-- Stereo modes -->
@@ -110,8 +112,8 @@
     <string name="pclink_manual_unreachable">Couldn\'t reach XPlayer Link at that address</string>
     <string name="pclink_recentered">Screen re-centered</string>
     <!-- The overlay's mute button: the PC's own sound, played through the glasses -->
-    <string name="pclink_audio_on">Sound on</string>
-    <string name="pclink_audio_muted">Sound off</string>
+    <string name="pclink_audio_on">Sound: glasses</string>
+    <string name="pclink_audio_muted">Sound: computer</string>
     <string name="pclink_ended_for_playback">PC Link disconnected</string>
 
     <!-- The PC-Mirror tab: the way in when nothing is streaming. -->
