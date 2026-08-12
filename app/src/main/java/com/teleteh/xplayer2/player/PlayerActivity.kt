@@ -104,7 +104,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @UnstableApi
-class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant {
+class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession.Host {
 
     companion object {
         const val EXTRA_START_POSITION_MS = "start_position_ms"
@@ -426,6 +426,10 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant {
     private var pcStatsBytes = 0L
     private var pcStatsFps = 0f
     private var pcStatsMbps = 0f
+    /** Identifies this session to readers that keep history across readings — see [PcLinkSession]. */
+    private var pcSessionId = 0L
+    /** Last state the client reported, so the tab can say "connecting" rather than draw a zero. */
+    private var pcLinkLink = PcLinkSession.Link.CONNECTING
 
     /** True once this activity was launched (or re-launched) with the PC Link extras. */
     private val isPcLinkMode: Boolean get() = pcLinkHost != null
@@ -437,7 +441,10 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant {
         // the glasses keeps running while this window is stopped (see onStop), and that is exactly
         // the instance a later claim has to be able to find.
         GlassesStage.register(this)
-        
+        // Same scope, same reason: the PC-Mirror tab reads the session's numbers off this instance
+        // while its own window is stopped behind the phone's UI.
+        PcLinkSession.register(this)
+
         // Ensure edge-to-edge and cutout mode for Android 15+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window.attributes = window.attributes.apply {
@@ -1298,6 +1305,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant {
             currentInstance = null
         }
         GlassesStage.unregister(this)
+        PcLinkSession.unregister(this)
         saveProgress()
         exitPcLink()
         if (lazy3dEnabled) stopLazy3d()
@@ -3100,6 +3108,11 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant {
         GlassesStage.claim(this)
         stopLocalPlayback()
         pcLinkHost = host
+        // A new session even when it is the same PC at the same address: whatever a reader has
+        // collected describes the one that just ended, and splicing the two would draw a minute
+        // that never happened.
+        pcSessionId = PcLinkSession.newSessionId()
+        pcLinkLink = PcLinkSession.Link.CONNECTING
         pcLinkControlPort = intent.getIntExtra(PcConnectActivity.EXTRA_PCLINK_CONTROL_PORT, DEFAULT_CONTROL_PORT)
         pcLinkVideoPort = intent.getIntExtra(PcConnectActivity.EXTRA_PCLINK_VIDEO_PORT, DEFAULT_VIDEO_PORT)
         pcLinkServerName = intent.getStringExtra(PcConnectActivity.EXTRA_PCLINK_NAME)
@@ -3425,6 +3438,68 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant {
     /** Whether this player is running a PC Link session (for the phone remote's gesture routing). */
     fun isPcLinkActive(): Boolean = isPcLinkMode
 
+    // ------------------------------------------------------------------------------------------
+    // PcLinkSession.Host — what the PC-Mirror tab reads and drives
+    // ------------------------------------------------------------------------------------------
+
+    /**
+     * One reading of this session, or null when this instance isn't running one.
+     *
+     * Counters, not rates — the caller has its own clock (see [PcLinkSession.Stats]). Everything
+     * here is a plain field read on the main thread, so it costs nothing to ask once a second and
+     * there is nothing to keep updated while nobody is asking.
+     */
+    override fun pcLinkStats(): PcLinkSession.Stats? {
+        if (!isPcLinkMode) return null
+        val client = pcLinkClient
+        val audio = pcAudio
+        val buffer = audio?.buffer
+        val videoPts = pcLastRenderedPtsUs
+        val audioPts = buffer?.lastPlayedPtsUs ?: 0L
+        return PcLinkSession.Stats(
+            sessionId = pcSessionId,
+            serverName = pcLinkServerName,
+            link = pcLinkLink,
+            // Both restart at zero when a dropped link is rebuilt (a new decoder, a new client),
+            // which is why the contract tells readers to floor a negative difference at zero.
+            framesRendered = pcDecoder?.framesRendered ?: 0L,
+            videoBytes = client?.videoBytes?.get() ?: 0L,
+            droppedFrames = pcDecoder?.droppedFrames ?: 0L,
+            rttMs = (client?.lastRttUs ?: 0L) / 1000f,
+            codec = pcLinkConfig?.mime?.removePrefix("video/"),
+            width = pcLinkConfig?.width ?: 0,
+            height = pcLinkConfig?.height ?: 0,
+            stereo = pcLinkConfig?.stereo,
+            audioRateHz = audio?.format?.rate ?: 0,
+            audioChannels = audio?.format?.channels ?: 0,
+            audioBufferedMs = buffer?.bufferedMs ?: 0,
+            // Ours (the stream ran dry) and the platform's (the track ran dry) are one fact to a
+            // reader who is not debugging the feeder.
+            audioDropouts = (buffer?.underruns ?: 0L) + (audio?.platformUnderruns?.toLong() ?: 0L),
+            audioSkewMs = if (videoPts > 0L && audioPts > 0L) (videoPts - audioPts) / 1000L else null,
+            audioToGlasses = !pcAudioMuted,
+            audioAvailable = audio != null || pcAudioMuted
+        )
+    }
+
+    /**
+     * The routing switch on the tab. Routed through the same [togglePcLinkMute] the overlay button
+     * uses rather than repeating it: the local gate, the `set_audio` on the wire that hands the
+     * PC's own speakers back, and the button's own label all move together there.
+     */
+    override fun setPcLinkAudioToGlasses(enabled: Boolean) {
+        if (!isPcLinkMode) return
+        if (enabled == !pcAudioMuted) return
+        togglePcLinkMute()
+    }
+
+    /** The tab's disconnect. Same ending as an eviction: the session stops and the window goes. */
+    override fun endPcLink() {
+        if (!isPcLinkMode) return
+        exitPcLink()
+        finish()
+    }
+
     // Last IMU state we asked GlassesController for, so lifecycle churn doesn't spam USB
     // start/stop commands (setImuStreaming is idempotent but each start is blocking USB I/O).
     private var pcImuStreaming = false
@@ -3458,14 +3533,22 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant {
         override fun onState(state: PcLinkState) {
             if (!isLive) return
             when (state) {
-                is PcLinkState.Connecting ->
+                is PcLinkState.Connecting -> {
+                    pcLinkLink = PcLinkSession.Link.CONNECTING
                     setPcLinkStatus(getString(R.string.pclink_connecting), dim = false)
-                is PcLinkState.Streaming ->
+                }
+                is PcLinkState.Streaming -> {
+                    pcLinkLink = PcLinkSession.Link.STREAMING
                     setPcLinkStatus(pcLinkServerName, dim = true)
-                is PcLinkState.Reconnecting ->
+                }
+                is PcLinkState.Reconnecting -> {
+                    pcLinkLink = PcLinkSession.Link.RECONNECTING
                     setPcLinkStatus("$pcLinkServerName — reconnecting (${state.attempt})", dim = false)
-                is PcLinkState.Failed ->
+                }
+                is PcLinkState.Failed -> {
+                    pcLinkLink = PcLinkSession.Link.FAILED
                     setPcLinkStatus("$pcLinkServerName — disconnected: ${state.reason}", dim = false)
+                }
                 is PcLinkState.AuthFailed -> onPcLinkAuthFailed(state.reason)
             }
         }
