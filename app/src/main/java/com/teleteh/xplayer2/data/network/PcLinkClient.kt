@@ -137,6 +137,14 @@ object PcLinkProtocol {
     /** The only wire protocol version this client speaks. */
     const val PROTOCOL_VERSION = 1
 
+    /**
+     * What `hello` calls this client family (§2.1).
+     *
+     * Optional and additive: it grants nothing and must not affect negotiation. It exists so a
+     * PC-side UI can offer something that only applies to one client family.
+     */
+    const val PLATFORM = "android"
+
     // --- video framing (§3) ---
 
     /** Frame magic, "XPV1". */
@@ -196,12 +204,24 @@ object PcLinkProtocol {
             .put("type", "hello")
             .put("clientName", clientName)
             .put("protocolVersion", protocolVersion)
+            .put("platform", PLATFORM)
             .put("codecs", arr)
             .toString() + "\n"
     }
 
     /** The `idr` line (client → server): "make the next frame a sync frame". */
     fun idrLine(): String = JSONObject().put("type", "idr").toString() + "\n"
+
+    /**
+     * The `glasses` line (client → server, §2.16): what the viewer's glasses are displaying.
+     *
+     * Advisory and additive — a server that predates it ignores the whole message under §2's
+     * forward-compatibility rule, so this can be sent unconditionally. The spelling is "3d"/"2d"
+     * because it describes the *panel*, not the stream: a mono stream going to glasses in 3D is
+     * the ordinary case, and `config.stereo` is what describes the bytes.
+     */
+    fun glassesLine(is3d: Boolean): String =
+        JSONObject().put("type", "glasses").put("mode", if (is3d) "3d" else "2d").toString() + "\n"
 
     /** The `ping` line. [tUs] is our own monotonic clock; the peer echoes it back verbatim. */
     fun pingLine(tUs: Long): String =
@@ -687,6 +707,12 @@ class PcLinkClient(
     // Whatever pong we owe the peer (its t_us, echoed verbatim), or null.
     @Volatile private var pendingPong: Long? = null
 
+    // The glasses' display mode as last reported to us, and whether the server has been told.
+    // A slot rather than a queue for the same reason as idrRequested: what the server needs is
+    // the current state, not the history of how we got here.
+    @Volatile private var glassesMode: Boolean? = null
+    @Volatile private var glassesSent: Boolean? = null
+
     /** Starts the session loop in [scope]. Call once. */
     fun connect(scope: CoroutineScope): Job {
         val started = scope.launch(Dispatchers.IO) { runSessions() }
@@ -704,6 +730,17 @@ class PcLinkClient(
     /** Asks the server for a sync frame (after a resync, a decoder reset, or a fresh surface). */
     fun requestIdr() {
         idrRequested = true
+    }
+
+    /**
+     * Tells the server what the glasses are displaying (§2.16).
+     *
+     * Safe to call from any thread and as often as the glasses change; the writer sends it only
+     * when it differs from what the server was last told. Re-sent on a reconnect, because a new
+     * session starts with the server knowing nothing.
+     */
+    fun reportGlasses(is3d: Boolean) {
+        glassesMode = is3d
     }
 
     private fun closeSockets() {
@@ -773,6 +810,9 @@ class PcLinkClient(
         sessionStartMs = nowMs()
         idrRequested = false
         pendingPong = null
+        // A fresh server knows nothing about our glasses, so whatever we last told the previous
+        // one has to be said again.
+        glassesSent = null
         unansweredPings = 0
         lastRxMs = nowMs()
 
@@ -1017,6 +1057,12 @@ class PcLinkClient(
             if (idrRequested) {
                 idrRequested = false
                 writeLine(output, PcLinkProtocol.idrLine())
+            }
+            glassesMode?.let { mode ->
+                if (glassesSent != mode) {
+                    glassesSent = mode
+                    writeLine(output, PcLinkProtocol.glassesLine(mode))
+                }
             }
             if (nowMs() >= nextPingAt) {
                 nextPingAt = nowMs() + PING_INTERVAL_MS

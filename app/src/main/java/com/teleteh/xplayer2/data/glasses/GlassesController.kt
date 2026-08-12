@@ -60,6 +60,7 @@ class GlassesController(private val appContext: Context) {
     private var device: UsbDevice? = null
     private var connection: UsbDeviceConnection? = null
     private var listener: Listener? = null
+    private var playbackListener: Listener? = null
     // IMU head-orientation telemetry (XREAL only), started on demand via [setImuStreaming] while the
     // head-gesture menu is shown and stopped otherwise, so it doesn't drain power streaming the gyro
     // continuously. Exposed via [headOrientationDegrees]/[latestImuDebug]; null when not streaming.
@@ -154,6 +155,19 @@ class GlassesController(private val appContext: Context) {
     fun setListener(l: Listener?) {
         listener = l
         notifyState()
+    }
+
+    /**
+     * A second listener slot, for playback.
+     *
+     * Deliberately not a list and not a replacement for [setListener]: that one belongs to
+     * MainActivity's toolbar chip and is cleared in its onStop, which — because onStop runs *after*
+     * the next activity's onStart — would silently wipe a listener PlayerActivity had just set.
+     * Two named slots make ownership unambiguous instead of ordering-dependent.
+     */
+    fun setPlaybackListener(l: Listener?) {
+        playbackListener = l
+        l?.onChanged(currentState(), lastMode())
     }
 
     // XREAL host devices (Beam / Beam Pro) ARE the glasses' host: the glasses are the device's own
@@ -850,6 +864,7 @@ class GlassesController(private val appContext: Context) {
 
     private fun notifyState() {
         listener?.onChanged(currentState(), lastReportedMode)
+        playbackListener?.onChanged(currentState(), lastReportedMode)
     }
 
     private fun UsbDevice.isSupportedGlasses(): Boolean = matchedDevice() != null

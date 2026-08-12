@@ -265,6 +265,21 @@ class PcLinkClientTest {
         assertEquals(0L, parser.skippedBytes)
     }
 
+    // --- control channel: glasses (§2.16) --------------------------------------------------------
+
+    @Test
+    fun `glasses reports the panel mode, not the stream packing`() {
+        // "3d"/"2d" describe what the viewer's glasses are displaying. The stream's own packing
+        // is `config.stereo`'s "sbs"/"mono", and the two are independent — a mono stream going to
+        // glasses in 3D is the ordinary case.
+        val on = PcLinkProtocol.glassesLine(is3d = true)
+        assertTrue("must be one NDJSON line", on.endsWith("\n") && on.count { it == '\n' } == 1)
+        val obj = JSONObject(on.trim())
+        assertEquals("glasses", obj.getString("type"))
+        assertEquals("3d", obj.getString("mode"))
+        assertEquals("2d", JSONObject(PcLinkProtocol.glassesLine(false).trim()).getString("mode"))
+    }
+
     // --- control channel: hello ------------------------------------------------------------------
 
     @Test
@@ -282,6 +297,7 @@ class PcLinkClientTest {
         assertEquals("hello", obj.getString("type"))
         assertEquals("Pixel 8", obj.getString("clientName"))
         assertEquals(1, obj.getInt("protocolVersion"))
+        assertEquals("android", obj.getString("platform"))
         val codecs = obj.getJSONArray("codecs")
         assertEquals(2, codecs.length())
         assertEquals("video/hevc", codecs.getJSONObject(0).getString("mime"))

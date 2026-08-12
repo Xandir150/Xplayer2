@@ -83,6 +83,7 @@ import com.teleteh.xplayer2.data.depth.DepthFrameWorker
 import com.teleteh.xplayer2.data.depth.DepthModelManager
 import com.teleteh.xplayer2.data.depth.DepthThermalGovernor
 import com.teleteh.xplayer2.data.glasses.GlassesController
+import com.teleteh.xplayer2.data.glasses.GlassesProtocol
 import com.teleteh.xplayer2.data.network.PairingFailure
 import com.teleteh.xplayer2.data.network.PcLinkAuth
 import com.teleteh.xplayer2.data.network.PcLinkClient
@@ -3075,6 +3076,12 @@ class PlayerActivity : AppCompatActivity() {
         )
         pcLinkClient = client
         client.connect(lifecycleScope)
+        // Tell the PC what the glasses are showing, now and whenever it changes (protocol.md
+        // §2.16). The PC decides what to do with it — with its own setting on "follow the
+        // glasses", switching them into 3D is what turns its desktop into stereo.
+        acquiredGlasses?.setPlaybackListener { _, mode ->
+            pcLinkClient?.reportGlasses(GlassesProtocol.is3DMode(mode))
+        }
         if (pcDebugView?.visibility == View.VISIBLE) startPcLinkDebugTicker()
     }
 
@@ -3102,6 +3109,7 @@ class PlayerActivity : AppCompatActivity() {
      */
     private fun disconnectPcLink() {
         stopPcLinkDebugTicker()
+        acquiredGlasses?.setPlaybackListener(null)
         pcLinkClient?.close()
         pcLinkClient = null
         pcDecoder?.release()
