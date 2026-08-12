@@ -252,8 +252,11 @@
                             android:layout_height="wrap_content"
                             android:clickable="false"
                             android:focusable="false"
-                            android:duplicateParentState="true"
-                            android:importantForAccessibility="no" />
+                            android:importantForAccessibility="no"
+                            android:text=""
+                            android:textOn=""
+                            android:textOff=""
+                            app:showText="false" />
                     </LinearLayout>
 
                     <TextView
