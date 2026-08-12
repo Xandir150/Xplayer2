@@ -363,18 +363,34 @@ class PcLinkRemoteActivity : AppCompatActivity() {
     }
 
     /**
-     * The player ended the session on its side — the glasses came off, a film claimed them, the PC
-     * went away. There is nothing left here to hold, so leave by the same door.
+     * The player ended the session on its side — the glasses came off, a film claimed them, the
+     * user picked something to watch. There is nothing left here to hold, so get out of the way.
+     *
+     * Deliberately just a `finish()`, where the user's own exit below navigates. Whoever ended the
+     * session is already deciding what should be on screen next, and every one of those paths has
+     * an answer: the player finishes too (so the user lands on the main screen), or it is being
+     * reused for the film that displaced the cast (so the user lands on the film). Sending them to
+     * the PC-Mirror tab from here would override that — and, worse, the [leave] route's CLEAR_TOP
+     * would finish the very film that had just started.
      */
-    fun onSessionEnded() = leave()
+    fun onSessionEnded() {
+        if (leaving) return
+        leaving = true
+        handler.removeCallbacks(tick)
+        finish()
+    }
 
     /**
-     * Ends the cast and goes home to the PC-Mirror tab.
+     * The user's way out: ends the cast and goes home to the PC-Mirror tab.
      *
-     * Every way out of this screen lands here, including the session ending on its own — so the
-     * cast and its remote have one lifetime, and leaving never uncovers the player's own window.
-     * [PcLinkSession.end] is a no-op when there is nothing running, which is exactly the case when
-     * a tick discovered the session was already gone.
+     * Back and Disconnect both land here, so the cast and its remote have one lifetime — there is
+     * no state in which a desktop streams to the glasses with no visible remote. CLEAR_TOP is what
+     * makes the destination stick: without it the player stays in the back stack underneath, and
+     * the next Back press uncovers its empty window, which is the fault this screen was rebuilt to
+     * remove.
+     *
+     * [PcLinkSession.end] is a no-op when nothing is running — the case when a tick discovered the
+     * session had already gone without anyone telling us.
      */
     private fun leave() {
         if (leaving) return
