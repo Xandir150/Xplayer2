@@ -49,6 +49,27 @@ class ExternalPanelPolicyTest {
     }
 
     @Test
+    fun `a cast that never had a panel is asked the same question, later`() {
+        // The rule was only ever wired to the moment a panel is *lost*, so a cast that never got
+        // one — glasses whose HID enumerated while DisplayPort never came up, or a hub with no
+        // alt-mode — was never asked about at all: it ran on with the desktop flattened into the
+        // player's own window, the PC's speakers held silent, and no remote (none is made without a
+        // presentation). The entry grace is what makes the question get asked.
+        assertTrue(
+            ExternalPanelPolicy.shouldEndSession(
+                panelAlive = false, hasPresentation = false, isPcLink = true
+            )
+        )
+        // And it must be long enough to be a grace and not a verdict: tapping a PC with the glasses
+        // still on the desk is an ordinary way in, and ending that session inside the hot-plug
+        // debounce would be a worse fault than the one being fixed.
+        assertTrue(
+            "the entry grace must outlast the hot-plug debounce, or DisplayPort never gets to finish",
+            ExternalPanelPolicy.ENTRY_GRACE_MS > ExternalPanelPolicy.RECONCILE_DEBOUNCE_MS
+        )
+    }
+
+    @Test
     fun `a cast with no presentation still ends — the 2D-panel case`() {
         // Glasses in 2D: an ordinary 1920x1080 external display, mirrored into rather than
         // presented onto, so there is no presentation to test for. The session must end anyway.

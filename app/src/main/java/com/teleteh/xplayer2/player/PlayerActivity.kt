@@ -2019,14 +2019,23 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
 
     private val externalReconcile = Runnable { reconcileExternalDisplay() }
 
+    /**
+     * The one-shot a starting cast arms, because there is no event to wait for when the panel never
+     * comes up at all — see [ExternalPanelPolicy.ENTRY_GRACE_MS]. Same check, but it explains the
+     * ending, since from the user's side nothing happened for it to be the consequence of.
+     */
+    private val pcLinkPanelGrace = Runnable { reconcileExternalDisplay(explainMissingPanel = true) }
+
     // Coalesce the hot-plug burst: both add and remove reschedule the SAME check, so it never
     // gets starved by a trailing event and fires once the dust settles.
     private fun scheduleExternalReconcile() {
+        // A real display event answers the entry question too, and does it sooner.
+        uiHandler.removeCallbacks(pcLinkPanelGrace)
         uiHandler.removeCallbacks(externalReconcile)
-        uiHandler.postDelayed(externalReconcile, 1200L)
+        uiHandler.postDelayed(externalReconcile, ExternalPanelPolicy.RECONCILE_DEBOUNCE_MS)
     }
 
-    private fun reconcileExternalDisplay() {
+    private fun reconcileExternalDisplay(explainMissingPanel: Boolean = false) {
         // PC Link has no ExoPlayer, and this used to return here because of that — so switching
         // the glasses between 2D and 3D mid-cast, which tears the panel down and brings it back
         // at a different size, was never reconciled at all: the presentation was not rebuilt and
@@ -2058,15 +2067,20 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                 panelAlive = false, hasPresentation = presentation != null, isPcLink = isPcLinkMode
             )
         ) {
-            onExternalPanelLost()
+            onExternalPanelLost(explain = explainMissingPanel)
         }
     }
 
     // Goggles came off (proximity sensor cut the panel) or the external display was unplugged:
     // just stop, as if the user hit Stop. The position is saved, so they pick the clip back up
     // from Recent when ready. Far simpler and more predictable than juggling player/remote layers.
-    private fun onExternalPanelLost() {
+    private fun onExternalPanelLost(explain: Boolean = false) {
         android.util.Log.i("XPlayer2", "External panel gone -> stop playback")
+        // Nothing was ever on the glasses for the user to notice going away, so say what happened —
+        // otherwise a cast that ends on its own a few seconds after it started reads as a crash.
+        if (explain) {
+            Toast.makeText(this, R.string.pclink_needs_glasses_body, Toast.LENGTH_LONG).show()
+        }
         saveProgress()
         // The glasses are the whole point of a cast: with them gone there is nobody to show the
         // desktop to, and a session left running would go on costing the PC its bitrate and its
@@ -3277,6 +3291,13 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         ensurePcLinkOverlay()
         setPcLinkStatus(getString(R.string.pclink_connecting), dim = false)
         connectPcLink()
+        // The door proved a pair of glasses is plugged in, not that its screen is up. Give the panel
+        // its grace and then let the rule that governs *losing* it decide — that rule was only ever
+        // wired to a transition, so a cast that never had a panel was never asked about at all, and
+        // ran on with the desktop flattened into this window, the PC's speakers held, and no remote
+        // (showRemoteControlFront makes none without a presentation).
+        uiHandler.removeCallbacks(pcLinkPanelGrace)
+        uiHandler.postDelayed(pcLinkPanelGrace, ExternalPanelPolicy.ENTRY_GRACE_MS)
     }
 
     /** Opens (or re-opens, after a background trip) the link. */
@@ -3389,6 +3410,10 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     /** Leaves PC Link mode entirely and gives the normal player UI its window back. */
     private fun exitPcLink() {
         if (!isPcLinkMode) return
+        // The entry grace belongs to a session that is over. (A stray fire is already harmless —
+        // reconcileExternalDisplay returns early once this is no longer PC Link mode — but a
+        // pending "no panel, end it" against the next session is not something to leave lying.)
+        uiHandler.removeCallbacks(pcLinkPanelGrace)
         // Leaving the mode is the user going somewhere else, so the PC is told rather than left to
         // work it out. Backgrounding (`disconnectPcLink()` on its own) is not: the session is
         // coming back, and re-muting it on the way out would only have to be undone.

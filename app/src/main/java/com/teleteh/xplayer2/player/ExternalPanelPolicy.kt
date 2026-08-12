@@ -22,6 +22,29 @@ package com.teleteh.xplayer2.player
 object ExternalPanelPolicy {
 
     /**
+     * How long a hot-plug burst is given to settle before the panel is judged. Taking the goggles
+     * off (or switching them 2D↔3D) fires a storm of add/remove/change events, often with brand-new
+     * display ids, so the answer is only meaningful once they stop.
+     */
+    const val RECONCILE_DEBOUNCE_MS = 1_200L
+
+    /**
+     * How long a *starting* cast is given for its panel to come up before the same judgement.
+     *
+     * The door into PC Link proves a pair of glasses is plugged in, not that its screen is up: HID
+     * enumerates seconds before DisplayPort, and on a phone or hub with no alt-mode it never comes
+     * up at all. Without a deadline that case has no transition to react to, so nothing ever asks
+     * the question and the cast runs on with the desktop flattened into the phone's own window, the
+     * PC's speakers held silent, and no remote.
+     *
+     * Deliberately far longer than [RECONCILE_DEBOUNCE_MS]: tapping a PC with the glasses still on
+     * the desk is an ordinary way in, and ending that session a second later would be a worse fault
+     * than the one this exists to catch. A few seconds of the desktop on the phone is a harmless
+     * stand-in while DisplayPort negotiates.
+     */
+    const val ENTRY_GRACE_MS = 8_000L
+
+    /**
      * @param panelAlive an external display is attached and powered.
      * @param hasPresentation we are showing through a `Presentation` on it.
      * @param isPcLink this is a PC Link session rather than a file being played.
