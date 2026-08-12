@@ -11,8 +11,8 @@ android {
         applicationId = "com.teleteh.xplayer2"
         minSdk = 29
         targetSdk = 36
-        versionCode = 29
-        versionName = "1.0.11"
+        versionCode = 30
+        versionName = "1.1.1b"
 
         ndk {
             // ARM-only by policy: every real target (phones, XReal/RayNeo glasses, the XREAL Beam
