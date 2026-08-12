@@ -3,20 +3,16 @@ package com.teleteh.xplayer2.player
 import android.animation.ValueAnimator
 import android.content.Intent
 import android.content.res.ColorStateList
-import android.graphics.Color
 import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.VibrationEffect
-import android.os.Vibrator
 import android.view.GestureDetector
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
-import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.AnimationUtils
 import android.widget.ImageButton
 import android.widget.SeekBar
@@ -26,10 +22,7 @@ import android.widget.ViewFlipper
 import kotlin.math.abs
 import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.core.graphics.toColorInt
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.util.UnstableApi
 import com.google.android.material.button.MaterialButton
 import com.teleteh.xplayer2.MainActivity
@@ -73,7 +66,7 @@ class RemoteControlActivity : AppCompatActivity() {
     // Touchpad state — the eyes-free gesture surface at the top of the remote.
     private lateinit var gestureDetector: GestureDetector
     private var audioManager: AudioManager? = null
-    private var vibrator: Vibrator? = null
+    private lateinit var haptics: RemoteHaptics
     private enum class SwipeAxis { NONE, HORIZONTAL, VERTICAL }
     private var swipeAxis = SwipeAxis.NONE
     private var volumeAccumPx = 0f
@@ -89,12 +82,9 @@ class RemoteControlActivity : AppCompatActivity() {
     private var scrubInfoFade: ValueAnimator? = null
 
 
-    // Screen dimming
-    private var isScreenDimmed = false
-    private var dimAnimator: ValueAnimator? = null
-    private var dimOverlay: View? = null
-    private val dimDelayMs = 5000L // 5 seconds before dimming
-    private val dimRunnable = Runnable { dimScreen() }
+    // The phone going black while the film is on the goggles — mechanics in [RemoteScreenDim],
+    // policy here: only dim while something is actually playing.
+    private lateinit var dim: RemoteScreenDim
     // Tracks play/pause transitions so we only act (arm/disarm the dim timer, wake the screen)
     // on a change, not on every 500 ms poll tick — see updatePlayPauseButton().
     private var lastKnownPlaying: Boolean? = null
@@ -127,7 +117,7 @@ class RemoteControlActivity : AppCompatActivity() {
         iconTouchpadPage = findViewById(R.id.iconTouchpadPage)
 
         audioManager = getSystemService(AudioManager::class.java)
-        vibrator = getSystemService(Vibrator::class.java)
+        haptics = RemoteHaptics(this)
         setupTouchpad()
         setupButtonPageGestures()
         setupPageHandle()
@@ -223,11 +213,14 @@ class RemoteControlActivity : AppCompatActivity() {
             finish()
         }
         
-        // Setup dim overlay for screen dimming
-        setupDimOverlay()
+        // Dimming exists so the phone doesn't glow at the user while the picture is on the
+        // goggles — only a concern while video is actually playing. Paused, keep the remote lit:
+        // the user is very likely looking at it to decide what to do next.
+        dim = RemoteScreenDim(this, handler) { PlayerActivity.currentInstance?.isPlaying() == true }
+        dim.attach()
 
         // Make D-pad / TV focus obvious on every button (the default highlight is too subtle).
-        applyTvFocusHighlight(findViewById(android.R.id.content))
+        RemoteStyling.applyTvFocusHighlight(this)
 
         // Give D-pad navigation a definite starting point — without this, on a TV/box without a
         // touchscreen the first key press has nothing focused to react to.
@@ -600,148 +593,28 @@ class RemoteControlActivity : AppCompatActivity() {
         }
     }
 
-    // --- Haptic vocabulary -------------------------------------------------------------------
-    private fun vibrate(effect: VibrationEffect) {
-        try { vibrator?.vibrate(effect) } catch (_: Throwable) { /* some boxes have no vibrator */ }
-    }
-    private fun hapticClick() = vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
-    private fun hapticTick() = vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
-    private fun hapticHeavy() = vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_HEAVY_CLICK))
-    private fun hapticSeekForward() = vibrate(VibrationEffect.createWaveform(longArrayOf(0, 30), -1))
-    private fun hapticSeekBack() = vibrate(VibrationEffect.createWaveform(longArrayOf(0, 25, 90, 25), -1))
+    // --- Haptic vocabulary (shared with the PC Link remote — see [RemoteHaptics]) --------------
+    private fun hapticClick() = haptics.click()
+    private fun hapticTick() = haptics.tick()
+    private fun hapticHeavy() = haptics.heavy()
+    private fun hapticSeekForward() = haptics.seekForward()
+    private fun hapticSeekBack() = haptics.seekBack()
 
-    private fun setupDimOverlay() {
-        // Create a fullscreen black overlay for dimming
-        val rootView = findViewById<View>(android.R.id.content) as android.view.ViewGroup
-        dimOverlay = View(this).apply {
-            setBackgroundColor(Color.BLACK)
-            alpha = 0f
-            visibility = View.GONE
-            // Purely visual: while dimmed, dispatchTouchEvent intercepts ALL touches before any
-            // view (routing them into the touchpad gestures), so this overlay never needs to be
-            // clickable. NOT focusable either — on a D-pad/TV device a focusable full-screen
-            // overlay would steal focus and trap navigation; keys wake via dispatchKeyEvent.
-            isClickable = false
-            isFocusable = false
-        }
-        rootView.addView(dimOverlay, android.view.ViewGroup.LayoutParams(
-            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-            android.view.ViewGroup.LayoutParams.MATCH_PARENT
-        ))
-    }
-    
-    private fun scheduleDim() {
-        handler.removeCallbacks(dimRunnable)
-        // Dimming exists so the phone doesn't glow at the user while the picture is on the
-        // goggles — only a concern while video is actually playing. Paused, keep the remote lit:
-        // the user is very likely looking at it to decide what to do next.
-        if (PlayerActivity.currentInstance?.isPlaying() != true) return
-        handler.postDelayed(dimRunnable, dimDelayMs)
-    }
-    
-    private fun cancelDim() {
-        handler.removeCallbacks(dimRunnable)
-    }
-    
-    /** Hide/show the system bars with the dim state: our black overlay only covers the app's
-     *  content area, and on OLED `screenBrightness = 0` is "minimum", not "off" — so without
-     *  this the status-bar clock/icons keep visibly glowing on an otherwise-black screen. */
-    private fun setSystemBarsHidden(hidden: Boolean) {
-        val controller = WindowInsetsControllerCompat(window, window.decorView)
-        if (hidden) {
-            controller.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-        } else {
-            controller.show(WindowInsetsCompat.Type.systemBars())
-        }
-    }
-
-    private fun dimScreen() {
-        if (isScreenDimmed) return
-        isScreenDimmed = true
-
-        dimAnimator?.cancel()
-        setSystemBarsHidden(true)
-        dimOverlay?.visibility = View.VISIBLE
-        
-        // Animate overlay alpha and screen brightness
-        dimAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-            // Slow, gentle fade-out (5 s): the user is settling into the goggles — a snap to
-            // black reads as "something broke"; a long dusk reads as intentional.
-            duration = 5000
-            interpolator = AccelerateDecelerateInterpolator()
-            addUpdateListener { animator ->
-                val value = animator.animatedValue as Float
-                dimOverlay?.alpha = value
-                // Dim the actual backlight all the way to BRIGHTNESS_OVERRIDE_OFF (0.0):
-                // backlight fully off, touch digitizer stays alive — combined with the opaque
-                // black overlay this is genuinely zero light on OLED, not a 1% glow.
-                window.attributes = window.attributes.apply {
-                    screenBrightness = (1f - value).coerceAtLeast(
-                        WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_OFF
-                    )
-                }
-            }
-            start()
-        }
-    }
-    
-    private fun wakeScreen() {
-        if (!isScreenDimmed) return
-        isScreenDimmed = false
-
-        dimAnimator?.cancel()
-        setSystemBarsHidden(false)
-        
-        // Waking is near-instant (unlike the long dim fade): the user actively asked for the
-        // screen, don't make them watch it ramp.
-        val currentAlpha = dimOverlay?.alpha ?: 1f
-        dimAnimator = ValueAnimator.ofFloat(currentAlpha, 0f).apply {
-            duration = 150
-            interpolator = AccelerateDecelerateInterpolator()
-            addUpdateListener { animator ->
-                val value = animator.animatedValue as Float
-                dimOverlay?.alpha = value
-                window.attributes = window.attributes.apply {
-                    screenBrightness = (1f - value).coerceAtLeast(
-                        WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_OFF
-                    )
-                }
-            }
-            addListener(object : android.animation.Animator.AnimatorListener {
-                override fun onAnimationEnd(animation: android.animation.Animator) {
-                    dimOverlay?.visibility = View.GONE
-                    // Reset brightness to auto
-                    window.attributes = window.attributes.apply {
-                        screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-                    }
-                    // Schedule next dim
-                    scheduleDim()
-                }
-                override fun onAnimationStart(animation: android.animation.Animator) {}
-                override fun onAnimationCancel(animation: android.animation.Animator) {}
-                override fun onAnimationRepeat(animation: android.animation.Animator) {}
-            })
-            start()
-        }
-    }
-    
     override fun dispatchTouchEvent(ev: MotionEvent?): Boolean {
         if (ev == null) return super.dispatchTouchEvent(ev)
-        if (isScreenDimmed) {
+        if (dim.isDimmed) {
             // Dark (or fading) screen: any touch just wakes it, and is consumed — nothing ever
             // reaches the controls underneath, so a blind grab of the phone can't mis-tap
             // anything. All actual control happens on the lit remote.
             if (ev.action == MotionEvent.ACTION_DOWN) {
                 hapticTick() // confirm the wake landed even before the eyes find the screen
-                wakeScreen()
+                dim.wake()
             }
             return true
         }
         if (ev.action == MotionEvent.ACTION_DOWN) {
             // Reset dim timer on any interaction while lit
-            scheduleDim()
+            dim.schedule()
         }
         return super.dispatchTouchEvent(ev)
     }
@@ -752,11 +625,11 @@ class RemoteControlActivity : AppCompatActivity() {
         // Without this, on a TV/box (no touchscreen) the screen dims after 5 s and navigation
         // appears frozen.
         if (event.action == KeyEvent.ACTION_DOWN) {
-            if (isScreenDimmed) {
-                wakeScreen()
+            if (dim.isDimmed) {
+                dim.wake()
                 return true
             }
-            scheduleDim()
+            dim.schedule()
         }
         return super.dispatchKeyEvent(event)
     }
@@ -773,19 +646,14 @@ class RemoteControlActivity : AppCompatActivity() {
         updateProgress()
         handler.post(updateRunnable)
         // Start dim timer
-        scheduleDim()
+        dim.schedule()
     }
 
     override fun onPause() {
         super.onPause()
         handler.removeCallbacks(updateRunnable)
-        cancelDim()
-        dimAnimator?.cancel()
-        // Reset brightness and bring the system bars back when leaving
-        setSystemBarsHidden(false)
-        window.attributes = window.attributes.apply {
-            screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-        }
+        // Hands the window back lit, with the system bars visible.
+        dim.onPause()
     }
 
     override fun onDestroy() {
@@ -857,10 +725,10 @@ class RemoteControlActivity : AppCompatActivity() {
         if (lastKnownPlaying != isPlaying) {
             lastKnownPlaying = isPlaying
             if (isPlaying) {
-                scheduleDim()
+                dim.schedule()
             } else {
-                cancelDim()
-                if (isScreenDimmed) wakeScreen()
+                dim.cancel()
+                dim.wake()
             }
         }
     }
@@ -901,34 +769,11 @@ class RemoteControlActivity : AppCompatActivity() {
         }
     }
 
-    /** Draw a bright focus ring over every button so D-pad / TV selection is visible. */
-    private fun applyTvFocusHighlight(v: View) {
-        if (v is MaterialButton || v is ImageButton) {
-            v.foreground = ContextCompat.getDrawable(this, R.drawable.tv_focus_ring)
-        }
-        if (v is android.view.ViewGroup) {
-            for (i in 0 until v.childCount) applyTvFocusHighlight(v.getChildAt(i))
-        }
-    }
+    // The look is shared with the PC Link remote — see [RemoteStyling].
+    private fun themeColor(attr: Int): Int = RemoteStyling.themeColor(this, attr)
 
-    private fun themeColor(attr: Int): Int {
-        val tv = android.util.TypedValue()
-        theme.resolveAttribute(attr, tv, true)
-        return tv.data
-    }
-
-    private fun applyButtonStyle(btn: MaterialButton, checked: Boolean) {
-        // Active = filled with the theme accent (Material You on Android 12+, else brand purple);
-        // inactive = the same tonal row colour as the non-toggle buttons, for a consistent card.
-        btn.strokeWidth = 0
-        if (checked) {
-            btn.backgroundTintList = ColorStateList.valueOf(themeColor(androidx.appcompat.R.attr.colorPrimary))
-            btn.setTextColor(themeColor(com.google.android.material.R.attr.colorOnPrimary))
-        } else {
-            btn.backgroundTintList = ColorStateList.valueOf(getColor(R.color.rc_row))
-            btn.setTextColor(getColor(R.color.rc_on_surface))
-        }
-    }
+    private fun applyButtonStyle(btn: MaterialButton, checked: Boolean) =
+        RemoteStyling.applyToggleStyle(btn, checked)
 
     private fun formatTime(ms: Long): String {
         val totalSec = TimeUnit.MILLISECONDS.toSeconds(ms)
