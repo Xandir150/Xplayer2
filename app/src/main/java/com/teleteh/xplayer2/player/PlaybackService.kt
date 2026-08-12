@@ -153,8 +153,13 @@ class PlaybackService : Service() {
     }
 
     private fun stopPlayback() {
-        // Notify PlayerActivity to stop
-        PlayerActivity.currentInstance?.finish()
+        // "Take whatever is on the glasses off them", which is what this notification is for: it
+        // only exists while something is on the external panel. Asked of GlassesStage rather than
+        // of PlayerActivity.currentInstance, because the registry is identity-scoped and answers
+        // for every live instance — an activity that is showing nothing is passed over, and one
+        // that is streaming gets the same ending an eviction gives it (the PC Link goodbye that
+        // hands the computer its own speakers back, the presentation dropped, the window finished).
+        GlassesStage.claim(null)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

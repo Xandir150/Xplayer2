@@ -71,6 +71,11 @@ object GlassesStage {
      * film and a desktop, and a second `PlayerActivity` playing its own file is the same defect
      * wearing a different hat. Returns what was ended, so the caller can tell the user which of
      * their things went away.
+     *
+     * A null [claimant] is "nobody is taking them" — clear the stage. That is what the playback
+     * notification's Stop button means, and it goes through here rather than through
+     * `PlayerActivity.currentInstance` because this list is identity-scoped: it holds the instance
+     * that is actually streaming, not whichever one happened to be created last.
      */
     fun claim(claimant: Occupant?): Handover {
         var endedPcLink = false

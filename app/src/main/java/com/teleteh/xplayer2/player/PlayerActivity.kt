@@ -133,9 +133,13 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         // quiet cinema mixes (~ -20 LUFS vs ~ -14 of streaming apps). User-overridable per clip.
         const val DEFAULT_ONLINE_BOOST_MB = 600
 
-        // Current instance for remote control access
-        var currentInstance: PlayerActivity? = null
-            private set
+        // Current instance for remote control access. Newest of the live ones rather than "the
+        // last one created": a second PlayerActivity is routine (see LiveInstances and
+        // GlassesStage), and the throwaway one the playback notification's own body intent creates
+        // used to take this with it when it finished — leaving the notification's Stop button
+        // stopping nothing and the film remote closing itself over a player that was still there.
+        private val liveInstances = LiveInstances<PlayerActivity>()
+        val currentInstance: PlayerActivity? get() = liveInstances.newest
 
         // --- PC Link ---
         // Fallbacks only: the ports actually used are the ones the server advertised in its
@@ -504,7 +508,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        currentInstance = this
+        liveInstances.add(this)
         // Scoped to the activity's whole life, not to onStart/onStop: a player whose picture is on
         // the glasses keeps running while this window is stopped (see onStop), and that is exactly
         // the instance a later claim has to be able to find.
@@ -1377,9 +1381,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
 
     override fun onDestroy() {
         super.onDestroy()
-        if (currentInstance == this) {
-            currentInstance = null
-        }
+        liveInstances.remove(this)
         GlassesStage.unregister(this)
         PcLinkSession.unregister(this)
         saveProgress()

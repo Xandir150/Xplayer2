@@ -99,6 +99,34 @@ class GlassesStageTest {
         assertFalse(handover.endedAnything)
     }
 
+    @Test
+    fun `the notification's Stop takes the desktop off even after a throwaway player has gone`() {
+        // Stop has no claimant of its own — it is "take whatever is on the glasses off them" — and
+        // it must not be routed through the last-created-wins static: the notification's own body
+        // intent creates a second PlayerActivity every time it is tapped while the remote is in
+        // front, and that one reports NOTHING and finishes immediately.
+        val streamingDesktop = FakeOccupant(Use.PC_LINK)
+        val throwaway = FakeOccupant(Use.NOTHING)
+        register(streamingDesktop, throwaway)
+        GlassesStage.unregister(throwaway) // it finished inside onCreate
+
+        val handover = GlassesStage.claim(null)
+
+        assertEquals(1, streamingDesktop.releases)
+        assertEquals(0, throwaway.releases)
+        assertTrue(handover.endedPcLink)
+        assertEquals(emptyList<GlassesStage.Occupant>(), GlassesStage.current)
+    }
+
+    @Test
+    fun `Stop with nothing on the glasses is a no-op`() {
+        val idle = FakeOccupant(Use.NOTHING)
+        register(idle)
+
+        assertFalse(GlassesStage.claim(null).endedAnything)
+        assertEquals(0, idle.releases)
+    }
+
     // --- the awkward parts --------------------------------------------------------------------
 
     @Test
