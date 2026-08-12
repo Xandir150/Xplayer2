@@ -279,4 +279,21 @@ object VirtualDesktopMath {
         for (i in a.indices) if (abs(a[i] - b[i]) > eps) return false
         return true
     }
+
+    /**
+     * Whether a panel of this pixel size expects side-by-side halves — i.e. whether the glasses
+     * are in their 3D mode.
+     *
+     * Measured rather than remembered on purpose: the glasses report the last mode *we* set them
+     * to, which is 2D by default and stays wrong for a pair that was already in 3D or a brand
+     * that cannot be read back. The panel's own shape cannot be wrong about itself.
+     *
+     * The two modes are far apart — 3840×1080 is 3.56:1 against 1920×1080's 1.78:1 — so the
+     * threshold has an enormous margin either side and no real panel sits near it.
+     */
+    fun panelIsStereo(widthPx: Int, heightPx: Int): Boolean =
+        heightPx > 0 && widthPx.toFloat() / heightPx >= STEREO_PANEL_RATIO
+
+    /** Halfway between a 16:9 panel and a doubled one, in log terms — nothing lands here. */
+    private const val STEREO_PANEL_RATIO = 2.5f
 }

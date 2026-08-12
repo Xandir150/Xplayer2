@@ -3452,11 +3452,24 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
      * the flat way is merely a picture in one eye.
      */
     private fun glassesAreStereo(): Boolean {
+        // The panel we are drawing on is the authority, and it is measured, not remembered.
+        //
+        // This asked the glasses over USB first, and that was wrong in a way that only shows up
+        // on someone else's setup: `lastMode()` is `lastReportedMode`, which starts at 2D and is
+        // only updated when *we* command a mode. Glasses already in 3D when the app started — or
+        // a brand with no read-back at all — therefore answered "2D" with total confidence, and a
+        // 3840-wide SBS panel got one desktop stretched across both eyes: an un-fusable double
+        // image. The `acquiredGlasses != null` branch also won almost always, since that field is
+        // set from a process-wide controller, so the measurement below was nearly unreachable.
+        //
+        // The USB answer is kept only for when there is no panel to measure, where a stale guess
+        // beats no answer.
+        presentation?.display?.let { display ->
+            val metrics = android.util.DisplayMetrics().also { display.getRealMetrics(it) }
+            return VirtualDesktopMath.panelIsStereo(metrics.widthPixels, metrics.heightPixels)
+        }
         acquiredGlasses?.let { return GlassesProtocol.is3DMode(it.lastMode()) }
-        val display = presentation?.display ?: return false
-        val metrics = android.util.DisplayMetrics().also { display.getRealMetrics(it) }
-        return metrics.heightPixels > 0 &&
-            metrics.widthPixels.toFloat() / metrics.heightPixels >= 3f
+        return false
     }
 
     private fun applyPcLinkRenderConfig() {
