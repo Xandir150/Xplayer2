@@ -1928,7 +1928,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         dismissPresentation()
 
         // Create Presentation and route video there
-        val pres = ExternalPlayerPresentation(this, ext, wantWorldFixed) { surface ->
+        val pres = ExternalPlayerPresentation(this, ext, wantWorldFixed, hostsExoPlayer = !isPcLinkMode) { surface ->
             presentationSurface = surface
             if (isPcLinkMode) {
                 // PC Link has no ExoPlayer to re-target: the decoder takes the new surface (and

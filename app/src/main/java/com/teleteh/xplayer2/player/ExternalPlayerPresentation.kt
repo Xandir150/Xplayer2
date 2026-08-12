@@ -26,6 +26,16 @@ class ExternalPlayerPresentation(
      * presentation — PlayerActivity recreates the presentation when the mode changes.
      */
     val isWorldFixedDesktop: Boolean = false,
+    /**
+     * Whether an ExoPlayer will be attached to the [PlayerView] in this presentation.
+     *
+     * False for PC Link, which decodes into a surface itself and has no player at all. It has to
+     * be asked separately from [isWorldFixedDesktop]: a PlayerView with no player shutters opaque
+     * black over the GL view beneath it, and when PC Link stopped using the world-fixed renderer
+     * it landed in the branch that leaves the PlayerView up — a black panel and a stream going
+     * nowhere visible.
+     */
+    private val hostsExoPlayer: Boolean = true,
     private val surfaceListener: (Surface?) -> Unit
 ) : Presentation(context, display) {
 
@@ -85,6 +95,9 @@ class ExternalPlayerPresentation(
                 surfaceListener(surface)
             }
         } else {
+            // Same reason as the branch above, and it applies whichever renderer is in use: with
+            // no player to attach, the PlayerView paints black over everything under it.
+            if (!hostsExoPlayer) playerView?.visibility = View.GONE
             glView?.setOnSurfaceReadyListener { surface ->
                 surfaceListener(surface)
             }
