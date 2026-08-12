@@ -472,6 +472,12 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     @Volatile private var pcAudio: PcAudioPlayer? = null
     /** The user's mute choice, kept across reconnects and format changes within one session. */
     private var pcAudioMuted = false
+    /**
+     * The PC's own answer to "do you have sound for us", as its last `config` gave it. A separate
+     * fact from [pcAudio] being alive, because our own mute is acknowledged by a `config` with no
+     * audio and so destroys the track — see [PcLinkAudioRouting], which owns both rules.
+     */
+    private var pcAudioOffered = false
     private var pcStatusView: TextView? = null
     private var pcAudioButton: TextView? = null
     private var pcDebugView: TextView? = null
@@ -3399,6 +3405,10 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         pcVideoWidth = 0
         pcVideoHeight = 0
         pcAudioMuted = false
+        // Deliberately not cleared by `disconnectPcLink()` alongside the track: a parked session
+        // has not stopped having sound, and the reconnect re-asserts the user's choice. Leaving the
+        // mode is where the PC's answer stops meaning anything.
+        pcAudioOffered = false
         pcLastRenderedPtsUs = 0L
         stopPcLinkDebugTicker()
         (pcStatusView?.parent as? ViewGroup)?.removeView(pcStatusView)
@@ -3515,6 +3525,13 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
      * pretending: the bandwidth is wasted otherwise, and the user gets an honest muted state.
      */
     private fun applyPcLinkAudioConfig(format: PcAudioFormat?) {
+        // First, and before any of the early returns below: every `config` is the PC restating what
+        // it has, including the one with no audio that acknowledges our own mute.
+        pcAudioOffered = PcLinkAudioRouting.offeredAfterConfig(
+            configHasAudio = format != null,
+            wasOffered = pcAudioOffered,
+            mutedHere = pcAudioMuted
+        )
         val current = pcAudio
         if (format == null) {
             if (current != null) {
@@ -3573,15 +3590,27 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     }
 
     /**
+     * Whether this session has sound to route at all — what the overlay's speaker button and the
+     * remote's switch are both drawn from, asked in one place so the two cannot drift apart.
+     */
+    private fun pcHasSoundToRoute(): Boolean = PcLinkAudioRouting.hasSoundToRoute(
+        offered = pcAudioOffered,
+        playing = pcAudio != null,
+        mutedHere = pcAudioMuted
+    )
+
+    /**
      * Shows the speaker button only while there is audio to mute — a PC that sends none (an older
      * server, or one whose capture failed) gets no dead control, and the debug overlay is where
      * "why is there no sound" is answered.
      *
-     * Muted stays visible: it is the one state the user has to be able to undo.
+     * Muted stays visible: it is the one state the user has to be able to undo. So does the moment
+     * after unmuting, when the PC has stopped sending and its answer is still on the wire — see
+     * [PcLinkAudioRouting].
      */
     private fun updatePcLinkAudioButton() {
         val button = pcAudioButton ?: return
-        val visible = isPcLinkMode && (pcAudio != null || pcAudioMuted)
+        val visible = isPcLinkMode && pcHasSoundToRoute()
         button.visibility = if (visible) View.VISIBLE else View.GONE
         if (!visible) return
         button.text = getString(
@@ -3648,7 +3677,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             audioDropouts = (buffer?.underruns ?: 0L) + (audio?.platformUnderruns?.toLong() ?: 0L),
             audioSkewMs = if (videoPts > 0L && audioPts > 0L) (videoPts - audioPts) / 1000L else null,
             audioToGlasses = !pcAudioMuted,
-            audioAvailable = audio != null || pcAudioMuted
+            audioAvailable = pcHasSoundToRoute()
         )
     }
 
