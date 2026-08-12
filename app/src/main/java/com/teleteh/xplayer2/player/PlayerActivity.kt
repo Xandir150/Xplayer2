@@ -94,6 +94,7 @@ import com.teleteh.xplayer2.data.network.PcLinkStreamConfig
 import com.teleteh.xplayer2.data.network.PcVideoFrame
 import com.teleteh.xplayer2.ui.network.PcConnectActivity
 import com.teleteh.xplayer2.ui.pclink.PcLinkRemoteActivity
+import com.teleteh.xplayer2.ui.pclink.PcLinkRemotePolicy
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import com.teleteh.xplayer2.BuildConfig
 import com.teleteh.xplayer2.util.VideoStreamExtractor
@@ -3828,8 +3829,9 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         if (reason == PairingFailure.UNKNOWN_TO_PC) {
             pcLinkRepairPending = true
             // With the picture on the glasses the link keeps running while this activity is
-            // stopped (see onStop), and a stopped activity may not launch another one — so when
-            // the bounce can't happen now it waits for onStart, and the overlay says why.
+            // stopped (see onStop), and a stopped activity may not launch another one — so the
+            // bounce is made by the remote in front of us instead. With neither of us started
+            // (a parked session, no glasses) it waits for onStart, and the overlay says why.
             if (!bouncePcLinkRepair()) {
                 setPcLinkStatus(
                     "$pcLinkServerName — ${getString(R.string.pclink_stream_unknown_client)}",
@@ -3847,25 +3849,42 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     }
 
     /**
-     * Hands the user back to [PcConnectActivity] with the re-pair request, if we're in a position
-     * to. Returns true once that's under way — the caller must then not re-open the link, which
-     * would only earn the same refusal.
+     * Hands the user back to [PcConnectActivity] with the re-pair request, if anyone is in a
+     * position to. Returns true once that's under way — the caller must then not re-open the link,
+     * which would only earn the same refusal.
+     *
+     * During a cast this activity is *stopped* behind [PcLinkRemoteActivity] and may not launch
+     * anything, and it never comes back to STARTED while the remote is up — so waiting for its own
+     * `onStart` waited forever and the remote sat on a bare "Disconnected" with no route to the
+     * ceremony. The app is in the foreground either way, so the launch is simply made by whichever
+     * screen is in front (see [PcLinkRemotePolicy.repairLauncher]).
      */
     private fun bouncePcLinkRepair(): Boolean {
         if (!pcLinkRepairPending) return false
-        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return false
-        pcLinkRepairPending = false
-        startActivity(
-            Intent(this, PcConnectActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                putExtra(PcConnectActivity.EXTRA_PCLINK_REPAIR, true)
-                putExtra(PcConnectActivity.EXTRA_PCLINK_HOST, pcLinkHost)
-                putExtra(PcConnectActivity.EXTRA_PCLINK_CONTROL_PORT, pcLinkControlPort)
-                putExtra(PcConnectActivity.EXTRA_PCLINK_VIDEO_PORT, pcLinkVideoPort)
-                putExtra(PcConnectActivity.EXTRA_PCLINK_NAME, pcLinkServerName)
-                putExtra(PcConnectActivity.EXTRA_PCLINK_SERVER_ID, pcLinkServerId)
-            }
+        val remote = PcLinkRemoteActivity.currentInstance
+            ?.takeIf { it.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
+        val launcher = PcLinkRemotePolicy.repairLauncher(
+            playerStarted = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED),
+            remoteStarted = remote != null
         )
+        val intent = Intent(this, PcConnectActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            putExtra(PcConnectActivity.EXTRA_PCLINK_REPAIR, true)
+            putExtra(PcConnectActivity.EXTRA_PCLINK_HOST, pcLinkHost)
+            putExtra(PcConnectActivity.EXTRA_PCLINK_CONTROL_PORT, pcLinkControlPort)
+            putExtra(PcConnectActivity.EXTRA_PCLINK_VIDEO_PORT, pcLinkVideoPort)
+            putExtra(PcConnectActivity.EXTRA_PCLINK_NAME, pcLinkServerName)
+            putExtra(PcConnectActivity.EXTRA_PCLINK_SERVER_ID, pcLinkServerId)
+        }
+        when (launcher) {
+            PcLinkRemotePolicy.RepairLauncher.PLAYER -> startActivity(intent)
+            // Already leaving of its own accord: keep the request pending rather than dropping it.
+            PcLinkRemotePolicy.RepairLauncher.REMOTE ->
+                if (remote?.startRepair(intent) != true) return false
+            PcLinkRemotePolicy.RepairLauncher.NOBODY -> return false
+        }
+        pcLinkRepairPending = false
+        // Still the usual ending: onDestroy runs exitPcLink(), so the PC gets its speakers back.
         finish()
         return true
     }

@@ -434,6 +434,23 @@ class PcLinkRemoteActivity : AppCompatActivity() {
     }
 
     /**
+     * The PC has forgotten this phone (§8.4), and only a fresh six-digit ceremony can answer that.
+     *
+     * The player found out while stopped behind this screen and a stopped activity may not launch
+     * one — so the screen that *is* in front makes the hand-off, and the ceremony stays one tap
+     * away instead of a bare "Disconnected" with no route out of it. Returns false when this remote
+     * is already leaving, so the caller keeps the request pending rather than dropping it.
+     */
+    fun startRepair(intent: Intent): Boolean {
+        if (leaving || isFinishing) return false
+        leaving = true
+        handler.removeCallbacks(tick)
+        startActivity(intent)
+        finish()
+        return true
+    }
+
+    /**
      * The user's way out: ends the cast and goes home to the PC-Mirror tab.
      *
      * Back and Disconnect both land here, so the cast and its remote have one lifetime — there is
