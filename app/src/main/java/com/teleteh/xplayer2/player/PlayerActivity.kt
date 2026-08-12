@@ -93,6 +93,7 @@ import com.teleteh.xplayer2.data.network.PcLinkState
 import com.teleteh.xplayer2.data.network.PcLinkStreamConfig
 import com.teleteh.xplayer2.data.network.PcVideoFrame
 import com.teleteh.xplayer2.ui.network.PcConnectActivity
+import com.teleteh.xplayer2.ui.pclink.PcMirrorRemoteActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import com.teleteh.xplayer2.BuildConfig
 import com.teleteh.xplayer2.util.VideoStreamExtractor
@@ -1246,10 +1247,12 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
      */
     private fun showRemoteControlFront() {
         if (presentation == null) return
-        // The remote drives an ExoPlayer; PC Link has none, and its own status overlay lives on
-        // this activity's window, so the phone stays here.
-        if (isPcLinkMode) return
-        startActivity(Intent(this, RemoteControlActivity::class.java).apply {
+        // PC Link gets its own remote rather than this one: the film remote drives an ExoPlayer —
+        // transport, scrubbing, track menus — and a desktop has no timeline to drive. Without it
+        // the phone was left showing this activity's window, which for a stream it never decodes
+        // into its own surface is a grey rectangle.
+        val remote = if (isPcLinkMode) PcMirrorRemoteActivity::class.java else RemoteControlActivity::class.java
+        startActivity(Intent(this, remote).apply {
             addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         })
     }
@@ -2016,7 +2019,11 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     }
 
     private fun reconcileExternalDisplay() {
-        if (player == null) return
+        // PC Link has no ExoPlayer, and this used to return here because of that — so switching
+        // the glasses between 2D and 3D mid-cast, which tears the panel down and brings it back
+        // at a different size, was never reconciled at all: the presentation was not rebuilt and
+        // the phone was left showing this window's empty grey.
+        if (player == null && !isPcLinkMode) return
         val dm = getSystemService(DisplayManager::class.java)
         val ext = DisplayUtils.findUltraWideExternalDisplay(this)
         val extAlive = ext != null &&
@@ -2026,6 +2033,14 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             // picture to the goggles, push the saved mode and bring up the remote.
             val wasShowing = presentation != null
             tryShowExternalPresentation()
+            if (isPcLinkMode) {
+                // The panel just changed shape (a 2D↔3D switch is a teardown and a re-add), so
+                // the renderer has to be told what it is looking at now — and the PC too, since
+                // its stereo decision follows the glasses.
+                applyPcLinkRenderConfig()
+                updatePcLinkSurface()
+                pcLinkClient?.reportGlasses(glassesAreStereo())
+            }
             if (presentation != null && !wasShowing) {
                 // No longer force a remembered glasses mode here (it sometimes restored the wrong one);
                 // the panel keeps its current mode and the picker reflects it.
@@ -2042,6 +2057,11 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     private fun onExternalPanelLost() {
         android.util.Log.i("XPlayer2", "External panel gone -> stop playback")
         saveProgress()
+        // The glasses are the whole point of a cast: with them gone there is nobody to show the
+        // desktop to, and a session left running would go on costing the PC its bitrate and its
+        // speakers. Say goodbye properly (the PC gets its sound back) rather than letting the
+        // socket rot.
+        if (isPcLinkMode) exitPcLink()
         finishAndClose()
     }
 
@@ -3276,7 +3296,12 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         // §2.16). The PC decides what to do with it — with its own setting on "follow the
         // glasses", switching them into 3D is what turns its desktop into stereo.
         acquiredGlasses?.setPlaybackListener { _, mode ->
-            pcLinkClient?.reportGlasses(GlassesProtocol.is3DMode(mode))
+            val stereo = GlassesProtocol.is3DMode(mode)
+            pcLinkClient?.reportGlasses(stereo)
+            // The renderer needs the same fact the PC is being told. It used to be told only the
+            // PC, which is how a pair of glasses in 2D ended up showing two half-width copies of
+            // the desktop: the view divided the panel in two regardless of what the panel was.
+            runOnUiThread { presentation?.desktopView?.setPanelIsStereo(stereo) }
         }
         if (pcDebugView?.visibility == View.VISIBLE) startPcLinkDebugTicker()
     }
@@ -3409,17 +3434,42 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
      *   would read a 32:9 canvas as side-by-side content). The one thing honoured is the server
      *   saying its stream *is* already SBS.
      */
+    /**
+     * Whether the glasses' panel is currently the ultrawide side-by-side one.
+     *
+     * Falls back to the panel's own shape when no pair is attached over USB to ask — a display
+     * about twice as wide as it is tall is the SBS mode by construction, and a presentation
+     * hosted on anything else is flat. Guessing beats defaulting to stereo here: the cost of
+     * being wrong the stereo way is two half-width copies, which is unusable, while being wrong
+     * the flat way is merely a picture in one eye.
+     */
+    private fun glassesAreStereo(): Boolean {
+        acquiredGlasses?.let { return GlassesProtocol.is3DMode(it.lastMode()) }
+        val display = presentation?.display ?: return false
+        val metrics = android.util.DisplayMetrics().also { display.getRealMetrics(it) }
+        return metrics.heightPixels > 0 &&
+            metrics.widthPixels.toFloat() / metrics.heightPixels >= 3f
+    }
+
     private fun applyPcLinkRenderConfig() {
         presentation?.desktopView?.let { desktop ->
             pcLinkConfig?.let { c -> desktop.setCanvas(c.canvasAngularWidthDeg, c.canvasDistanceM) }
             desktop.setSourceIsSbs(pcLinkSourceIsSbs)
+            // What the panel is, which is a different question from how the stream is packed:
+            // glasses sitting in 2D are an ordinary flat display and must be drawn once.
+            desktop.setPanelIsStereo(glassesAreStereo())
             if (pcVideoWidth > 0 && pcVideoHeight > 0) {
                 desktop.setVideoSize(pcVideoWidth, pcVideoHeight)
             }
             return
         }
         val v = activeGlView() ?: return
-        v.setSbsEnabled(pcLinkSourceIsSbs)
+        // SBS *output* only when the screen is the glasses' 3D panel. In 2D they are an ordinary
+        // 1920x1080 external display — below `findUltraWideExternalDisplay`'s threshold, so no
+        // presentation is made and this window is simply mirrored into them. Splitting it in two
+        // there is what put a pair of half-width desktops on a flat panel.
+        val stereoPanel = glassesAreStereo()
+        v.setSbsEnabled(pcLinkSourceIsSbs && stereoPanel)
         v.setSourceIsSbs(pcLinkSourceIsSbs)
         v.setDuplicateMonoToSbs(false)
         v.setSwapEyes(false)

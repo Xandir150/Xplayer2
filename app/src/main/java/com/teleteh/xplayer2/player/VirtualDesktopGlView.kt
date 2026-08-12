@@ -26,7 +26,9 @@ import javax.microedition.khronos.opengles.GL10
  * ([PcStreamDecoder]) renders into the [Surface] this view hands out via
  * [setOnSurfaceReadyListener], wrapping a SurfaceTexture bound to an OES texture.
  *
- * What it draws, per eye (left/right half of the ultrawide SBS panel):
+ * What it draws, per eye when the glasses are in their 3D mode (left/right half of the ultrawide
+ * SBS panel) and once across the whole panel when they are in 2D — see [setPanelIsStereo], which
+ * is a question about the screen and not about the stream:
  * a [GRID_COLS]×[GRID_ROWS] subdivided plane at `canvasDistanceM` subtending
  * `canvasAngularWidthDeg` (geometry from [VirtualDesktopMath]), projected with a per-eye
  * symmetric frustum matched to the glasses' physical per-eye FOV ([DEFAULT_EYE_HFOV_DEG] — see
@@ -140,6 +142,22 @@ class VirtualDesktopGlView @JvmOverloads constructor(
         requestRender()
     }
 
+    /**
+     * Whether the panel expects side-by-side halves — i.e. whether the glasses are in their 3D
+     * mode — as opposed to being an ordinary flat display.
+     *
+     * Not the same question as [setSourceIsSbs], and conflating the two is what put two little
+     * copies of the desktop on a pair of glasses sitting in 2D: that asks how the *incoming frame*
+     * is packed, this asks what the *screen* is. They are independent — a mono stream still has to
+     * be drawn twice for a stereo panel, and an SBS stream shown on a flat one would need one eye
+     * picked — and only the screen decides how the viewport is divided.
+     */
+    fun setPanelIsStereo(stereo: Boolean) {
+        if (renderer.panelIsStereo == stereo) return
+        renderer.panelIsStereo = stereo
+        requestRender()
+    }
+
     /** Whether the incoming frame is packed left|right SBS (per-eye halves) or mono (full frame). */
     fun setSourceIsSbs(sbs: Boolean) {
         renderer.sourceIsSbs = sbs
@@ -205,6 +223,9 @@ class VirtualDesktopGlView @JvmOverloads constructor(
         @Volatile var canvasAngularWidthDeg = 45f
         @Volatile var canvasDistanceM = 3f
         @Volatile var sourceIsSbs = false
+
+        /** See [setPanelIsStereo]. Starts true: the glasses' 3D mode is what this view is for. */
+        @Volatile var panelIsStereo = true
         @Volatile var videoWidth = 0
         @Volatile var videoHeight = 0
         /** Bumped on any change above; the GL thread rebuilds the vertex buffer when it differs. */
@@ -302,7 +323,9 @@ class VirtualDesktopGlView @JvmOverloads constructor(
         }
 
         private fun ensureProjection() {
-            val eyeW = surfaceWidth / 2
+            // One eye owns half the panel in 3D and all of it in 2D; the frustum is built for
+            // whichever it is, or a flat panel would be drawn through a lens made for half of it.
+            val eyeW = if (panelIsStereo) surfaceWidth / 2 else surfaceWidth
             if (eyeW == projForWidth && surfaceHeight == projForHeight) return
             projForWidth = eyeW
             projForHeight = surfaceHeight
@@ -354,15 +377,25 @@ class VirtualDesktopGlView @JvmOverloads constructor(
             GLES20.glVertexAttribPointer(aTexLoc, 2, GLES20.GL_FLOAT, false, 20, vertexBuffer)
 
             val sbs = sourceIsSbs
-            val eyeW = surfaceWidth / 2
-            for (eye in 0..1) {
-                GLES20.glViewport(eye * eyeW, 0, eyeW, surfaceHeight)
-                val crop = VirtualDesktopMath.eyeTexTransform(sbs, rightEye = eye == 1)
+            if (panelIsStereo) {
+                val eyeW = surfaceWidth / 2
+                for (eye in 0..1) {
+                    GLES20.glViewport(eye * eyeW, 0, eyeW, surfaceHeight)
+                    val crop = VirtualDesktopMath.eyeTexTransform(sbs, rightEye = eye == 1)
+                    GLES20.glUniform2f(uScaleLoc, crop[0], 1f)
+                    GLES20.glUniform2f(uOffsetLoc, crop[1], 0f)
+                    GLES20.glDrawElements(GLES20.GL_TRIANGLES, indexCount, GLES20.GL_UNSIGNED_SHORT, indexBuffer)
+                }
+                GLES20.glViewport(0, 0, surfaceWidth, surfaceHeight)
+            } else {
+                // A flat panel gets one picture across the whole of it. If an SBS stream somehow
+                // arrives here — the server should have sent mono once it was told the glasses
+                // are in 2D — the left eye is shown rather than both halves squeezed side by side.
+                val crop = VirtualDesktopMath.eyeTexTransform(sbs, rightEye = false)
                 GLES20.glUniform2f(uScaleLoc, crop[0], 1f)
                 GLES20.glUniform2f(uOffsetLoc, crop[1], 0f)
                 GLES20.glDrawElements(GLES20.GL_TRIANGLES, indexCount, GLES20.GL_UNSIGNED_SHORT, indexBuffer)
             }
-            GLES20.glViewport(0, 0, surfaceWidth, surfaceHeight)
 
             GLES20.glDisableVertexAttribArray(aPosLoc)
             GLES20.glDisableVertexAttribArray(aTexLoc)

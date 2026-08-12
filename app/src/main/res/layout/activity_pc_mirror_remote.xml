@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nothing but a host: every control lives in PcMirrorFragment, which the PC-Mirror tab shows
+     too, so the remote cannot drift between the two places it appears. -->
+<androidx.fragment.app.FragmentContainerView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/pcMirrorRemoteContainer"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" />
