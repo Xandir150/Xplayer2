@@ -112,7 +112,14 @@ class PcAudioPlayer(
         }
     }
 
-    /** Stops everything. The instance is not reusable. */
+    /**
+     * Stops everything. The instance is not reusable.
+     *
+     * The track is destroyed by whoever owns it: the feeder thread on its way out when there is
+     * one, and this call otherwise. Releasing it here while the feeder sits inside a blocking
+     * `write` would be a use-after-free in native code — a crash, not an exception — so the
+     * ownership is single and explicit rather than guarded by a join timeout.
+     */
     fun release() {
         val thread: Thread?
         val doomed: AudioTrack?
@@ -124,12 +131,15 @@ class PcAudioPlayer(
             feeder = null
             track = null
         }
-        thread?.interrupt()
-        // The feeder can be parked inside a blocking write; pausing unblocks it promptly.
+        // Pausing and flushing unblocks a write parked on a full buffer, so the feeder notices
+        // `released` promptly instead of waiting out a bufferful of audio.
         runCatching { doomed?.pause() }
-        runCatching { thread?.join(250) }
-        runCatching { doomed?.stop() }
-        runCatching { doomed?.release() }
+        runCatching { doomed?.flush() }
+        thread?.interrupt()
+        if (thread == null) {
+            runCatching { doomed?.stop() }
+            runCatching { doomed?.release() }
+        }
     }
 
     /** Underruns the platform itself reported, which counts the ones our silence papered over. */
@@ -184,30 +194,50 @@ class PcAudioPlayer(
         return built
     }
 
+    /**
+     * The one thread that talks to [AudioTrack], and — once it exists — the only owner of the
+     * track's lifetime: it stops and releases on the way out, whatever ended it.
+     */
     private fun feedLoop(track: AudioTrack) {
-        val out = ByteArray(buffer.chunkBytes)
-        while (!released && !Thread.currentThread().isInterrupted) {
-            if (isMuted) {
-                // Nothing to pace against while paused, so idle instead of spinning.
-                try {
-                    Thread.sleep(MUTED_IDLE_MS)
-                } catch (_: InterruptedException) {
+        try {
+            val out = ByteArray(buffer.chunkBytes)
+            while (!released && !Thread.currentThread().isInterrupted) {
+                if (isMuted) {
+                    // Nothing to pace against while paused, so idle instead of spinning.
+                    try {
+                        Thread.sleep(MUTED_IDLE_MS)
+                    } catch (_: InterruptedException) {
+                        return
+                    }
+                    continue
+                }
+                buffer.pull(out)
+                val written = try {
+                    track.write(out, 0, out.size)
+                } catch (_: IllegalStateException) {
                     return
                 }
-                continue
+                if (written < 0) {
+                    // ERROR_DEAD_OBJECT and friends: the route died under us. Say so once and
+                    // stop — the session's video is unaffected, which is the whole point of the
+                    // audio lane.
+                    if (!released) onError("AudioTrack write failed ($written)")
+                    return
+                }
             }
-            buffer.pull(out)
-            val written = try {
-                track.write(out, 0, out.size)
-            } catch (_: IllegalStateException) {
-                return
+        } finally {
+            // Drop the shared references before the native object goes away, so a late setMuted()
+            // or stats read can't reach a released track.
+            synchronized(lock) {
+                if (feeder === Thread.currentThread()) {
+                    feeder = null
+                    this.track = null
+                }
             }
-            if (written < 0) {
-                // ERROR_DEAD_OBJECT and friends: the route died under us. Say so once and stop —
-                // the session's video is unaffected, which is the whole point of the audio lane.
-                if (!released) onError("AudioTrack write failed ($written)")
-                return
-            }
+            runCatching { track.pause() }
+            runCatching { track.flush() }
+            runCatching { track.stop() }
+            runCatching { track.release() }
         }
     }
 
