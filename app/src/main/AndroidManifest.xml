@@ -361,7 +361,7 @@
              portrait-and-singleTop shape: it is a thing you hold, and a second copy of it must
              not stack up behind the first. -->
         <activity
-            android:name=".ui.pclink.PcMirrorRemoteActivity"
+            android:name=".ui.pclink.PcLinkRemoteActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:launchMode="singleTop"

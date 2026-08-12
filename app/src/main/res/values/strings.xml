@@ -154,6 +154,20 @@
     <string name="pclink_audio_hint_computer">The sound is playing on the computer</string>
     <string name="pclink_audio_none">This PC isn\'t sending any sound</string>
 
+    <!-- The PC-Mirror tab: the computers this phone is already paired with. -->
+    <string name="pclink_paired_label">Your computers</string>
+    <string name="pclink_paired_no_address">Address not recorded yet</string>
+    <string name="pclink_paired_unreachable">Couldn\'t reach that computer. Make sure XPlayer Link is running on it.</string>
+    <string name="pclink_open_remote">Open the remote</string>
+
+    <!-- PC Link needs somewhere to put the desktop, and there is only one such place. -->
+    <string name="pclink_needs_glasses_title">Connect your glasses</string>
+    <string name="pclink_needs_glasses_body">PC Link puts your computer\'s screen on XR glasses. Plug them into this phone (or connect an external display) and try again.</string>
+
+    <!-- The remote itself. -->
+    <string name="pclink_recenter">Re-centre the screen</string>
+    <string name="pclink_remote_surface_hint">Drag up or down for volume\nLong-press to re-centre</string>
+
     <!-- PC Link pairing: the 6-digit comparison code (SAS) and the states around it -->
     <string name="pclink_pair_title">Pair with \"%1$s\"?</string>
     <string name="pclink_pair_body">Make sure your PC shows the same code:</string>

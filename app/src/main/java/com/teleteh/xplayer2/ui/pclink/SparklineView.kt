@@ -61,6 +61,19 @@ class SparklineView @JvmOverloads constructor(
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
     }
 
+    /**
+     * Overrides what the track is drawn against.
+     *
+     * The default reads `colorOnSurface` off the theme, which is right inside an ordinary screen
+     * that follows the system's light/dark setting. The remote is not one of those: it paints its
+     * own near-black card whatever the phone is set to, and in light mode a track tinted for a
+     * white surface disappears into it. So the host that knows its own surface says so.
+     */
+    fun setSurfaceColor(color: Int) {
+        trackPaint.color = withAlpha(color, 0.10f)
+        invalidate()
+    }
+
     /** Points this view at a window and redraws. The window goes on being filled by its owner. */
     fun setWindow(window: SparklineWindow) {
         this.window = window

@@ -93,7 +93,7 @@ import com.teleteh.xplayer2.data.network.PcLinkState
 import com.teleteh.xplayer2.data.network.PcLinkStreamConfig
 import com.teleteh.xplayer2.data.network.PcVideoFrame
 import com.teleteh.xplayer2.ui.network.PcConnectActivity
-import com.teleteh.xplayer2.ui.pclink.PcMirrorRemoteActivity
+import com.teleteh.xplayer2.ui.pclink.PcLinkRemoteActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import com.teleteh.xplayer2.BuildConfig
 import com.teleteh.xplayer2.util.VideoStreamExtractor
@@ -1251,7 +1251,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         // transport, scrubbing, track menus — and a desktop has no timeline to drive. Without it
         // the phone was left showing this activity's window, which for a stream it never decodes
         // into its own surface is a grey rectangle.
-        val remote = if (isPcLinkMode) PcMirrorRemoteActivity::class.java else RemoteControlActivity::class.java
+        val remote = if (isPcLinkMode) PcLinkRemoteActivity::class.java else RemoteControlActivity::class.java
         startActivity(Intent(this, remote).apply {
             addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         })
@@ -2046,7 +2046,10 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                 // the panel keeps its current mode and the picker reflects it.
                 showRemoteControlFront()
             }
-        } else if (presentation != null) {
+        } else if (ExternalPanelPolicy.shouldEndSession(
+                panelAlive = false, hasPresentation = presentation != null, isPcLink = isPcLinkMode
+            )
+        ) {
             onExternalPanelLost()
         }
     }
@@ -3405,6 +3408,11 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         pcAudioButton = null
         pcDebugView = null
         playerView.visibility = View.VISIBLE
+        // The cast and its remote have one lifetime between them: whichever side ends first takes
+        // the other with it, so the user is never left holding a remote for a session that stopped
+        // (nor — the older fault — dropped onto this activity's own empty window). Re-entrant from
+        // the remote's own exit, and a no-op there: it has already started leaving.
+        PcLinkRemoteActivity.currentInstance?.onSessionEnded()
     }
 
     /**
@@ -3574,7 +3582,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
      * gyro-only yaw drifts over a long session, and this is the one-gesture fix. Reached from
      * the phone remote's touchpad long-press and a long-press on the PC Link status overlay.
      */
-    fun recenterPcLink() {
+    override fun recenterPcLink() {
         if (!isPcLinkMode) return
         presentation?.desktopView?.recenter()
     }

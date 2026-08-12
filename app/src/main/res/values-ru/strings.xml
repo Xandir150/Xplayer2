@@ -133,6 +133,20 @@
     <string name="pclink_audio_hint_computer">Звук играет на компьютере</string>
     <string name="pclink_audio_none">Этот компьютер не передаёт звук</string>
 
+    <!-- Вкладка PC-Mirror: компьютеры, с которыми телефон уже сопряжён. -->
+    <string name="pclink_paired_label">Ваши компьютеры</string>
+    <string name="pclink_paired_no_address">Адрес ещё не записан</string>
+    <string name="pclink_paired_unreachable">Не удалось связаться с этим компьютером. Проверьте, запущен ли на нём XPlayer Link.</string>
+    <string name="pclink_open_remote">Открыть пульт</string>
+
+    <!-- Рабочий стол нужно куда-то показывать, и место для этого ровно одно. -->
+    <string name="pclink_needs_glasses_title">Подключите очки</string>
+    <string name="pclink_needs_glasses_body">PC Link показывает экран компьютера в XR-очках. Подключите их к телефону (или подключите внешний дисплей) и попробуйте снова.</string>
+
+    <!-- Сам пульт. -->
+    <string name="pclink_recenter">Отцентрировать экран</string>
+    <string name="pclink_remote_surface_hint">Проведите вверх или вниз — громкость\nДолгое нажатие — отцентрировать</string>
+
     <!-- Сопряжение PC Link: код из 6 цифр и всё вокруг него -->
     <string name="pclink_pair_title">Подключить «%1$s»?</string>
     <string name="pclink_pair_body">Убедитесь, что на компьютере показан такой же код:</string>

@@ -1,5 +1,6 @@
 package com.teleteh.xplayer2
 
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.drawable.BitmapDrawable
@@ -182,6 +183,33 @@ class MainActivity : AppCompatActivity() {
         setupTvFocusNavigation()
         prefetchDepthModelIfNeeded()
         registerDoubleBackToExit()
+        selectTabFromIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // The PC Link remote comes back here with CLEAR_TOP when its session ends, so this is the
+        // instance that survives rather than a fresh one — the tab request arrives here.
+        setIntent(intent)
+        selectTabFromIntent(intent)
+    }
+
+    /**
+     * Honours [EXTRA_TAB]: whoever sent the user here can say which page they should land on.
+     *
+     * Used by the PC Link remote, which ends its session on the way out and must leave the user
+     * looking at the screen that owns that story — the PC-Mirror tab, with its list of known PCs —
+     * rather than wherever the pager happened to be when the cast started.
+     */
+    private fun selectTabFromIntent(intent: Intent?) {
+        if (intent == null) return
+        val tab = intent.getIntExtra(EXTRA_TAB, -1)
+        val count = binding.viewPager.adapter?.itemCount ?: 0
+        if (tab < 0 || tab >= count) return
+        // Consumed: a later recreation (a rotation, a return from the player) must not drag the
+        // user back to this tab all over again.
+        intent.removeExtra(EXTRA_TAB)
+        binding.viewPager.setCurrentItem(tab, false)
     }
 
     /**
@@ -790,6 +818,12 @@ class MainActivity : AppCompatActivity() {
         init {
             System.loadLibrary("xplayer2")
         }
+
+        /** Which page to land on — see [selectTabFromIntent]. */
+        const val EXTRA_TAB = "com.teleteh.xplayer2.extra.TAB"
+
+        /** PC Link's own page, third in [com.teleteh.xplayer2.ui.MainPagerAdapter]. */
+        const val TAB_PC_MIRROR = 2
 
         /**
          * Exposed for [com.teleteh.xplayer2.player.PlayerActivity] / RemoteControlActivity so

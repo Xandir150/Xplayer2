@@ -2,6 +2,7 @@ package com.teleteh.xplayer2.player
 
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -103,11 +104,30 @@ class PcLinkSessionTest {
         assertTrue(second > first)
     }
 
+    @Test
+    fun `a re-centre reaches the live host, and nothing at all when none is streaming`() {
+        val parked = host()
+        val live = host(stats(sessionId = 1))
+
+        PcLinkSession.recenter()
+
+        assertTrue(live.recentered)
+        assertFalse(parked.recentered)
+
+        // With the streaming host gone there is nothing to re-centre, and the parked one must not
+        // be handed the gesture as a consolation prize.
+        PcLinkSession.unregister(live)
+        PcLinkSession.recenter()
+        assertFalse(parked.recentered)
+    }
+
     private class FakeHost(private val stats: PcLinkSession.Stats?) : PcLinkSession.Host {
         var audioToGlasses: Boolean? = null
         var ended = false
+        var recentered = false
         override fun pcLinkStats(): PcLinkSession.Stats? = stats
         override fun setPcLinkAudioToGlasses(enabled: Boolean) { audioToGlasses = enabled }
         override fun endPcLink() { ended = true }
+        override fun recenterPcLink() { recentered = true }
     }
 }

@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PC Link's remote, built to the same plan as activity_remote_control.xml so the two are
+     visibly one object with different buttons on it:
+
+       * a compact header naming what is on the glasses (there, the film; here, the PC);
+       * one big card taking the free height, which is BOTH the readout and the eyes-free gesture
+         surface — where the film remote puts a touchpad, a desktop puts the two numbers that
+         answer "is this working right now";
+       * the controls card below it, in the same tonal rows;
+       * Stop, kept to half width and centred so it is hard to hit by accident.
+
+     There is no transport row and no seekbar: a desktop has no timeline. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/rc_bg"
+    android:fitsSystemWindows="true">
+
+    <!-- Header: app mark + the PC's name (the one the pairing exchange proved). -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="8dp">
+
+        <ImageView
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:src="@mipmap/ic_launcher"
+            android:layout_marginEnd="10dp"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/rc_on_surface"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text="@string/pclink_title" />
+    </LinearLayout>
+
+    <!-- The surface: the live numbers, and the gestures for someone who cannot see the phone.
+         Drag up/down is volume, a long-press re-centres the desktop. -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="10dp"
+        app:cardBackgroundColor="@color/rc_card"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="0dp"
+        app:strokeColor="@color/rc_outline"
+        app:strokeWidth="1dp">
+
+        <FrameLayout
+            android:id="@+id/surface"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:id="@+id/tvLinkState"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/rc_secondary"
+                    android:textSize="13sp"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:text="@string/pclink_state_connecting" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:baselineAligned="false"
+                    android:layout_marginTop="14dp">
+
+                    <include
+                        android:id="@+id/chipFps"
+                        layout="@layout/view_pclink_stat_chip"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="8dp" />
+
+                    <include
+                        android:id="@+id/chipBitrate"
+                        layout="@layout/view_pclink_stat_chip"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- What the surface responds to, faintly, at the bottom — same place and weight as
+                 the film remote's touchpad hint. -->
+            <TextView
+                android:id="@+id/tvSurfaceHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|center_horizontal"
+                android:layout_marginBottom="10dp"
+                android:gravity="center"
+                android:text="@string/pclink_remote_surface_hint"
+                android:textColor="@color/rc_secondary"
+                android:textSize="13sp"
+                android:alpha="0.65"
+                android:lineSpacingExtra="6dp" />
+
+            <!-- Big last-action feedback (volume %, the re-centre mark), fades out on its own. -->
+            <TextView
+                android:id="@+id/tvSurfaceFeedback"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:textColor="@color/rc_on_surface"
+                android:textSize="40sp"
+                android:textStyle="bold"
+                android:alpha="0" />
+        </FrameLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="14dp">
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                app:cardBackgroundColor="@color/rc_card"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/rc_outline"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="6dp"
+                        android:text="@string/remote_section_display"
+                        android:textAppearance="@style/TextAppearance.XPlayer.Section" />
+
+                    <!-- Gyro yaw drifts over a long session; this is the one-tap fix, and the
+                         long-press on the surface above is the same thing without looking. -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnRecenter"
+                        style="@style/Widget.XPlayer.RemoteRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:text="@string/pclink_recenter"
+                        app:icon="@drawable/ic_recenter_24" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="10dp"
+                        android:background="@color/rc_outline" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="6dp"
+                        android:text="@string/remote_section_audio"
+                        android:textAppearance="@style/TextAppearance.XPlayer.Section" />
+
+                    <!-- Not a mute: it says where the PC's sound is going. Lit when it is here. -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnAudioRoute"
+                        style="@style/Widget.XPlayer.RemoteRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:text="@string/pclink_audio_to_glasses"
+                        android:checkable="true"
+                        app:icon="@drawable/ear_sound_24px" />
+
+                    <TextView
+                        android:id="@+id/tvAudioHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:textColor="@color/rc_secondary"
+                        android:textSize="12sp" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="2dp"
+                        android:background="@color/rc_outline" />
+
+                    <!-- The door: everything that answers "why isn't it working". Shut by default
+                         and remembered, because whoever opens it is debugging something that
+                         outlasts one session. -->
+                    <LinearLayout
+                        android:id="@+id/rowDetails"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:minHeight="48dp"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/pclink_stats_details"
+                            android:textColor="@color/rc_on_surface"
+                            android:textSize="15sp" />
+
+                        <ImageView
+                            android:id="@+id/ivDetailsChevron"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:importantForAccessibility="no"
+                            android:tint="@color/rc_secondary"
+                            android:src="@drawable/ic_chevron_down_24" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/boxDetails"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnStop"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="2"
+                    android:text="@string/pclink_disconnect"
+                    android:textAllCaps="false"
+                    android:textColor="@color/rc_danger"
+                    app:icon="@drawable/ic_stop"
+                    app:iconTint="@color/rc_danger"
+                    app:iconGravity="textStart"
+                    app:strokeColor="@color/rc_danger" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

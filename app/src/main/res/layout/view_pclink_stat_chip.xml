@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One live number, over a minute of itself. Two of these sit side by side at the top of the
-     PC-Mirror tab: the number is the hero, the sparkline is context. One accessibility node —
-     "frames, 60 fps" is a single fact, and the chart is that same fact drawn again. -->
+<!-- One live number, over a minute of itself. Two of these sit side by side on the PC Link
+     remote's surface: the number is the hero, the sparkline is context. One accessibility node —
+     "frames, 60 fps" is a single fact, and the chart is that same fact drawn again.
+
+     Coloured from the remote's own rc_* palette rather than the theme: the remote paints a dark
+     card whatever the system's light/dark setting is doing. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -14,7 +17,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textSize="12sp"
-        android:textColor="?android:attr/textColorSecondary"
+        android:textColor="@color/rc_secondary"
         android:maxLines="1"
         android:ellipsize="end" />
 
@@ -25,7 +28,7 @@
         android:layout_marginTop="2dp"
         android:textSize="22sp"
         android:textStyle="bold"
-        android:textColor="?android:attr/textColorPrimary"
+        android:textColor="@color/rc_on_surface"
         android:fontFamily="sans-serif-medium"
         android:maxLines="1"
         android:ellipsize="end" />

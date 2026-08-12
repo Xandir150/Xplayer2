@@ -87,6 +87,14 @@ object PcLinkSession {
 
         /** End the session and take the desktop off the glasses. */
         fun endPcLink()
+
+        /**
+         * Re-anchor the world-fixed desktop dead ahead of wherever the user is looking now. The
+         * yaw this is fighting is gyro-integrated and drifts over a long session, so this is a
+         * routine gesture rather than an error recovery — which is why the remote offers it as a
+         * button *and* as a long-press anywhere on its surface.
+         */
+        fun recenterPcLink()
     }
 
     private val hosts = ArrayList<Host>()
@@ -118,6 +126,11 @@ object PcLinkSession {
     /** Ends the live session; no-op when there isn't one. */
     fun end() {
         liveHost()?.first?.endPcLink()
+    }
+
+    /** Re-centres the live session's desktop; no-op when there isn't one. */
+    fun recenter() {
+        liveHost()?.first?.recenterPcLink()
     }
 
     private fun liveHost(): Pair<Host, Stats>? {
