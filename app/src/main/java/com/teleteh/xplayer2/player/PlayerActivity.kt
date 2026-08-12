@@ -362,8 +362,15 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
      * the fold-down happens exactly as before. So there is no route on which this can quietly
      * hand somebody a stream they cannot play.
      *
-     * The switch in front of it defaults to on for the same reason, and exists so the difference
-     * can be heard both ways rather than because the automatic answer needs supervising.
+     * **Off by default, on the evidence.** Listened to on the glasses against a 5.1 file with each
+     * channel announced in its own channel: front left, centre and front right were all that could
+     * be told apart, the surrounds were not placed and the LFE was inaudible — they are a stereo
+     * headset, and the platform's binaural rendering has nothing to work with. So the fold-down,
+     * which exists because a mis-handled 5.1 costs dialogue on some OEM builds, stays the default;
+     * turning it off buys a measured nothing and risks that on devices nobody here can test.
+     *
+     * The switch stays because the machinery is sound and cheap — a different pair of glasses, or
+     * a phone whose spatialiser is worth more, only has to flip a boolean.
      */
     private fun spatialAudioWanted(channelCount: Int, sampleRate: Int): Boolean =
         isSpatialAudioEnabled() &&
@@ -372,7 +379,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             )
 
     private fun isSpatialAudioEnabled(): Boolean =
-        getSharedPreferences(SPATIAL_PREFS, MODE_PRIVATE).getBoolean(SPATIAL_KEY, true)
+        getSharedPreferences(SPATIAL_PREFS, MODE_PRIVATE).getBoolean(SPATIAL_KEY, false)
 
     private fun setSpatialAudioEnabled(on: Boolean) {
         getSharedPreferences(SPATIAL_PREFS, MODE_PRIVATE).edit().putBoolean(SPATIAL_KEY, on).apply()
