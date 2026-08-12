@@ -151,6 +151,7 @@
     <!-- The sound control is a route, not a mute: it says where the sound comes out. -->
     <string name="pclink_section_audio">Sound</string>
     <string name="pclink_audio_to_glasses">Sound — in the glasses</string>
+    <string name="pclink_audio_to_computer">Sound: on the computer</string>
     <string name="pclink_audio_hint_glasses">The computer stays silent while you listen here</string>
     <string name="pclink_audio_hint_computer">The sound is playing on the computer</string>
     <string name="pclink_audio_none">This PC isn\'t sending any sound</string>

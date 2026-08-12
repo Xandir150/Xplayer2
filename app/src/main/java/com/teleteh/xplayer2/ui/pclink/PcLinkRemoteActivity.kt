@@ -67,7 +67,11 @@ class PcLinkRemoteActivity : AppCompatActivity() {
     private lateinit var tvLinkState: TextView
     private lateinit var tvFeedback: TextView
     private lateinit var tvAudioHint: TextView
-    private lateinit var btnAudioRoute: MaterialButton
+    /** The whole row is the tap target; the switch inside it is only the affordance. */
+    private lateinit var btnAudioRoute: LinearLayout
+    private lateinit var ivAudioRoute: ImageView
+    private lateinit var tvAudioRoute: TextView
+    private lateinit var swAudioRoute: com.google.android.material.materialswitch.MaterialSwitch
     private lateinit var btnRecenter: MaterialButton
     private lateinit var chevron: ImageView
     private lateinit var detailsBox: LinearLayout
@@ -114,6 +118,9 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         tvFeedback = findViewById(R.id.tvSurfaceFeedback)
         tvAudioHint = findViewById(R.id.tvAudioHint)
         btnAudioRoute = findViewById(R.id.btnAudioRoute)
+        ivAudioRoute = findViewById(R.id.ivAudioRoute)
+        tvAudioRoute = findViewById(R.id.tvAudioRoute)
+        swAudioRoute = findViewById(R.id.swAudioRoute)
         btnRecenter = findViewById(R.id.btnRecenter)
         chevron = findViewById(R.id.ivDetailsChevron)
         detailsBox = findViewById(R.id.boxDetails)
@@ -141,9 +148,10 @@ class PcLinkRemoteActivity : AppCompatActivity() {
 
         btnAudioRoute.setOnClickListener {
             haptics.click()
-            // Truth is the session, never the widget: this button is `checkable`, and
-            // MaterialButton.performClick() flips isChecked BEFORE it dispatches this listener —
-            // see [PcLinkRemotePolicy.audioTapCommand].
+            // Truth is the session, never the widget. The switch inside the row is not clickable
+            // and is only ever set from the session's own state, so it cannot get ahead of it —
+            // which is exactly how the old checkable button managed to send the value that was
+            // already in force and do nothing at all. See [PcLinkRemotePolicy.audioTapCommand].
             val wanted = PcLinkRemotePolicy.audioTapCommand(PcLinkSession.stats()?.audioToGlasses)
                 ?: return@setOnClickListener
             PcLinkSession.setAudioToGlasses(wanted)
@@ -401,9 +409,22 @@ class PcLinkRemoteActivity : AppCompatActivity() {
     }
 
     private fun applyAudioState(stats: PcLinkSession.Stats) {
-        btnAudioRoute.isChecked = stats.audioToGlasses
-        RemoteStyling.applyToggleStyle(btnAudioRoute, stats.audioToGlasses)
+        // Both ends of the choice are on screen at once: the icon is where the sound is going
+        // now, the switch is how to send it elsewhere. iOS reads the same way, and a control that
+        // only changed a word was the thing that made this one easy to misread.
+        swAudioRoute.isChecked = stats.audioToGlasses
+        ivAudioRoute.setImageResource(
+            if (stats.audioToGlasses) R.drawable.ic_glasses else R.drawable.ic_computer_24
+        )
+        tvAudioRoute.setText(
+            if (stats.audioToGlasses) R.string.pclink_audio_to_glasses
+            else R.string.pclink_audio_to_computer
+        )
         btnAudioRoute.isEnabled = stats.audioAvailable
+        swAudioRoute.isEnabled = stats.audioAvailable
+        // The row carries the whole control's state, so a disabled one dims as a unit rather than
+        // leaving a bright icon over a dead switch.
+        btnAudioRoute.alpha = if (stats.audioAvailable) 1f else 0.45f
         // The button names the destination; the line under it names the other one, so neither
         // state has to be guessed at.
         tvAudioHint.setText(

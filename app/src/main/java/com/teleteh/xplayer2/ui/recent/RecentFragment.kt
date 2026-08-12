@@ -105,6 +105,11 @@ class RecentFragment : Fragment(R.layout.fragment_recent) {
             }
         }
         ItemTouchHelper(cb).attachToRecyclerView(recycler)
+        // A drag that starts on a row belongs to the row, everywhere else it belongs to the tabs.
+        // Without this the whole page has to give up paging so the rows can be swiped — which it
+        // did, and swiping the empty space below the last row then did nothing at all.
+        (requireActivity().findViewById<androidx.viewpager2.widget.ViewPager2>(com.teleteh.xplayer2.R.id.viewPager))
+            ?.let { com.teleteh.xplayer2.ui.PagerSwipeGate.attach(it, recycler) }
     }
 
     private fun removeRecent(entry: RecentEntry, withUndo: Boolean) {

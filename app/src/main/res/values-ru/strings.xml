@@ -130,6 +130,7 @@
     <!-- Звук — это маршрут, а не «выключить»: переключатель говорит, откуда идёт звук. -->
     <string name="pclink_section_audio">Звук</string>
     <string name="pclink_audio_to_glasses">Звук — в очках</string>
+    <string name="pclink_audio_to_computer">Звук — на компьютере</string>
     <string name="pclink_audio_hint_glasses">Компьютер молчит, пока вы слушаете здесь</string>
     <string name="pclink_audio_hint_computer">Звук играет на компьютере</string>
     <string name="pclink_audio_none">Этот компьютер не передаёт звук</string>

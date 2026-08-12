@@ -17,6 +17,7 @@
     <color name="rc_bg">#0E0F13</color>          <!-- screen background -->
     <color name="rc_card">#16181E</color>        <!-- grouped card surface -->
     <color name="rc_row">#20232C</color>         <!-- tonal action row -->
+    <color name="rc_row_pressed">#2A2E39</color> <!-- the same row, under a finger -->
     <color name="rc_accent">#2196F3</color>      <!-- accent (matches applyButtonStyle) -->
     <color name="rc_on_surface">#ECEDF1</color>  <!-- primary text/icon -->
     <color name="rc_secondary">#9AA0AE</color>   <!-- secondary text -->

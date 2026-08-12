@@ -209,15 +209,52 @@
                         android:text="@string/pclink_section_audio"
                         android:textAppearance="@style/TextAppearance.XPlayer.Section" />
 
-                    <!-- Not a mute: it says where the PC's sound is going. Lit when it is here. -->
-                    <com.google.android.material.button.MaterialButton
+                    <!-- Not a mute: it says where the PC's sound is going, and both ends of the
+                         choice are visible at once — the icon is the destination it is going to
+                         now, the switch is the affordance for changing it. The row is the tap
+                         target; the switch itself is not clickable, so a tap anywhere on the row
+                         does the same thing and there is no dead strip between them. -->
+                    <LinearLayout
                         android:id="@+id/btnAudioRoute"
-                        style="@style/Widget.XPlayer.RemoteRow"
                         android:layout_width="match_parent"
-                        android:layout_height="44dp"
-                        android:text="@string/pclink_audio_to_glasses"
-                        android:checkable="true"
-                        app:icon="@drawable/ear_sound_24px" />
+                        android:layout_height="52dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:paddingStart="18dp"
+                        android:paddingEnd="12dp"
+                        android:background="@drawable/rc_row_background"
+                        android:clickable="true"
+                        android:focusable="true">
+
+                        <ImageView
+                            android:id="@+id/ivAudioRoute"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:importantForAccessibility="no"
+                            app:tint="?attr/colorPrimary"
+                            android:src="@drawable/ic_glasses" />
+
+                        <TextView
+                            android:id="@+id/tvAudioRoute"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="14dp"
+                            android:maxLines="1"
+                            android:ellipsize="end"
+                            android:textColor="@color/rc_on_surface"
+                            android:textSize="15sp"
+                            android:text="@string/pclink_audio_to_glasses" />
+
+                        <com.google.android.material.materialswitch.MaterialSwitch
+                            android:id="@+id/swAudioRoute"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:clickable="false"
+                            android:focusable="false"
+                            android:duplicateParentState="true"
+                            android:importantForAccessibility="no" />
+                    </LinearLayout>
 
                     <TextView
                         android:id="@+id/tvAudioHint"

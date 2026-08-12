@@ -32,7 +32,6 @@ import com.teleteh.xplayer2.data.RecentStore
 import com.teleteh.xplayer2.data.SourceType
 import com.teleteh.xplayer2.player.MenuMirrorPresentation
 import com.teleteh.xplayer2.ui.MainPagerAdapter
-import com.teleteh.xplayer2.ui.TabSwipePolicy
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -80,10 +79,11 @@ class MainActivity : AppCompatActivity() {
         android.view.ViewTreeObserver.OnGlobalFocusChangeListener { _, _ -> pushGlassesMenu() }
     private val glassesPageCallback = object : ViewPager2.OnPageChangeCallback() {
         override fun onPageSelected(position: Int) {
-            // Recent (0) and PC-Mirror (2) both host swipe-to-delete rows, which need the
-            // horizontal gesture — only Sources (1) pages by swipe. Tap the tab (or turn your
-            // head) to leave the other two. See TabSwipePolicy.
-            binding.viewPager.isUserInputEnabled = TabSwipePolicy.pagesBySwipe(position)
+            // Every page pages by swipe. The two that host swipe-to-delete rows take the
+            // gesture only for the row under the finger — see PagerSwipeGate — rather than the
+            // whole page giving paging up, which is what left the empty space below the last row
+            // doing nothing at all.
+            binding.viewPager.isUserInputEnabled = true
             refreshGlassesMenu()
         }
     }
@@ -174,7 +174,7 @@ class MainActivity : AppCompatActivity() {
         val viewPager: ViewPager2 = binding.viewPager
         viewPager.adapter = MainPagerAdapter(this)
         // Start on Recent (page 0), where swipe-to-delete lives — so paging-by-swipe is off there.
-        viewPager.isUserInputEnabled = false
+        viewPager.isUserInputEnabled = true
 
         TabLayoutMediator(binding.tabLayout, viewPager) { tab, position ->
             tab.text = tabTitle(position)
