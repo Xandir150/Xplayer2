@@ -89,6 +89,7 @@
     <!-- Кнопка звука на оверлее: звук компьютера, который играют очки -->
     <string name="pclink_audio_on">Звук включён</string>
     <string name="pclink_audio_muted">Звук выключен</string>
+    <string name="pclink_ended_for_playback">PC Link отключён</string>
 
     <!-- Сопряжение PC Link: код из 6 цифр и всё вокруг него -->
     <string name="pclink_pair_title">Подключить «%1$s»?</string>

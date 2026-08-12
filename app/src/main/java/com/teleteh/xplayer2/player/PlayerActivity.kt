@@ -104,7 +104,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @UnstableApi
-class PlayerActivity : AppCompatActivity() {
+class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant {
 
     companion object {
         const val EXTRA_START_POSITION_MS = "start_position_ms"
@@ -136,6 +136,59 @@ class PlayerActivity : AppCompatActivity() {
         private const val DEFAULT_CONTROL_PORT = 48631
         private const val DEFAULT_VIDEO_PORT = 48632
         private const val PCLINK_DEBUG_INTERVAL_MS = 500L
+        // How long a client outlives its session so its farewell `set_audio` can leave. See
+        // [disconnectPcLink].
+        private const val PCLINK_FAREWELL_MS = 300L
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // GlassesStage.Occupant — one screen, one thing on it
+    // ------------------------------------------------------------------------------------------
+
+    override val glassesUse: GlassesStage.Use
+        get() = when {
+            isPcLinkMode -> GlassesStage.Use.PC_LINK
+            // `sourceUri` outlives the ExoPlayer across a backgrounding (onStop releases the player
+            // and onStart rebuilds it), so it — not `player` — is what "this activity is showing a
+            // film" actually means.
+            sourceUri != null -> GlassesStage.Use.LOCAL_VIDEO
+            else -> GlassesStage.Use.NOTHING
+        }
+
+    /**
+     * Something else is taking the glasses. End what this activity is showing and get out of the
+     * way — including the window, because a player left in the back stack with nothing to play is
+     * a screen the user can return to that lies about what is happening.
+     */
+    override fun releaseGlasses() {
+        if (isPcLinkMode) exitPcLink()
+        stopLocalPlayback()
+        dismissPresentation()
+        finish()
+    }
+
+    /**
+     * Tears down the ExoPlayer side and everything hanging off it. Not a lifecycle callback: this
+     * is "there is no longer a film here", which `onStop` deliberately does not mean.
+     */
+    private fun stopLocalPlayback() {
+        // The position is worth keeping even when the film is being taken away rather than closed.
+        saveProgress()
+        // Same order and the same reason as onNewIntent's teardown: the LoudnessEnhancer goes
+        // first, because the system has been seen leaving the effect alive after its audio session
+        // dies and locking the glasses' USB output for every other app.
+        releaseLoudnessEnhancer()
+        try { player?.clearVideoSurface() } catch (_: Throwable) { }
+        try { player?.release() } catch (_: Throwable) { }
+        player = null
+        trackSelector = null
+        resolvedStreamUri = null
+        streamVariants = emptyList()
+        selectedVariantIndex = 0
+        currentResolvedTitle = null
+        sourceUri = null
+        recentKeyUri = null
+        stopPlaybackService()
     }
 
     private fun navigateBackToPrimary() {
@@ -380,6 +433,10 @@ class PlayerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         currentInstance = this
+        // Scoped to the activity's whole life, not to onStart/onStop: a player whose picture is on
+        // the glasses keeps running while this window is stopped (see onStop), and that is exactly
+        // the instance a later claim has to be able to find.
+        GlassesStage.register(this)
         
         // Ensure edge-to-edge and cutout mode for Android 15+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -548,9 +605,6 @@ class PlayerActivity : AppCompatActivity() {
             startPcLink(intent, pcHost)
             return
         }
-        // A file/stream intent arriving while PC Link is up (singleTop → onNewIntent) ends it.
-        if (isPcLinkMode) exitPcLink()
-
         val action = intent?.action
         sourceUri = when (action) {
             Intent.ACTION_SEND -> {
@@ -586,6 +640,21 @@ class PlayerActivity : AppCompatActivity() {
             startActivity(browse)
             finish()
             return
+        }
+        // The glasses are one screen and everything below is about to take it, so whatever else is
+        // on it comes off first: a PC Link session in this activity (singleTop → onNewIntent), and
+        // a desktop or another film in an older PlayerActivity, which singleTop lets exist whenever
+        // this one wasn't the top of the task.
+        //
+        // Deliberately after the two branches above that play nothing: the playback notification's
+        // bare launch intent and a container link (a VK list, a Yandex folder) both land here and
+        // then leave, and neither is a reason to end a session the user never touched.
+        val endedOwnPcLink = isPcLinkMode
+        if (isPcLinkMode) exitPcLink()
+        val handover = GlassesStage.claim(this)
+        if (handover.endedPcLink || endedOwnPcLink) {
+            // Unasked, but not unannounced — see GlassesStage.
+            Toast.makeText(this, R.string.pclink_ended_for_playback, Toast.LENGTH_SHORT).show()
         }
         recentKeyUri = intent?.getStringExtra(EXTRA_RECENT_URI)
             ?.let { runCatching { Uri.parse(it) }.getOrNull() }
@@ -1228,6 +1297,7 @@ class PlayerActivity : AppCompatActivity() {
         if (currentInstance == this) {
             currentInstance = null
         }
+        GlassesStage.unregister(this)
         saveProgress()
         exitPcLink()
         if (lazy3dEnabled) stopLazy3d()
@@ -3023,6 +3093,12 @@ class PlayerActivity : AppCompatActivity() {
     /** One-time setup for a PC Link session, then [connectPcLink]. */
     private fun startPcLink(intent: Intent, host: String) {
         exitPcLink()
+        // The other half of the exclusivity, and the one that was already intended: the glasses can
+        // only show one thing, so a film — in this activity or in an older one still holding the
+        // panel — comes off before the desktop goes on. `onNewIntent` has already released the
+        // player when the intent landed here, but a fresh instance reaches this by another road.
+        GlassesStage.claim(this)
+        stopLocalPlayback()
         pcLinkHost = host
         pcLinkControlPort = intent.getIntExtra(PcConnectActivity.EXTRA_PCLINK_CONTROL_PORT, DEFAULT_CONTROL_PORT)
         pcLinkVideoPort = intent.getIntExtra(PcConnectActivity.EXTRA_PCLINK_VIDEO_PORT, DEFAULT_VIDEO_PORT)
@@ -3120,11 +3196,26 @@ class PlayerActivity : AppCompatActivity() {
      * Drops the sockets and the codec but stays in PC Link mode — what backgrounding does, so a
      * phone in a pocket isn't decoding a desktop nobody is looking at.
      */
-    private fun disconnectPcLink() {
+    private fun disconnectPcLink(sayGoodbye: Boolean = false) {
         stopPcLinkDebugTicker()
         acquiredGlasses?.setPlaybackListener(null)
-        pcLinkClient?.close()
+        val client = pcLinkClient
         pcLinkClient = null
+        if (sayGoodbye && client != null) {
+            // `set_audio: false` is what hands the computer its own speakers back: xpl-server keeps
+            // them silenced for as long as sound is reaching the glasses and releases the hold the
+            // moment it stops flowing. Dropping the socket releases them too — the hold restores on
+            // any way the session ends — but only once the PC notices, and until then the user's
+            // desktop is mute for no reason it can see. So the message goes out first and the
+            // socket outlives it by a beat.
+            client.setAudioEnabled(false)
+            closePcFarewell()
+            pcFarewellClient = client
+            uiHandler.postDelayed(pcFarewell, PCLINK_FAREWELL_MS)
+        } else {
+            closePcFarewell()
+            client?.close()
+        }
         pcDecoder?.release()
         pcDecoder = null
         // The audio path is session-scoped like the decoder: the next `config` rebuilds it, and a
@@ -3134,10 +3225,31 @@ class PlayerActivity : AppCompatActivity() {
         updatePcLinkAudioButton()
     }
 
+    /**
+     * A client kept alive past the end of its session so its farewell can leave — see
+     * [disconnectPcLink]. Never more than one, and never past the next thing that happens: a
+     * client left retrying against a PC nobody is watching is a socket and a reconnect ladder
+     * leaking out of a dead session.
+     */
+    private var pcFarewellClient: PcLinkClient? = null
+    private val pcFarewell = Runnable {
+        pcFarewellClient?.close()
+        pcFarewellClient = null
+    }
+
+    private fun closePcFarewell() {
+        uiHandler.removeCallbacks(pcFarewell)
+        pcFarewellClient?.close()
+        pcFarewellClient = null
+    }
+
     /** Leaves PC Link mode entirely and gives the normal player UI its window back. */
     private fun exitPcLink() {
         if (!isPcLinkMode) return
-        disconnectPcLink()
+        // Leaving the mode is the user going somewhere else, so the PC is told rather than left to
+        // work it out. Backgrounding (`disconnectPcLink()` on its own) is not: the session is
+        // coming back, and re-muting it on the way out would only have to be undone.
+        disconnectPcLink(sayGoodbye = true)
         // A world-fixed presentation is PC Link-only: drop it so whatever comes next (a file, or
         // nothing) gets the normal OuToSbsGlView presentation recreated by the usual lifecycle
         // paths. This also turns the IMU off via updatePcLinkImu() inside dismissPresentation().
@@ -3332,7 +3444,19 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private val pcLinkListener = object : PcLinkClient.Listener {
+        /**
+         * Whether what a client is saying still concerns us.
+         *
+         * A client outlives the session that owned it twice over: [close] races its own reader, and
+         * a handover keeps one alive on purpose so its farewell can leave. The `config` that
+         * arrives in either gap used to be applied — and `applyPcLinkAudioConfig` would then build
+         * a fresh AudioTrack, putting the PC's sound back on top of the film we just made room for.
+         * Both callbacks below run on Main, after whatever cleared these fields.
+         */
+        private val isLive: Boolean get() = isPcLinkMode && pcLinkClient != null
+
         override fun onState(state: PcLinkState) {
+            if (!isLive) return
             when (state) {
                 is PcLinkState.Connecting ->
                     setPcLinkStatus(getString(R.string.pclink_connecting), dim = false)
@@ -3347,6 +3471,7 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         override fun onConfig(config: PcLinkStreamConfig) {
+            if (!isLive) return
             pcLinkConfig = config
             pcLinkSourceIsSbs = config.isSbs
             pcVideoWidth = config.width

@@ -110,6 +110,7 @@
     <!-- The overlay's mute button: the PC's own sound, played through the glasses -->
     <string name="pclink_audio_on">Sound on</string>
     <string name="pclink_audio_muted">Sound off</string>
+    <string name="pclink_ended_for_playback">PC Link disconnected</string>
 
     <!-- PC Link pairing: the 6-digit comparison code (SAS) and the states around it -->
     <string name="pclink_pair_title">Pair with \"%1$s\"?</string>
