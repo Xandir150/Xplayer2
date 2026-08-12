@@ -372,6 +372,58 @@ class PcLinkClientTest {
         assertSame(PcControlMessage.Unknown, PcLinkProtocol.parseControlLine(nanFps))
     }
 
+    /**
+     * §2 forward compatibility: a non-finite or non-numeric value where a number is specified is a
+     * protocol error and the message MUST be dropped. That applies to the *optional* canvas fields
+     * too — the default is for a field the server never mentioned, not a way to paper over one it
+     * mentioned and got wrong. (Rendering a `"canvasDistanceM": "NaN"` desktop at 3 m as though it
+     * had been omitted is exactly the silent misinterpretation the rule exists to prevent.)
+     */
+    @Test
+    fun `a config whose canvas geometry is present but not a finite number is dropped`() {
+        val broken = listOf(
+            """"canvasAngularWidthDeg":45.0""" to """"canvasAngularWidthDeg":"NaN"""",
+            """"canvasAngularWidthDeg":45.0""" to """"canvasAngularWidthDeg":null""",
+            """"canvasAngularWidthDeg":45.0""" to """"canvasAngularWidthDeg":"wide"""",
+            """"canvasDistanceM":3.0""" to """"canvasDistanceM":"Infinity"""",
+            """"canvasDistanceM":3.0""" to """"canvasDistanceM":null"""
+        )
+        for ((from, to) in broken) {
+            val line = configLine().replace(from, to)
+            assertSame(to, PcControlMessage.Unknown, PcLinkProtocol.parseControlLine(line))
+        }
+    }
+
+    @Test
+    fun `canvas geometry still defaults when the server omits it entirely`() {
+        val line = configLine()
+            .replace(""","canvasAngularWidthDeg":45.0""", "")
+            .replace(""","canvasDistanceM":3.0""", "")
+
+        val config = (PcLinkProtocol.parseControlLine(line) as PcControlMessage.Config).config
+        assertEquals(45f, config.canvasAngularWidthDeg, 0.001f)
+        assertEquals(3f, config.canvasDistanceM, 0.001f)
+    }
+
+    @Test
+    fun `a windows message with an unusable depth is dropped whole`() {
+        for (depth in listOf(""""NaN"""", "null", """"near"""")) {
+            val line = """{"type":"windows","windows":[""" +
+                """{"id":42,"title":"Terminal","x":0,"y":0,"w":8,"h":9,"depth":$depth}]}"""
+            assertSame(depth, PcControlMessage.Unknown, PcLinkProtocol.parseControlLine(line))
+        }
+    }
+
+    @Test
+    fun `a window that omits depth still defaults`() {
+        val windows = PcLinkProtocol.parseControlLine(
+            """{"type":"windows","windows":[{"id":42,"title":"Terminal","x":0,"y":0,"w":8,"h":9}]}"""
+        ) as PcControlMessage.Windows
+
+        assertEquals(1, windows.windows.size)
+        assertEquals(0.5f, windows.windows[0].depth, 0.0001f)
+    }
+
     @Test
     fun `parses ping pong and windows`() {
         assertEquals(

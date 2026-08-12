@@ -40,6 +40,12 @@ data class PcLinkServer(
     val host: String,
     val controlPort: Int,
     val videoPort: Int,
+    /**
+     * The **highest** protocol version this server speaks (§1), which is not the version the
+     * session will run at — §5 conducts that at the *client's* version. So never send this back on
+     * the wire: `hello` and the pairing transcript both take [PcLinkDiscovery.PROTOCOL_VERSION].
+     * It is here to be displayed and carried, and it may legitimately exceed ours.
+     */
     val protocolVersion: Int,
     val serverId: String? = null
 )
@@ -293,8 +299,11 @@ class PcLinkDiscovery(
          *
          * Validation is kept in lockstep with the reference decoder (Rust `xpl_proto`'s
          * `DiscoveryReply`): `name` is a required non-empty String there (no default — so no
-         * "XPlayer Link" fallback here either), both ports are `u16`, and this client only speaks
-         * [PROTOCOL_VERSION]. `serverId` is additive/optional there too — absent or blank simply
+         * "XPlayer Link" fallback here either), both ports are `u16`, and the reply's
+         * `protocolVersion` is the *highest* version that server speaks (§1), not the one the
+         * session will use — §5 conducts the session at the client's version, so anything from
+         * [PROTOCOL_VERSION] up can still talk to us and belongs in the picker. Only a server whose
+         * ceiling is below ours is filtered out. `serverId` is additive/optional there too — absent or blank simply
          * decodes to null, not a parse failure, so pre-pairing servers stay discoverable. Unknown
          * fields are ignored, like the reference. Returns null for malformed JSON or missing/invalid
          * *required* fields. Extracted as a pure function so it's directly unit-testable without a
@@ -305,7 +314,8 @@ class PcLinkDiscovery(
                 val obj = JSONObject(json)
                 val name = obj.optString("name").trim()
                 if (name.isEmpty()) return null
-                if (obj.optInt("protocolVersion", -1) != PROTOCOL_VERSION) return null
+                val advertisedVersion = obj.optInt("protocolVersion", -1)
+                if (advertisedVersion < PROTOCOL_VERSION) return null
                 val controlPort = obj.optInt("controlPort", -1)
                 val videoPort = obj.optInt("videoPort", -1)
                 // Bound to real port numbers: an out-of-range controlPort would otherwise ride the
@@ -321,7 +331,10 @@ class PcLinkDiscovery(
                     host = host,
                     controlPort = controlPort,
                     videoPort = videoPort,
-                    protocolVersion = PROTOCOL_VERSION,
+                    // What the server advertised, not what we speak. Hardcoding our own was
+                    // indistinguishable while the check above demanded equality; now that a newer
+                    // server is accepted, recording 1 for a server that said 2 would be a lie.
+                    protocolVersion = advertisedVersion,
                     serverId = serverId
                 )
             } catch (_: Exception) {

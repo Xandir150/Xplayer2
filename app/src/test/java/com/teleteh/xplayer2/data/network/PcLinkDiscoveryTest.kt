@@ -14,6 +14,7 @@ import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -163,9 +164,25 @@ class PcLinkDiscoveryTest {
         assertNull(PcLinkDiscovery.parseServerResponse(json, "192.168.1.42"))
     }
 
+    /**
+     * §1: the reply's `protocolVersion` is the *highest* version that server speaks, not the one
+     * the session will use — §5 conducts the session at the client's version. So a future v2 server
+     * still speaks v1 to us and must stay in the picker; filtering it out would make this client
+     * blind to every server newer than itself.
+     */
     @Test
-    fun `rejects a protocol version this client does not speak`() {
+    fun `keeps a server whose highest version is newer than this client`() {
         val json = """{"name":"Alex-PC","protocolVersion":2,"controlPort":48631,"videoPort":48632}"""
+
+        val server = PcLinkDiscovery.parseServerResponse(json, "192.168.1.42")
+
+        assertNotNull(server)
+        assertEquals(2, server!!.protocolVersion)
+    }
+
+    @Test
+    fun `rejects a server whose highest version predates this client`() {
+        val json = """{"name":"Alex-PC","protocolVersion":0,"controlPort":48631,"videoPort":48632}"""
 
         assertNull(PcLinkDiscovery.parseServerResponse(json, "192.168.1.42"))
     }

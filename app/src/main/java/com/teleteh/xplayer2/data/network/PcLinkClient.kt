@@ -220,7 +220,8 @@ object PcLinkProtocol {
         val obj = try { JSONObject(line.trim()) } catch (_: Exception) { return null }
         return when (obj.optString("type")) {
             "config" -> parseConfig(obj)?.let { PcControlMessage.Config(it) } ?: PcControlMessage.Unknown
-            "windows" -> PcControlMessage.Windows(parseWindows(obj))
+            "windows" -> parseWindows(obj)?.let { PcControlMessage.Windows(it) }
+                ?: PcControlMessage.Unknown
             "ping" -> readU64(obj, "t_us")?.let { PcControlMessage.Ping(it) } ?: PcControlMessage.Unknown
             "pong" -> readU64(obj, "t_us")?.let { PcControlMessage.Pong(it) } ?: PcControlMessage.Unknown
             else -> PcControlMessage.Unknown
@@ -230,8 +231,9 @@ object PcLinkProtocol {
     /**
      * `config` → [PcLinkStreamConfig], or null if a required field is missing/invalid. Required:
      * a non-empty `mime`, positive `width`/`height`, a finite `fps`, a known `stereo`, and a
-     * syntactically valid `videoToken` (§2.2 makes the token mandatory). Canvas geometry falls
-     * back to sane defaults rather than failing the whole message.
+     * syntactically valid `videoToken` (§2.2 makes the token mandatory). Canvas geometry is
+     * optional and defaults when *absent* — but a canvas field that is present and not a finite
+     * number fails the message like any other, per §2.
      */
     fun parseConfig(obj: JSONObject): PcLinkStreamConfig? {
         val mime = obj.optString("mime").trim()
@@ -244,19 +246,23 @@ object PcLinkProtocol {
         if (stereo != STEREO_SBS && stereo != STEREO_MONO) return null
         val token = obj.optString("videoToken").trim()
         if (decodeToken(token) == null) return null
+        // Absent is fine and defaults; present-but-unusable is not (§2 forward compatibility).
+        val canvasWidthDeg = readOptionalFinite(obj, "canvasAngularWidthDeg", 45f) ?: return null
+        val canvasDistanceM = readOptionalFinite(obj, "canvasDistanceM", 3f) ?: return null
         return PcLinkStreamConfig(
             mime = mime,
             width = width,
             height = height,
             fps = fps,
             stereo = stereo,
-            canvasAngularWidthDeg = readFinite(obj, "canvasAngularWidthDeg") ?: 45f,
-            canvasDistanceM = readFinite(obj, "canvasDistanceM") ?: 3f,
+            canvasAngularWidthDeg = canvasWidthDeg,
+            canvasDistanceM = canvasDistanceM,
             videoToken = token
         )
     }
 
-    private fun parseWindows(obj: JSONObject): List<PcLinkWindow> {
+    /** Null when any window carries an unusable `depth` — the whole message is then dropped. */
+    private fun parseWindows(obj: JSONObject): List<PcLinkWindow>? {
         val arr = obj.optJSONArray("windows") ?: return emptyList()
         val out = ArrayList<PcLinkWindow>(arr.length())
         for (i in 0 until arr.length()) {
@@ -268,7 +274,7 @@ object PcLinkProtocol {
                 y = w.optInt("y", 0),
                 w = w.optInt("w", 0),
                 h = w.optInt("h", 0),
-                depth = readFinite(w, "depth") ?: 0.5f
+                depth = readOptionalFinite(w, "depth", 0.5f) ?: return null
             )
         }
         return out
@@ -280,6 +286,21 @@ object PcLinkProtocol {
         val v = obj.optDouble(key, Double.NaN)
         if (v.isNaN() || v.isInfinite()) return null
         return v.toFloat()
+    }
+
+    /**
+     * An optional number: [fallback] when the field is absent, its value when present and finite,
+     * and null when present but not a finite number.
+     *
+     * That last case is the point. §2 makes a non-finite or non-numeric value where a number is
+     * specified a protocol error whose message MUST be dropped — so it cannot be quietly replaced
+     * by the default, which is what a plain `readFinite(...) ?: fallback` did: a `config` claiming
+     * `"canvasDistanceM": "NaN"` would have been rendered at 3 m as though the server had never
+     * mentioned it. Only *absence* may default.
+     */
+    private fun readOptionalFinite(obj: JSONObject, key: String, fallback: Float): Float? {
+        if (!obj.has(key)) return fallback
+        return readFinite(obj, key)
     }
 
     private fun readU64(obj: JSONObject, key: String): Long? {
@@ -754,6 +775,15 @@ class PcLinkClient(
         pendingPong = null
         unansweredPings = 0
         lastRxMs = nowMs()
+
+        // Resolved BEFORE the socket, not after `hello`: this reads the pairing store, and on the
+        // first call of a session that can mean unsealing a Keystore key. A server running with
+        // `--allow-unpaired` only holds its unpaired grace open briefly after `hello`, so a slow
+        // store read used to be enough to land us on the interim unpaired path — where our late
+        // `auth_challenge` is ignored and we spend the full authentication timeout waiting for a
+        // reply that isn't coming. Whether we authenticate must be decided before we say anything.
+        val auth = authProvider()
+
         val control = openSocket(controlPort, CONTROL_READ_TIMEOUT_MS)
         controlSocket = control
         try {
@@ -765,16 +795,20 @@ class PcLinkClient(
 
             // Paired PC: authenticate before anything else. A server implementing §2.6 sends no
             // `config` at all until it has, and §2.2 forbids opening the video connection first.
-            val auth = authProvider()
             val authToken = if (auth == null) null else authenticate(auth, input, output, splitter)
 
             val config = awaitConfig(input, splitter)
             withContext(Dispatchers.Main) { listener.onConfig(config) }
 
-            // "Whichever message most recently carried one" (§2.2): `config` follows `auth_ok`, and
-            // a conforming server either repeats that still-unspent token there — the same token,
-            // not a reuse — or issues a fresh one that supersedes it. `authToken` therefore only
-            // decides the preamble when a `config` arrives without a token of its own.
+            // §2.2's rule is "whichever message most recently carried one". This reads as "config
+            // wins", and the two coincide: `config` always follows `auth_ok` and its token field is
+            // mandatory, and the only other way to be issued one — asking with `video_token`
+            // (§2.15) — is something this client never does. So `config`'s token IS the most recent
+            // one, whether the server repeated the still-unspent `auth_ok` token (the same token,
+            // not a reuse) or minted a fresh one that supersedes it. `authToken` covers only the
+            // case of a `config` arriving without a token of its own. Should this client ever send
+            // `video_token`, that reply becomes the most recent and this has to become a slot the
+            // later message overwrites rather than a two-way fallback.
             val videoToken = config.videoToken.ifEmpty { authToken.orEmpty() }
             val preamble = PcLinkProtocol.videoPreamble(videoToken)
                 ?: throw IOException("server sent an invalid videoToken")
