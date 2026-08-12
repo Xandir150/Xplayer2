@@ -136,6 +136,9 @@
     <!-- Вкладка PC-Mirror: компьютеры, с которыми телефон уже сопряжён. -->
     <string name="pclink_paired_label">Ваши компьютеры</string>
     <string name="pclink_paired_no_address">Адрес ещё не записан</string>
+    <!-- Здесь список сопряжений, а не поиск в сети: запуск XPlayer Link на новом компьютере строку
+         сюда не добавит — этой фразе место на экране поиска. -->
+    <string name="pclink_paired_empty">Пока нет компьютеров — нажмите «Найти компьютер», чтобы добавить</string>
     <string name="pclink_paired_unreachable">Не удалось связаться с этим компьютером. Проверьте, запущен ли на нём XPlayer Link.</string>
     <string name="pclink_open_remote">Открыть пульт</string>
 

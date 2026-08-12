@@ -157,6 +157,10 @@
     <!-- The PC-Mirror tab: the computers this phone is already paired with. -->
     <string name="pclink_paired_label">Your computers</string>
     <string name="pclink_paired_no_address">Address not recorded yet</string>
+    <!-- This list is the pairing store, not a discovery scan: starting XPlayer Link on a PC that
+         has never been paired cannot add a row here, so it must not be what the empty state asks
+         for (that sentence belongs to the connect screen, where discovery really runs). -->
+    <string name="pclink_paired_empty">No computers yet — tap \"Find your PC\" to add one</string>
     <string name="pclink_paired_unreachable">Couldn\'t reach that computer. Make sure XPlayer Link is running on it.</string>
     <string name="pclink_open_remote">Open the remote</string>
 

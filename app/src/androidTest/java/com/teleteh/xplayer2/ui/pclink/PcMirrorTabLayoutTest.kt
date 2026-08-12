@@ -53,5 +53,9 @@ class PcMirrorTabLayoutTest {
     fun itOpensOnTheWayInNotOnAClaimThatSomethingIsStreaming() {
         assertEquals(View.GONE, root.findViewById<View>(R.id.cardSession).visibility)
         assertEquals(View.VISIBLE, root.findViewById<View>(R.id.boxIdle).visibility)
+        // "No computers yet" is the answer to a question the store has not been asked yet:
+        // showPairings() turns it on once the read comes back, so nobody with paired PCs sees it
+        // flash over their list.
+        assertEquals(View.GONE, root.findViewById<View>(R.id.tvEmpty).visibility)
     }
 }
