@@ -300,15 +300,16 @@ class PcMirrorFragment : Fragment() {
     private fun forget(pairing: PcLinkPairing, withUndo: Boolean) {
         val store = store ?: return
         lifecycleScope.launch {
-            withContext(Dispatchers.IO) { store.forget(pairing.serverId) }
+            // The record as it was stored, held whole until the Snackbar goes: re-pairing it
+            // through addOrUpdate would restore the key but stamp it as seen just now, and the row
+            // would come back at the top of the list instead of where it was.
+            val forgotten = withContext(Dispatchers.IO) { store.forget(pairing.serverId) }
             loadPairings()
-            if (!withUndo) return@launch
+            if (!withUndo || forgotten == null) return@launch
             Snackbar.make(recycler, getString(R.string.pclink_forgotten, pairing.name), Snackbar.LENGTH_LONG)
                 .setAction(R.string.undo) {
                     lifecycleScope.launch {
-                        withContext(Dispatchers.IO) {
-                            store.addOrUpdate(pairing.serverId, pairing.name, pairing.ltk, pairing.lastHost)
-                        }
+                        withContext(Dispatchers.IO) { store.restore(pairing.serverId, forgotten) }
                         loadPairings()
                     }
                 }.show()

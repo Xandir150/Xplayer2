@@ -177,8 +177,27 @@ class PcLinkPairingStore internal constructor(
         pairingBacking.put(serverId, record.toString())
     }
 
-    /** "Forget this PC". Purely local: the PC finds out at our next `auth_challenge`. */
-    fun forget(serverId: String) = pairingBacking.remove(serverId)
+    /**
+     * "Forget this PC". Purely local: the PC finds out at our next `auth_challenge`.
+     *
+     * Hands back the record exactly as it was stored, so an undo can be an undo — see [restore].
+     * Null if there was nothing to forget.
+     */
+    fun forget(serverId: String): String? {
+        val record = pairingBacking.get(serverId)
+        pairingBacking.remove(serverId)
+        return record
+    }
+
+    /**
+     * Undo for [forget]: puts back the record it returned, byte for byte.
+     *
+     * Not [addOrUpdate] — that is the *pairing* path and stamps `lastSeenAt` (and, with the record
+     * already deleted, `createdAt`) with now, which would move the row to the top of a list sorted
+     * by last contact and claim the phone had just spoken to a PC it has not. It would also drop
+     * any field written by a future version of the app, which [addOrUpdate] otherwise preserves.
+     */
+    fun restore(serverId: String, record: String) = pairingBacking.put(serverId, record)
 
     private fun decode(serverId: String, json: String): PcLinkPairing? {
         val record = runCatching { JSONObject(json) }.getOrNull() ?: return null

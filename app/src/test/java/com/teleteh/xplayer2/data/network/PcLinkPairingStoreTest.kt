@@ -238,6 +238,51 @@ class PcLinkPairingStoreTest {
         assertEquals(Hex.encode(ltk(0x09)), raw.getString("ltk"))
     }
 
+    /**
+     * Undo on the PC-Mirror tab's swipe has to be an undo, not a fresh pairing.
+     *
+     * Re-adding through [PcLinkPairingStore.addOrUpdate] restores the key but stamps the record as
+     * seen just now — and since the record was already deleted, as *paired* just now too — so the
+     * row comes back at the top of a list sorted by last contact instead of where the user swiped
+     * it from, claiming a conversation with the PC that never happened.
+     */
+    @Test
+    fun forgetHandsBackTheRecordSoUndoPutsItBackUnchanged() {
+        val s = store()
+        val office = "a".repeat(64)
+        s.addOrUpdate(office, "Office", ltk(0x01), host = "192.168.1.10")
+        // A field only a future version of the app knows about: an undo must not drop it either.
+        pairingBacking.put(
+            office,
+            JSONObject(pairingBacking.get(office)!!).put("futureField", "keep me").toString()
+        )
+        clock = clock.plusSeconds(86_400)
+        s.addOrUpdate("b".repeat(64), "Home", ltk(0x02), host = "192.168.1.11")
+        assertEquals(listOf("Home", "Office"), s.getAll().map { it.name })
+
+        val before = s.get(office)!!
+        val forgotten = s.forget(office)!!
+        assertNull(s.get(office))
+
+        // The undo lands later than the swipe, as it always does — the record must not notice.
+        clock = clock.plusSeconds(30)
+        s.restore(office, forgotten)
+
+        val after = s.get(office)!!
+        assertEquals(before, after)
+        assertEquals(before.createdAt, after.createdAt)
+        assertEquals(before.lastSeenAt, after.lastSeenAt)
+        assertArrayEquals(before.ltk, after.ltk)
+        assertEquals("keep me", JSONObject(pairingBacking.get(office)!!).getString("futureField"))
+        assertEquals("back where it was swiped from", listOf("Home", "Office"), s.getAll().map { it.name })
+    }
+
+    /** Nothing to hand back for a PC we were not paired with — the caller offers no undo. */
+    @Test
+    fun forgettingSomethingWeNeverHadReturnsNothing() {
+        assertNull(store().forget("c".repeat(64)))
+    }
+
     @Test
     fun plainCipherRoundTripsAndRejectsJunk() {
         val sealed = PcLinkPairingStore.PlainSecretCipher.seal(ltk(0x5a))
