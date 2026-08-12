@@ -85,6 +85,7 @@ import com.teleteh.xplayer2.data.depth.DepthThermalGovernor
 import com.teleteh.xplayer2.data.glasses.GlassesController
 import com.teleteh.xplayer2.data.glasses.GlassesProtocol
 import com.teleteh.xplayer2.data.network.PairingFailure
+import com.teleteh.xplayer2.data.network.PcAudioFormat
 import com.teleteh.xplayer2.data.network.PcLinkAuth
 import com.teleteh.xplayer2.data.network.PcLinkClient
 import com.teleteh.xplayer2.data.network.PcLinkPairingStore
@@ -351,9 +352,17 @@ class PlayerActivity : AppCompatActivity() {
     private var pcLinkSourceIsSbs = false
     private var pcVideoWidth = 0
     private var pcVideoHeight = 0
+    // The PC's system audio, when the server negotiated any. Null the whole time `config.audio`
+    // is absent, which is exactly the pre-audio behaviour. Read from the network reader thread.
+    @Volatile private var pcAudio: PcAudioPlayer? = null
+    /** The user's mute choice, kept across reconnects and format changes within one session. */
+    private var pcAudioMuted = false
     private var pcStatusView: TextView? = null
+    private var pcAudioButton: TextView? = null
     private var pcDebugView: TextView? = null
     private var pcDebugTicker: Runnable? = null
+    /** pts of the last frame the decoder actually rendered, for the A/V skew readout. */
+    @Volatile private var pcLastRenderedPtsUs = 0L
     // Latency estimate. The server's pts_us is on ITS monotonic clock, so an absolute delay is not
     // computable; the running minimum of (our clock - pts) is the best-case one-way delay of this
     // session, and what we show is how far above that floor we currently are.
@@ -3114,6 +3123,11 @@ class PlayerActivity : AppCompatActivity() {
         pcLinkClient = null
         pcDecoder?.release()
         pcDecoder = null
+        // The audio path is session-scoped like the decoder: the next `config` rebuilds it, and a
+        // phone in a pocket must not hold a live AudioTrack (or the glasses' audio route) open.
+        pcAudio?.release()
+        pcAudio = null
+        updatePcLinkAudioButton()
     }
 
     /** Leaves PC Link mode entirely and gives the normal player UI its window back. */
@@ -3133,10 +3147,14 @@ class PlayerActivity : AppCompatActivity() {
         pcLinkSourceIsSbs = false
         pcVideoWidth = 0
         pcVideoHeight = 0
+        pcAudioMuted = false
+        pcLastRenderedPtsUs = 0L
         stopPcLinkDebugTicker()
         (pcStatusView?.parent as? ViewGroup)?.removeView(pcStatusView)
+        (pcAudioButton?.parent as? ViewGroup)?.removeView(pcAudioButton)
         (pcDebugView?.parent as? ViewGroup)?.removeView(pcDebugView)
         pcStatusView = null
+        pcAudioButton = null
         pcDebugView = null
         playerView.visibility = View.VISIBLE
     }
@@ -3186,6 +3204,85 @@ class PlayerActivity : AppCompatActivity() {
         if (pcVideoWidth > 0 && pcVideoHeight > 0) {
             v.updateVideoAspectRatio(pcVideoWidth, pcVideoHeight)
         }
+    }
+
+    /**
+     * Builds, rebuilds or tears down the audio path to match what `config.audio` announced —
+     * §2.2's "single wire truth". Main thread (that is where `onConfig` lands).
+     *
+     * The three transitions that matter:
+     *
+     * * **absent → present**: the PC has audio for us. Build a player for that exact format.
+     * * **present → absent**: either side muted, or the PC's capture died. Drop the player; video
+     *   is untouched, because the two never shared anything but the socket.
+     * * **format change**: rebuild, since AudioTrack's rate and channel mask are fixed at build.
+     *
+     * A device that refuses to open the track tells the PC to stop sending (§12) rather than
+     * pretending: the bandwidth is wasted otherwise, and the user gets an honest muted state.
+     */
+    private fun applyPcLinkAudioConfig(format: PcAudioFormat?) {
+        val current = pcAudio
+        if (format == null) {
+            if (current != null) {
+                current.release()
+                pcAudio = null
+            }
+            updatePcLinkAudioButton()
+            return
+        }
+        if (current != null && current.format == format) {
+            updatePcLinkAudioButton()
+            return
+        }
+        current?.release()
+        val player = PcAudioPlayer(format) { message ->
+            runOnUiThread {
+                if (!isPcLinkMode) return@runOnUiThread
+                android.util.Log.w("XPlayer2", "PC Link audio: $message")
+                pcAudio?.release()
+                pcAudio = null
+                pcLinkClient?.setAudioEnabled(false)
+                updatePcLinkAudioButton()
+            }
+        }
+        pcAudio = player
+        player.setMuted(pcAudioMuted)
+        if (!player.start()) {
+            player.release()
+            pcAudio = null
+            // Nothing on this phone can play it: stop paying for the bytes.
+            pcLinkClient?.setAudioEnabled(false)
+        }
+        updatePcLinkAudioButton()
+    }
+
+    /** The overlay's speaker button: mute locally now, ask the PC to stop sending right after. */
+    private fun togglePcLinkMute() {
+        if (!isPcLinkMode) return
+        pcAudioMuted = !pcAudioMuted
+        pcAudio?.setMuted(pcAudioMuted)
+        // Local gate first (instant), wire second (saves the 1.5 Mbit/s). The PC acknowledges by
+        // re-sending `config` with or without `audio`, which flows back through onConfig.
+        pcLinkClient?.setAudioEnabled(!pcAudioMuted)
+        updatePcLinkAudioButton()
+    }
+
+    /**
+     * Shows the speaker button only while there is audio to mute — a PC that sends none (an older
+     * server, or one whose capture failed) gets no dead control, and the debug overlay is where
+     * "why is there no sound" is answered.
+     *
+     * Muted stays visible: it is the one state the user has to be able to undo.
+     */
+    private fun updatePcLinkAudioButton() {
+        val button = pcAudioButton ?: return
+        val visible = isPcLinkMode && (pcAudio != null || pcAudioMuted)
+        button.visibility = if (visible) View.VISIBLE else View.GONE
+        if (!visible) return
+        button.text = getString(
+            if (pcAudioMuted) R.string.pclink_audio_muted else R.string.pclink_audio_on
+        )
+        button.alpha = if (pcAudioMuted) 1f else 0.35f
     }
 
     /**
@@ -3241,15 +3338,25 @@ class PlayerActivity : AppCompatActivity() {
             pcVideoHeight = config.height
             pcDecoder?.configure(config.mime, config.width, config.height)
             applyPcLinkRenderConfig()
+            applyPcLinkAudioConfig(config.audio)
             android.util.Log.i(
                 "XPlayer2",
-                "PC Link config: ${config.mime} ${config.width}x${config.height}@${config.fps} ${config.stereo}"
+                "PC Link config: ${config.mime} ${config.width}x${config.height}@${config.fps} " +
+                    "${config.stereo} audio=${config.audio?.let { "${it.codec} ${it.rate}/${it.channels}" } ?: "none"}"
             )
         }
 
         /** Network thread — straight into the decoder, no main-thread hop. */
         override fun onVideoFrame(frame: PcVideoFrame) {
             pcDecoder?.submit(frame)
+        }
+
+        /**
+         * Network thread, same as [onVideoFrame] — the chunks share that socket. Straight into
+         * the jitter buffer; the feeder thread inside the player is what talks to AudioTrack.
+         */
+        override fun onAudioChunk(ptsUs: Long, payload: ByteArray) {
+            pcAudio?.submit(ptsUs, payload)
         }
     }
 
@@ -3328,6 +3435,10 @@ class PlayerActivity : AppCompatActivity() {
             val delta = android.os.SystemClock.elapsedRealtimeNanos() / 1000L - ptsUs
             if (delta < pcLatencyFloorUs) pcLatencyFloorUs = delta
             pcLatencyUs = delta - pcLatencyFloorUs
+            // Both streams carry the server's clock, so the difference between this and the pts
+            // of the audio at the DAC is the A/V skew — free to compute, and the only honest way
+            // to check lipsync without a slow-motion camera (audio-design §9).
+            pcLastRenderedPtsUs = ptsUs
         }
 
         override fun onVideoSize(width: Int, height: Int) {
@@ -3377,6 +3488,27 @@ class PlayerActivity : AppCompatActivity() {
                 setMargins(pad, pad, pad, pad)
             }
         )
+        // The mute control. Its own tap target opposite the status line: the status line is
+        // already the debug toggle, and muting must never be one mis-tap away from that.
+        val audio = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            setBackgroundColor("#B0000000".toColorInt())
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setPadding(pad, pad / 2, pad, pad / 2)
+            isClickable = true
+            visibility = View.GONE
+            setOnClickListener { togglePcLinkMute() }
+        }
+        root.addView(
+            audio,
+            android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = android.view.Gravity.TOP or android.view.Gravity.END
+                setMargins(pad, pad, pad, pad)
+            }
+        )
         val debug = TextView(this).apply {
             setTextColor("#80FF80".toColorInt())
             setBackgroundColor("#B0000000".toColorInt())
@@ -3396,7 +3528,9 @@ class PlayerActivity : AppCompatActivity() {
             }
         )
         pcStatusView = status
+        pcAudioButton = audio
         pcDebugView = debug
+        updatePcLinkAudioButton()
     }
 
     private fun setPcLinkStatus(text: String, dim: Boolean) {
@@ -3462,6 +3596,38 @@ class PlayerActivity : AppCompatActivity() {
             append("  resync ").append(client?.resyncBytes?.get() ?: 0L).append(" B")
             append("\nlat +").append(pcLatencyUs / 1000L).append(" ms")
             append("  rtt ").append("%.1f".format((client?.lastRttUs ?: 0L) / 1000f)).append(" ms")
+            appendPcLinkAudioDebug(client)
+        }
+    }
+
+    /**
+     * The audio line of the debug overlay: buffer depth, the corrections the jitter buffer has
+     * had to make, and the A/V skew — which is what a "the sound is out of sync" report needs and
+     * what §9's field measurement is checked against.
+     *
+     * Skew is (video pts rendered − audio pts at the DAC) on the server's own clock: positive
+     * means audio is behind the picture, the direction the design deliberately chose.
+     */
+    private fun StringBuilder.appendPcLinkAudioDebug(client: PcLinkClient?) {
+        val audio = pcAudio
+        if (audio == null) {
+            append("\naudio ").append(if (pcAudioMuted) "muted" else "none")
+            return
+        }
+        val buffer = audio.buffer
+        append("\naudio ").append(audio.format.rate / 1000).append("k/")
+            .append(audio.format.channels).append("ch")
+        if (audio.isMuted) append(" muted")
+        append("  buf ").append(buffer.bufferedMs).append(" ms")
+        append("  under ").append(buffer.underruns)
+        append("\ncorr -").append(buffer.driftDrops).append("/+").append(buffer.driftInserts)
+        append("  resync ").append(buffer.hardResyncs)
+        append("  gap ").append(buffer.discontinuities)
+        append("  drop ").append(client?.audioDropped?.get() ?: 0L)
+        val videoPts = pcLastRenderedPtsUs
+        val audioPts = buffer.lastPlayedPtsUs
+        if (videoPts > 0L && audioPts > 0L) {
+            append("  skew ").append((videoPts - audioPts) / 1000L).append(" ms")
         }
     }
 }

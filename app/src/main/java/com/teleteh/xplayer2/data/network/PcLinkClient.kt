@@ -45,6 +45,15 @@ class PcVideoFrame(val flags: Int, val ptsUs: Long, val payload: ByteArray) {
 
     val hasCodecConfig: Boolean get() = (flags and PcLinkProtocol.FLAG_CODEC_CONFIG) != 0
 
+    /**
+     * The payload is an audio chunk (§3.3), not an Annex-B access unit.
+     *
+     * On such a frame the IDR/codec-config bits are reserved and meaningless — [isIdr] and
+     * [hasCodecConfig] must never be consulted without checking this first, which is why the
+     * reader routes on this bit before anything else looks at the frame.
+     */
+    val isAudio: Boolean get() = (flags and PcLinkProtocol.FLAG_AUDIO) != 0
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is PcVideoFrame) return false
@@ -66,6 +75,44 @@ data class PcCodecCapability(
 )
 
 /**
+ * What this phone can play, advertised as `hello.audio` (§2.1).
+ *
+ * Presence of this object is the whole audio gate: a `hello` without it tells the server this
+ * client predates audio, and the server then MUST NOT announce `config.audio` nor send a single
+ * `0x04` frame. Sending it therefore means both "I can play this" and "send it to me".
+ *
+ * @param codecs most-preferred first; v1 defines only `pcm_s16le`.
+ * @param rates sample rates we can play, most-preferred first.
+ * @param channels the MAXIMUM channel count we can output — the server downmixes to fit.
+ */
+data class PcAudioCapability(
+    val codecs: List<String>,
+    val rates: List<Int>,
+    val channels: Int
+)
+
+/**
+ * The negotiated audio stream format from `config.audio` (§2.2) — the single wire truth for "is
+ * audio flowing and in what format". Absent ⇔ no audio until a later `config` says otherwise.
+ */
+data class PcAudioFormat(
+    val codec: String,
+    val rate: Int,
+    val channels: Int
+) {
+    /** Bytes per sample-frame; a chunk's length must be a whole number of these. */
+    val bytesPerFrame: Int get() = channels * PcLinkProtocol.PCM_S16_BYTES
+
+    val bytesPerSecond: Int get() = rate * bytesPerFrame
+
+    /** Bytes of PCM holding [ms] milliseconds, rounded to whole sample-frames. */
+    fun bytesForMs(ms: Int): Int = (rate * ms / 1000) * bytesPerFrame
+
+    fun msForBytes(bytes: Int): Int =
+        if (bytesPerSecond == 0) 0 else (bytes.toLong() * 1000L / bytesPerSecond).toInt()
+}
+
+/**
  * The server's `config` message: the format of the video stream that follows, the geometry of the
  * virtual canvas, and the one-shot [videoToken] admitting our video connection.
  */
@@ -79,7 +126,13 @@ data class PcLinkStreamConfig(
     val canvasAngularWidthDeg: Float,
     val canvasDistanceM: Float,
     /** 64 lowercase hex chars = the 32 raw token bytes of the video preamble. */
-    val videoToken: String
+    val videoToken: String,
+    /**
+     * The audio stream that accompanies this video, or null when the server is sending none —
+     * either because it can't, because the user muted it on either end, or because it predates
+     * audio entirely. Null must behave exactly like the pre-audio client did.
+     */
+    val audio: PcAudioFormat? = null
 ) {
     val isSbs: Boolean get() = stereo == PcLinkProtocol.STEREO_SBS
 }
@@ -159,8 +212,33 @@ object PcLinkProtocol {
     /** Payload starts with codec configuration (VPS/SPS/PPS). */
     const val FLAG_CODEC_CONFIG = 0x02
 
+    /**
+     * Payload is an audio chunk (§3.3) rather than an access unit.
+     *
+     * Strictly negotiation-gated: the server sends this only to a client whose `hello` carried
+     * [PcAudioCapability]. That gate is not politeness — a client that fed these to its video
+     * decoder would collapse into an IDR-request/decoder-reset loop (audio-design §4).
+     */
+    const val FLAG_AUDIO = 0x04
+
+    /** Reserved for client→server microphone audio (§3.4). This client never sends it. */
+    const val FLAG_MIC = 0x08
+
     /** Maximum accepted payload: frames declaring more are corruption (protocol v1 cap). */
     const val MAX_PAYLOAD_LEN = 8 * 1024 * 1024
+
+    // --- audio (§3.3) ---
+
+    /** The only audio codec v1 defines: interleaved little-endian signed 16-bit linear PCM. */
+    const val AUDIO_CODEC_PCM_S16LE = "pcm_s16le"
+
+    const val PCM_S16_BYTES = 2
+
+    /**
+     * A server MUST NOT put more than this much audio in one frame; longer chunks are content
+     * errors we discard without resyncing (the header was valid — this is not corruption).
+     */
+    const val MAX_AUDIO_CHUNK_MS = 100
 
     // --- video preamble (§3.1) ---
 
@@ -188,7 +266,13 @@ object PcLinkProtocol {
     fun helloLine(
         clientName: String,
         codecs: List<PcCodecCapability>,
-        protocolVersion: Int = PROTOCOL_VERSION
+        protocolVersion: Int = PROTOCOL_VERSION,
+        /**
+         * What we can play, or null to ask for a silent session. Omitting the field is what tells
+         * a server "this client predates audio" — so it is the one knob that keeps the stream
+         * byte-identical to the pre-audio wire.
+         */
+        audio: PcAudioCapability? = null
     ): String {
         val arr = JSONArray()
         for (c in codecs) {
@@ -200,14 +284,33 @@ object PcLinkProtocol {
                     .put("maxFps", c.maxFps)
             )
         }
-        return JSONObject()
+        val obj = JSONObject()
             .put("type", "hello")
             .put("clientName", clientName)
             .put("protocolVersion", protocolVersion)
             .put("platform", PLATFORM)
             .put("codecs", arr)
-            .toString() + "\n"
+        if (audio != null) {
+            obj.put(
+                "audio",
+                JSONObject()
+                    .put("codecs", JSONArray().also { a -> audio.codecs.forEach(a::put) })
+                    .put("rates", JSONArray().also { a -> audio.rates.forEach(a::put) })
+                    .put("channels", audio.channels)
+            )
+        }
+        return obj.toString() + "\n"
     }
+
+    /**
+     * The `set_audio` line (client → server, §2.16): mute or unmute the audio stream at the source.
+     *
+     * Idempotent, and acknowledged only by the server re-sending `config` with (or without) its
+     * `audio` field — there is no dedicated ack. Muting on the wire rather than locally is what
+     * saves the 1.5 Mbit/s; the client gates locally as well so the button feels instant.
+     */
+    fun setAudioLine(enabled: Boolean): String =
+        JSONObject().put("type", "set_audio").put("enabled", enabled).toString() + "\n"
 
     /** The `idr` line (client → server): "make the next frame a sync frame". */
     fun idrLine(): String = JSONObject().put("type", "idr").toString() + "\n"
@@ -277,8 +380,29 @@ object PcLinkProtocol {
             stereo = stereo,
             canvasAngularWidthDeg = canvasWidthDeg,
             canvasDistanceM = canvasDistanceM,
-            videoToken = token
+            videoToken = token,
+            audio = parseAudioFormat(obj.optJSONObject("audio"))
         )
+    }
+
+    /**
+     * `config.audio` → [PcAudioFormat], or null when the field is absent, malformed, or names a
+     * codec we don't implement.
+     *
+     * Deliberately NOT the "present-but-unusable drops the message" rule the canvas fields follow.
+     * §3.3 is more specific for audio and it wins: audio degrades independently and a receiver
+     * MUST keep rendering video regardless of the audio stream's health — refusing the whole
+     * `config` over a bad `rate` would take the desktop down to protect a stream we can simply
+     * not play.
+     */
+    private fun parseAudioFormat(obj: JSONObject?): PcAudioFormat? {
+        if (obj == null) return null
+        val codec = obj.optString("codec").trim().lowercase()
+        if (codec != AUDIO_CODEC_PCM_S16LE) return null
+        val rate = obj.optInt("rate", -1)
+        val channels = obj.optInt("channels", -1)
+        if (rate <= 0 || channels <= 0) return null
+        return PcAudioFormat(codec = codec, rate = rate, channels = channels)
     }
 
     /** Null when any window carries an unusable `depth` — the whole message is then dropped. */
@@ -659,6 +783,11 @@ class PcLinkClient(
     private val codecs: List<PcCodecCapability> = deviceCodecs(),
     private val nowMs: () -> Long = { SystemClock.elapsedRealtime() },
     /**
+     * What this phone can play, or null to run a video-only session (which is also what a device
+     * with no usable output falls back to). Injectable because the probe touches AudioTrack.
+     */
+    private val audioCapability: PcAudioCapability? = deviceAudio(),
+    /**
      * The credentials for the next connection attempt, or null to speak the unauthenticated M1
      * flow. Called on [Dispatchers.IO] immediately after `hello`, once per attempt — so it may
      * touch the pairing store, and a pairing that appeared or was forgotten since the last attempt
@@ -676,6 +805,16 @@ class PcLinkClient(
 
         /** One access unit, on the video reader coroutine (NOT the main thread). */
         fun onVideoFrame(frame: PcVideoFrame)
+
+        /**
+         * One audio chunk in the format most recently announced by `config.audio`, on the video
+         * reader coroutine (the frames are interleaved on that one socket, §3).
+         *
+         * [ptsUs] is the presentation time of the chunk's FIRST sample, on the same server clock
+         * as video `pts_us` — that shared clock is the whole of the A/V sync mechanism. Default
+         * no-op so a listener that wants no audio simply doesn't override it.
+         */
+        fun onAudioChunk(ptsUs: Long, payload: ByteArray) {}
     }
 
     private val appContext: Context? = context?.applicationContext
@@ -688,6 +827,16 @@ class PcLinkClient(
 
     /** Bytes discarded by the frame parser resyncing — non-zero means a corrupt stream. */
     val resyncBytes = AtomicLong(0)
+
+    /** Audio chunks handed to [Listener.onAudioChunk]. */
+    val audioChunks = AtomicLong(0)
+
+    /**
+     * Audio frames thrown away before the audio path: either no `config.audio` is in force (a
+     * benign race on a mute toggle, §2.16) or the chunk failed content validation (§3.3). Never a
+     * resync — the framing was fine.
+     */
+    val audioDropped = AtomicLong(0)
 
     /** Round-trip time of the most recent ping/pong pair, microseconds (0 = none yet). */
     @Volatile var lastRttUs: Long = 0L
@@ -712,6 +861,17 @@ class PcLinkClient(
     // the current state, not the history of how we got here.
     @Volatile private var glassesMode: Boolean? = null
     @Volatile private var glassesSent: Boolean? = null
+
+    // Whether we want the PC to send audio at all, and what it was last told. `hello` carrying
+    // audio caps already means "yes" (§2.1), so a fresh session starts implicitly enabled and
+    // `set_audio` goes out only when the user has muted — including after a reconnect, which is
+    // why `audioEnabledSent` is reset per session rather than tracked globally.
+    @Volatile private var audioEnabled = true
+    @Volatile private var audioEnabledSent: Boolean? = null
+
+    // The format `config.audio` most recently announced, or null for "no audio in this stream".
+    // The reader consults it to drop stray chunks; §2.2 makes this the single wire truth.
+    @Volatile private var audioFormat: PcAudioFormat? = null
 
     /** Starts the session loop in [scope]. Call once. */
     fun connect(scope: CoroutineScope): Job {
@@ -742,6 +902,23 @@ class PcLinkClient(
     fun reportGlasses(is3d: Boolean) {
         glassesMode = is3d
     }
+
+    /**
+     * Mutes or unmutes the PC's audio at the source (§2.16 `set_audio`).
+     *
+     * Safe from any thread; the writer sends it only when it differs from what this session's
+     * server was last told, and re-sends it after a reconnect (a new session starts unmuted,
+     * because `hello` carrying audio caps is itself a request for audio).
+     *
+     * This is the wire half only — the caller mutes its own output the instant the user taps, so
+     * the button never waits for the round trip.
+     */
+    fun setAudioEnabled(enabled: Boolean) {
+        audioEnabled = enabled
+    }
+
+    /** The audio format currently in force, or null when this stream carries none. */
+    val currentAudioFormat: PcAudioFormat? get() = audioFormat
 
     private fun closeSockets() {
         try { controlSocket?.close() } catch (_: Throwable) { }
@@ -810,9 +987,11 @@ class PcLinkClient(
         sessionStartMs = nowMs()
         idrRequested = false
         pendingPong = null
-        // A fresh server knows nothing about our glasses, so whatever we last told the previous
-        // one has to be said again.
+        // A fresh server knows nothing about our glasses (or that we are muted), so whatever we
+        // last told the previous one has to be said again.
         glassesSent = null
+        audioEnabledSent = null
+        audioFormat = null
         unansweredPings = 0
         lastRxMs = nowMs()
 
@@ -829,7 +1008,10 @@ class PcLinkClient(
         try {
             val input = control.getInputStream()
             val output = control.getOutputStream()
-            writeLine(output, PcLinkProtocol.helloLine(clientName, effectiveCodecs()))
+            writeLine(
+                output,
+                PcLinkProtocol.helloLine(clientName, effectiveCodecs(), audio = audioCapability)
+            )
 
             val splitter = PcLinkLineSplitter()
 
@@ -838,6 +1020,7 @@ class PcLinkClient(
             val authToken = if (auth == null) null else authenticate(auth, input, output, splitter)
 
             val config = awaitConfig(input, splitter)
+            audioFormat = config.audio
             withContext(Dispatchers.Main) { listener.onConfig(config) }
 
             // §2.2's rule is "whichever message most recently carried one". This reads as "config
@@ -1027,6 +1210,10 @@ class PcLinkClient(
                     is PcControlMessage.Config -> {
                         // A format change mid-session: the server keeps our video connection and
                         // follows this with a codec-config frame, so we only re-arm the decoder.
+                        // A `config` that differs ONLY in `audio` is the mute ack (§2.16) and must
+                        // not disturb video at all — the decoder no-ops an unchanged format, and
+                        // the reader's gate flips here, before the listener sees anything.
+                        audioFormat = msg.config.audio
                         withContext(Dispatchers.Main) { listener.onConfig(msg.config) }
                         emitState(PcLinkState.Streaming(msg.config))
                     }
@@ -1064,6 +1251,17 @@ class PcLinkClient(
                     writeLine(output, PcLinkProtocol.glassesLine(mode))
                 }
             }
+            // Only worth saying when we have audio caps to say it about: on a session whose
+            // `hello` carried none the server ignores `set_audio` anyway (§2.16).
+            if (audioCapability != null) {
+                val want = audioEnabled
+                // Sending "enabled" before anything was ever said is redundant — `hello` already
+                // asked for audio — so only an unmute that follows a mute goes out.
+                if (audioEnabledSent != want && !(audioEnabledSent == null && want)) {
+                    audioEnabledSent = want
+                    writeLine(output, PcLinkProtocol.setAudioLine(want))
+                }
+            }
             if (nowMs() >= nextPingAt) {
                 nextPingAt = nowMs() + PING_INTERVAL_MS
                 unansweredPings++
@@ -1093,6 +1291,15 @@ class PcLinkClient(
             parser.feed(buf, 0, n)
             while (true) {
                 val frame = parser.nextFrame() ?: break
+                // Route on the AUDIO bit BEFORE anything else touches the frame: an audio chunk
+                // that reached the video decoder would be fed to MediaCodec as an access unit,
+                // and 50 chunks/s would also overflow PcAuDropPolicy — the exact failure mode
+                // audio-design §4 gates the whole feature on avoiding.
+                if (frame.isAudio) {
+                    sessionStreamed = true
+                    deliverAudio(frame)
+                    continue
+                }
                 videoFrames.incrementAndGet()
                 sessionStreamed = true
                 listener.onVideoFrame(frame)
@@ -1105,6 +1312,31 @@ class PcLinkClient(
                 requestIdr()
             }
         }
+    }
+
+    /**
+     * Content validation for one audio chunk (§3.3), then on to the audio path.
+     *
+     * Everything rejected here is dropped silently and counted: a chunk under no active
+     * `config.audio` (the benign race when either side mutes), one whose length isn't a whole
+     * number of sample-frames, and one carrying more than [PcLinkProtocol.MAX_AUDIO_CHUNK_MS].
+     * None of them is a framing error, so the parser is never resynced and video never notices.
+     */
+    private fun deliverAudio(frame: PcVideoFrame) {
+        val format = audioFormat
+        if (format == null || format.bytesPerFrame <= 0) {
+            audioDropped.incrementAndGet()
+            return
+        }
+        val len = frame.payload.size
+        if (len == 0 || len % format.bytesPerFrame != 0 ||
+            format.msForBytes(len) > PcLinkProtocol.MAX_AUDIO_CHUNK_MS
+        ) {
+            audioDropped.incrementAndGet()
+            return
+        }
+        audioChunks.incrementAndGet()
+        listener.onAudioChunk(frame.ptsUs, frame.payload)
     }
 
     // Session bookkeeping, reset by runSession(): when the peer last sent anything (either
@@ -1208,6 +1440,67 @@ class PcLinkClient(
          */
         fun deviceCodecs(): List<PcCodecCapability> =
             listOfNotNull(capabilityFor(MIME_HEVC), capabilityFor(MIME_AVC))
+
+        /** Rates we ask for, most-preferred first — see [deviceAudio]. */
+        private val AUDIO_RATE_PREFERENCE = intArrayOf(48_000, 44_100)
+
+        /**
+         * What this phone can actually play back, or null if it can play nothing (in which case
+         * `hello` carries no `audio` object and the session is video-only, byte-for-byte as
+         * before).
+         *
+         * Probed rather than asserted. Every rate offered is one [AudioTrack] itself accepts for
+         * a 16-bit track at the channel count we offer, and the channel count is stereo only if
+         * a stereo track is constructible — the glasses are stereo USB sinks, but the phone is
+         * what actually opens the track, and a device that would refuse one must ask the PC to
+         * downmix instead of discovering the problem after negotiation.
+         *
+         * 48 kHz leads regardless of the device's native rate: it is the only rate every server
+         * capture path can deliver (macOS ScreenCaptureKit has no 44.1 kHz at all), and the rate
+         * list is a preference the server walks in order, not a demand. The native rate is added
+         * when it is something else, so a 44.1 kHz-native phone can still avoid a resampler if
+         * the PC happens to be able to produce it.
+         *
+         * Every call is wrapped: these are static AudioTrack entry points, which throw against
+         * the stubbed android.jar under JVM unit tests — and a probe failure must mean "no
+         * audio", never "no session".
+         */
+        fun deviceAudio(): PcAudioCapability? = try {
+            val channels = if (minBufferSize(48_000, 2) > 0) 2 else 1
+            val rates = ArrayList<Int>(3)
+            AUDIO_RATE_PREFERENCE.forEach { rate ->
+                if (minBufferSize(rate, channels) > 0) rates.add(rate)
+            }
+            val native = android.media.AudioTrack.getNativeOutputSampleRate(
+                android.media.AudioManager.STREAM_MUSIC
+            )
+            if (native > 0 && !rates.contains(native) && minBufferSize(native, channels) > 0) {
+                rates.add(native)
+            }
+            if (rates.isEmpty()) null
+            else PcAudioCapability(
+                codecs = listOf(PcLinkProtocol.AUDIO_CODEC_PCM_S16LE),
+                rates = rates,
+                channels = channels
+            )
+        } catch (_: Throwable) {
+            null
+        }
+
+        /** AudioTrack's own answer for "can I open a 16-bit track like this?" (bytes, or <= 0). */
+        private fun minBufferSize(rate: Int, channels: Int): Int = try {
+            android.media.AudioTrack.getMinBufferSize(
+                rate,
+                if (channels >= 2) {
+                    android.media.AudioFormat.CHANNEL_OUT_STEREO
+                } else {
+                    android.media.AudioFormat.CHANNEL_OUT_MONO
+                },
+                android.media.AudioFormat.ENCODING_PCM_16BIT
+            )
+        } catch (_: Throwable) {
+            0
+        }
 
         private fun capabilityFor(mime: String): PcCodecCapability? {
             val infos = try {
