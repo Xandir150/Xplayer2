@@ -79,7 +79,8 @@ class MainActivity : AppCompatActivity() {
     private val glassesPageCallback = object : ViewPager2.OnPageChangeCallback() {
         override fun onPageSelected(position: Int) {
             // Recent (page 0) hosts swipe-to-delete, which needs the horizontal gesture — disable
-            // ViewPager paging there (tap the tab to leave it). Sources (page 1) keeps swipe paging.
+            // ViewPager paging there (tap the tab to leave it). Sources (1) and PC-Mirror (2) keep
+            // swipe paging between themselves.
             binding.viewPager.isUserInputEnabled = position != 0
             refreshGlassesMenu()
         }
@@ -173,9 +174,8 @@ class MainActivity : AppCompatActivity() {
         // Start on Recent (page 0), where swipe-to-delete lives — so paging-by-swipe is off there.
         viewPager.isUserInputEnabled = false
 
-        val tabTitles = listOf(getString(R.string.tab_recent), getString(R.string.tab_sources))
         TabLayoutMediator(binding.tabLayout, viewPager) { tab, position ->
-            tab.text = tabTitles[position]
+            tab.text = tabTitle(position)
             tab.contentDescription = null
         }.attach()
 
@@ -272,7 +272,11 @@ class MainActivity : AppCompatActivity() {
     private fun shouldReturnToTabsOnUp(fragmentView: View): Boolean {
         val focused = currentFocus ?: return false
         // First-row controls on each fragment should return to tabs on UP
-        val firstRow = listOf(R.id.etUrl, R.id.btnOpenUrl, R.id.btnOpenFile, R.id.btnHughey)
+        val firstRow = listOf(
+            R.id.etUrl, R.id.btnOpenUrl, R.id.btnOpenFile, R.id.btnHughey,
+            // PC-Mirror's first control in each of its two states.
+            R.id.btnFindPc, R.id.rowDetails
+        )
         if (firstRow.any { fragmentView.findViewById<View?>(it) === focused }) return true
         val recycler: RecyclerView? = fragmentView.findViewById<RecyclerView?>(R.id.rvRecent)
             ?: fragmentView.findViewById<RecyclerView?>(R.id.rvNetwork)
@@ -487,11 +491,21 @@ class MainActivity : AppCompatActivity() {
         ensureGlassesRowFocused()
     }
 
+    /**
+     * The name of a page, for the tab strip and for the glasses menu's heading. One list, so a
+     * fourth page can't quietly acquire the third one's title.
+     */
+    private fun tabTitle(position: Int): String = when (position) {
+        0 -> getString(R.string.tab_recent)
+        1 -> getString(R.string.tab_sources)
+        else -> getString(R.string.tab_pc_mirror)
+    }
+
     /** Reflect the phone's current tab + focused row onto the glasses menu (no-op if not shown). */
     private fun pushGlassesMenu() {
         val pres = menuPresentation ?: return
         val tab = binding.viewPager.currentItem
-        val title = if (tab == 0) getString(R.string.tab_recent) else getString(R.string.tab_sources)
+        val title = tabTitle(tab)
         if (tab == 0) {
             // Recent: rich data rows (icon + title + position + stereo chip), cached per tab.
             if (tab != glassesTab) {
@@ -522,8 +536,9 @@ class MainActivity : AppCompatActivity() {
             if (idx < 0 && glassesRows.isNotEmpty()) idx = 0
             pres.render(title, glassesRows, idx)
         } else {
-            // Sources: reflect the tab's focusable items (Open File / URL / Hughey + DLNA/SMB list)
-            // by walking the live view tree, so it covers buttons + dynamically-discovered rows.
+            // Sources and PC-Mirror: reflect the tab's focusable items (Open File / URL / Hughey +
+            // DLNA/SMB list; connect / details / sound / disconnect) by walking the live view tree,
+            // so it covers buttons + dynamically-discovered rows without knowing either layout.
             glassesTab = tab
             val items = currentFragmentView()?.let { collectFocusableItems(it) } ?: emptyList()
             glassesRows = items.map { MenuMirrorPresentation.Row(labelOf(it)) }

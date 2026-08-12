@@ -8,6 +8,8 @@
     <string name="tab_files">Files</string>
     <string name="tab_network">Network</string>
     <string name="tab_sources">Sources</string>
+    <!-- PC Link's own tab: finding a PC, and the remote for a running session. -->
+    <string name="tab_pc_mirror">PC-Mirror</string>
 
     <!-- Player menu -->
     <string name="menu_audio">Audio track</string>
@@ -111,6 +113,44 @@
     <string name="pclink_audio_on">Sound on</string>
     <string name="pclink_audio_muted">Sound off</string>
     <string name="pclink_ended_for_playback">PC Link disconnected</string>
+
+    <!-- The PC-Mirror tab: the way in when nothing is streaming. -->
+    <string name="pclink_find_pc">Find your PC</string>
+    <string name="pclink_disconnect">Disconnect</string>
+    <string name="pclink_state_connecting">Connecting…</string>
+    <string name="pclink_state_streaming">Streaming to the glasses</string>
+    <string name="pclink_state_reconnecting">Reconnecting…</string>
+    <string name="pclink_state_failed">Disconnected</string>
+
+    <!-- The two live numbers out front, each over a minute of itself. -->
+    <string name="pclink_stat_fps">Frames</string>
+    <string name="pclink_stat_bitrate">Bitrate</string>
+
+    <!-- …and the door everything else waits behind: shut by default, remembered when opened. -->
+    <string name="pclink_stats_details">Details</string>
+    <string name="pclink_details_show">Show details</string>
+    <string name="pclink_details_hide">Hide details</string>
+    <string name="pclink_stat_latency">Network latency</string>
+    <string name="pclink_stat_format">Stream format</string>
+    <string name="pclink_stat_dropped">Dropped frames</string>
+    <string name="pclink_stat_audio_output">Audio output</string>
+    <string name="pclink_stat_audio_buffer">Audio buffer</string>
+    <string name="pclink_stat_skew">A/V skew</string>
+    <string name="pclink_stat_audio_dropouts">Audio dropouts</string>
+
+    <!-- Units. Only the number is formatted in code; the words go through here. -->
+    <string name="pclink_value_fps">%1$s fps</string>
+    <string name="pclink_value_mbps">%1$s Mbps</string>
+    <string name="pclink_value_ms">%1$s ms</string>
+    <string name="pclink_value_format">%1$s · %2$d×%3$d · %4$s</string>
+    <string name="pclink_value_audio_format">%1$d kHz · %2$d ch</string>
+    <string name="pclink_value_none">—</string>
+
+    <!-- The sound control is a route, not a mute: it says where the sound comes out. -->
+    <string name="pclink_audio_to_glasses">Sound — in the glasses</string>
+    <string name="pclink_audio_hint_glasses">The computer stays silent while you listen here</string>
+    <string name="pclink_audio_hint_computer">The sound is playing on the computer</string>
+    <string name="pclink_audio_none">This PC isn\'t sending any sound</string>
 
     <!-- PC Link pairing: the 6-digit comparison code (SAS) and the states around it -->
     <string name="pclink_pair_title">Pair with \"%1$s\"?</string>

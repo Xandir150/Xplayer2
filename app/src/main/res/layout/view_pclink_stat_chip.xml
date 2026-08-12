@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One live number, over a minute of itself. Two of these sit side by side at the top of the
+     PC-Mirror tab: the number is the hero, the sparkline is context. One accessibility node —
+     "frames, 60 fps" is a single fact, and the chart is that same fact drawn again. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:focusable="false"
+    android:importantForAccessibility="yes">
+
+    <TextView
+        android:id="@+id/tvChipTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/tvChipValue"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textSize="22sp"
+        android:textStyle="bold"
+        android:textColor="?android:attr/textColorPrimary"
+        android:fontFamily="sans-serif-medium"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <com.teleteh.xplayer2.ui.pclink.SparklineView
+        android:id="@+id/sparkline"
+        android:layout_width="match_parent"
+        android:layout_height="30dp"
+        android:layout_marginTop="6dp" />
+
+</LinearLayout>

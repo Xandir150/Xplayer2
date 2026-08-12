@@ -268,10 +268,6 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
                 view?.findViewById<EditText>(R.id.etUrl)?.setText(item.uri)
             }
 
-            is NetworkItem.PcLink -> {
-                startActivity(Intent(requireContext(), PcConnectActivity::class.java))
-            }
-
             is NetworkItem.DlnaUp -> {
                 val control = currentDlnaControlUrl
                 if (control != null && dlnaBackStack.isNotEmpty()) {
@@ -397,10 +393,11 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
     }
 
     private fun rebuildInitialList() {
-        // Order: PC Link (static entry) pinned first, then SMB shares + discovered DLNA devices,
-        // remembered web sources appended at the end.
+        // Order: SMB shares + discovered DLNA devices, remembered web sources appended at the end.
+        // PC Link used to be pinned to the top here as a static row; it has its own tab now
+        // (PC-Mirror), which is both the way in and the remote for a running session — so this
+        // list is media sources again, and there is one entrance to PC Link rather than two.
         items.clear()
-        items.add(NetworkItem.PcLink)
         items.addAll(smbStorage.getAll())
         items.addAll(discoveredDevices)
         items.addAll(webSourceStore.getAll())

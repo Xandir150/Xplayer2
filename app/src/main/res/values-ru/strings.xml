@@ -5,6 +5,8 @@
     <string name="tab_files">Файлы</string>
     <string name="tab_network">Сеть</string>
     <string name="tab_sources">Источники</string>
+    <!-- Отдельная вкладка PC Link: поиск компьютера и пульт для запущенной сессии. -->
+    <string name="tab_pc_mirror">PC-Mirror</string>
 
     <!-- Player menu -->
     <string name="menu_audio">Аудиодорожка</string>
@@ -90,6 +92,44 @@
     <string name="pclink_audio_on">Звук включён</string>
     <string name="pclink_audio_muted">Звук выключен</string>
     <string name="pclink_ended_for_playback">PC Link отключён</string>
+
+    <!-- Вкладка PC-Mirror: вход, когда ничего не транслируется. -->
+    <string name="pclink_find_pc">Найти компьютер</string>
+    <string name="pclink_disconnect">Отключиться</string>
+    <string name="pclink_state_connecting">Подключение…</string>
+    <string name="pclink_state_streaming">Трансляция в очки</string>
+    <string name="pclink_state_reconnecting">Переподключение…</string>
+    <string name="pclink_state_failed">Отключено</string>
+
+    <!-- Два живых числа впереди, под каждым — минута его самого. -->
+    <string name="pclink_stat_fps">Кадры</string>
+    <string name="pclink_stat_bitrate">Битрейт</string>
+
+    <!-- …и дверь, за которой ждёт всё остальное: закрыта по умолчанию, состояние запоминается. -->
+    <string name="pclink_stats_details">Подробности</string>
+    <string name="pclink_details_show">Показать подробности</string>
+    <string name="pclink_details_hide">Скрыть подробности</string>
+    <string name="pclink_stat_latency">Задержка сети</string>
+    <string name="pclink_stat_format">Формат потока</string>
+    <string name="pclink_stat_dropped">Пропущено кадров</string>
+    <string name="pclink_stat_audio_output">Вывод звука</string>
+    <string name="pclink_stat_audio_buffer">Буфер звука</string>
+    <string name="pclink_stat_skew">Рассинхрон звука</string>
+    <string name="pclink_stat_audio_dropouts">Пропуски звука</string>
+
+    <!-- Единицы. В коде форматируется только число, слова идут отсюда. -->
+    <string name="pclink_value_fps">%1$s кадр/с</string>
+    <string name="pclink_value_mbps">%1$s Мбит/с</string>
+    <string name="pclink_value_ms">%1$s мс</string>
+    <string name="pclink_value_format">%1$s · %2$d×%3$d · %4$s</string>
+    <string name="pclink_value_audio_format">%1$d кГц · %2$d кан.</string>
+    <string name="pclink_value_none">—</string>
+
+    <!-- Звук — это маршрут, а не «выключить»: переключатель говорит, откуда идёт звук. -->
+    <string name="pclink_audio_to_glasses">Звук — в очках</string>
+    <string name="pclink_audio_hint_glasses">Компьютер молчит, пока вы слушаете здесь</string>
+    <string name="pclink_audio_hint_computer">Звук играет на компьютере</string>
+    <string name="pclink_audio_none">Этот компьютер не передаёт звук</string>
 
     <!-- Сопряжение PC Link: код из 6 цифр и всё вокруг него -->
     <string name="pclink_pair_title">Подключить «%1$s»?</string>

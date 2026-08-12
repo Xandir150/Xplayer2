@@ -16,13 +16,10 @@ sealed class NetworkItem {
     // Special row to navigate up within DLNA browsing UI
     object DlnaUp : NetworkItem()
 
-    /**
-     * Static entry point into PC Link (PC -> glasses desktop streaming): always shown at the top
-     * of the Sources list, like a permanent "device". Tapping it opens
-     * `com.teleteh.xplayer2.ui.network.PcConnectActivity`, which does its own LAN discovery /
-     * manual-IP entry — nothing here is discovered or persisted per-instance.
-     */
-    object PcLink : NetworkItem()
+    // PC Link used to have a static row here, pinned to the top of the Sources list. It has its
+    // own tab now (`com.teleteh.xplayer2.ui.pclink.PcMirrorFragment`), which is both the way into
+    // the pairing screen and the remote for a running session — so this list is media sources
+    // again, and PC Link has one entrance instead of two.
 
     data class DlnaContainer(
         val title: String,
