@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.wifi.WifiManager
 import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
@@ -19,6 +20,61 @@ import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
+
+/**
+ * The Wi-Fi multicast lock, behind an interface so the acquire/release lifecycle can be asserted in
+ * a JVM test — `WifiManager` isn't available there, and "released on every exit path" is exactly the
+ * sort of rule that lives only in control flow until something holds it.
+ */
+internal interface MulticastLease {
+    fun acquire()
+    fun release()
+}
+
+/**
+ * The real lock. Mirrors the app's existing SSDP one in `NetworkFragment` (same
+ * `setReferenceCounted(false)` + held-check discipline), under its own tag so the two can't release
+ * each other's.
+ */
+internal class WifiMulticastLease(context: Context?) : MulticastLease {
+
+    private val appContext: Context? = context?.applicationContext
+    private var lock: WifiManager.MulticastLock? = null
+
+    @Synchronized
+    override fun acquire() {
+        if (lock != null) return
+        val wifi = appContext?.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return
+        lock = try {
+            wifi.createMulticastLock(LOCK_TAG).apply {
+                // Not reference counted: one responder, one lock, and a plain held/not-held state
+                // that a stray double-release can't drive negative.
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (e: Exception) {
+            // No lock is a degraded responder, not a broken one — on many chipsets it still works.
+            Log.i(TAG_LEASE, "Multicast lock unavailable; reverse discovery may be unreliable", e)
+            null
+        }
+    }
+
+    @Synchronized
+    override fun release() {
+        val held = lock ?: return
+        lock = null
+        try {
+            if (held.isHeld) held.release()
+        } catch (e: Exception) {
+            Log.i(TAG_LEASE, "Multicast lock release failed", e)
+        }
+    }
+
+    private companion object {
+        const val LOCK_TAG = "pclink-responder"
+        const val TAG_LEASE = "PcLinkMulticast"
+    }
+}
 
 /**
  * A PC's invitation to pair, delivered as one unicast UDP datagram (design §9.2).
@@ -69,18 +125,47 @@ data class PcLinkPairInvite(
  * `clientId` is a stable LAN-visible identifier) and most of the abuse story (an invite can't
  * interrupt anything if nothing is listening).
  */
-class PcLinkPhoneResponder(
+class PcLinkPhoneResponder internal constructor(
     context: Context?,
     private val clientName: String,
     private val clientId: String,
-    private val nowMs: () -> Long = { SystemClock.elapsedRealtime() },
+    private val nowMs: () -> Long,
+    private val lease: MulticastLease,
+    /**
+     * Injectable so tests can bind an ephemeral port instead of fighting for the well-known one.
+     * Named `listenPort`, not `port`: inside an `apply` on a [DatagramSocket], a property called
+     * `port` silently resolves to the socket's own `getPort()` — which is -1 until it is connected.
+     */
+    private val listenPort: Int,
+    // Defaults to silence rather than android.util.Log: local unit tests run against the stubbed
+    // android.jar, where every Log call throws — and this one sits on the socket loop's failure
+    // path, so a stubbed Log would kill the coroutine instead of reporting why the bind failed.
+    // The Context constructor below wires the real logger, so devices still get the message.
+    private val logInfo: (String, Throwable?) -> Unit = { _, _ -> },
     private val onInvite: (PcLinkPairInvite) -> Unit
 ) {
+
+    constructor(
+        context: Context?,
+        clientName: String,
+        clientId: String,
+        nowMs: () -> Long = { SystemClock.elapsedRealtime() },
+        onInvite: (PcLinkPairInvite) -> Unit
+    ) : this(
+        context, clientName, clientId, nowMs,
+        WifiMulticastLease(context), PcLinkDiscovery.UDP_PORT,
+        { message, error -> Log.i(TAG, message, error) }, onInvite
+    )
 
     private val appContext: Context? = context?.applicationContext
 
     @Volatile private var socket: DatagramSocket? = null
     @Volatile private var job: Job? = null
+
+    /** The port actually bound, or 0 when not listening. Only interesting when [listenPort] is 0. */
+    @Volatile
+    internal var boundPort: Int = 0
+        private set
 
     /** Last time we forwarded an invite from each source, for the per-source dedupe. */
     private val lastInviteAt = HashMap<String, Long>()
@@ -106,6 +191,15 @@ class PcLinkPhoneResponder(
     private suspend fun listen() {
         val bound = openSocket() ?: return
         socket = bound
+        boundPort = bound.localPort
+        // Held for exactly as long as we're listening. Many Wi-Fi chipsets stop passing broadcast
+        // and multicast frames up to the CPU when the device idles — a power optimisation that is
+        // invisible until you are the one waiting for a broadcast. The PC's probe is a broadcast,
+        // so without this lock reverse discovery works on some phones, works on others only while
+        // the screen is busy, and fails intermittently on the rest. Acquired after the bind
+        // succeeds and released in the finally, so a lock is never held by a responder that isn't
+        // actually listening (it costs battery: it defeats that same optimisation).
+        lease.acquire()
         val buffer = ByteArray(MAX_PACKET_SIZE)
         try {
             bound.use {
@@ -123,7 +217,9 @@ class PcLinkPhoneResponder(
                 }
             }
         } finally {
+            lease.release()
             socket = null
+            boundPort = 0
         }
     }
 
@@ -167,11 +263,11 @@ class PcLinkPhoneResponder(
         // silently share a port and steal half of someone else's datagrams.
         DatagramSocket(null).apply {
             soTimeout = SOCKET_POLL_TIMEOUT_MS
-            bind(InetSocketAddress(PcLinkDiscovery.UDP_PORT))
+            bind(InetSocketAddress(listenPort))
             bindToLocalNetwork(this)
         }
     } catch (e: Exception) {
-        Log.i(TAG, "UDP ${PcLinkDiscovery.UDP_PORT} unavailable; reverse discovery is off", e)
+        logInfo("UDP $listenPort unavailable; reverse discovery is off", e)
         null
     }
 

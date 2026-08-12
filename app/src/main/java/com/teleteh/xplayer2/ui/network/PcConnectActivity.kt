@@ -1,6 +1,7 @@
 package com.teleteh.xplayer2.ui.network
 
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.text.InputType
 import android.view.LayoutInflater
@@ -173,6 +174,9 @@ class PcConnectActivity : AppCompatActivity() {
         pairingClient?.cancel()
         pairingDialog?.dismiss()
         promptDialog?.dismiss()
+        // Belt and braces: a ceremony that never reached onSessionFinished must not leave the
+        // orientation pinned for whatever this task shows next.
+        releaseOrientationLock()
     }
 
     /**
@@ -452,6 +456,18 @@ class PcConnectActivity : AppCompatActivity() {
         connecting = true
         discoveryLoop?.cancel()
         discoverySource.stop()
+        // A rotation recreates this activity, and the ceremony's socket dies with it: the PC would
+        // be left holding a dialog until its 90 s timeout while the user starts over, having done
+        // nothing wrong but turn the phone. There's no configChanges or retained state here to
+        // survive that, and adding them for a handshake that lasts seconds would be a lot of
+        // machinery for one screen — so hold the orientation for the duration instead. Released in
+        // [onSessionFinished] and in onDestroy, so a ceremony that dies unexpectedly can't leave
+        // the screen stuck.
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LOCKED
+    }
+
+    private fun releaseOrientationLock() {
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 
     /** Silent re-authentication with a stored key, behind a spinner (§5). */
@@ -518,6 +534,7 @@ class PcConnectActivity : AppCompatActivity() {
     }
 
     private fun onSessionFinished(target: PairingTarget, outcome: PairingOutcome) {
+        releaseOrientationLock()
         pairingDialog?.dismiss()
         pairingDialog = null
         pairingClient = null
