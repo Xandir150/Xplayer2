@@ -303,14 +303,32 @@ object PcLinkProtocol {
     }
 
     /**
-     * The `set_audio` line (client → server, §2.16): mute or unmute the audio stream at the source.
+     * The `set_audio` line (client → server, §2.17): mute or unmute the audio stream at the source,
+     * and optionally re-offer what this phone can play.
      *
      * Idempotent, and acknowledged only by the server re-sending `config` with (or without) its
      * `audio` field — there is no dedicated ack. Muting on the wire rather than locally is what
      * saves the 1.5 Mbit/s; the client gates locally as well so the button feels instant.
+     *
+     * [audio] is the **late offer**: the same object `hello` carries, sent again because this
+     * phone's output route has changed since. A session whose `hello` could not describe an output
+     * — glasses being plugged in at that exact moment — would otherwise be video-only until the
+     * user tore it down and built another one, which is the field bug this exists for. Additive:
+     * a server that predates the field ignores it and reads the message as the mute switch it
+     * already was, so it is always safe to send.
      */
-    fun setAudioLine(enabled: Boolean): String =
-        JSONObject().put("type", "set_audio").put("enabled", enabled).toString() + "\n"
+    fun setAudioLine(enabled: Boolean, audio: PcAudioCapability? = null): String =
+        JSONObject().put("type", "set_audio").put("enabled", enabled).also { obj ->
+            if (audio != null) {
+                obj.put(
+                    "audio",
+                    JSONObject()
+                        .put("codecs", JSONArray().also { a -> audio.codecs.forEach(a::put) })
+                        .put("rates", JSONArray().also { a -> audio.rates.forEach(a::put) })
+                        .put("channels", audio.channels)
+                )
+            }
+        }.toString() + "\n"
 
     /** The `idr` line (client → server): "make the next frame a sync frame". */
     fun idrLine(): String = JSONObject().put("type", "idr").toString() + "\n"
@@ -869,9 +887,18 @@ class PcLinkClient(
     @Volatile private var audioEnabled = true
     @Volatile private var audioEnabledSent: Boolean? = null
 
+    // Set when this phone's output route has changed and the server should be told what we can
+    // play now (§2.17's late offer). A one-shot flag rather than a queue: the server needs the
+    // current capability, not the history of how the route got there.
+    @Volatile private var audioReofferPending = false
+
     // The format `config.audio` most recently announced, or null for "no audio in this stream".
     // The reader consults it to drop stray chunks; §2.2 makes this the single wire truth.
     @Volatile private var audioFormat: PcAudioFormat? = null
+
+    // The output-route watcher, registered for as long as a session runs. Held so it can be
+    // unregistered: an AudioDeviceCallback outlives the session that wanted it otherwise.
+    private var audioRouteWatcher: android.media.AudioDeviceCallback? = null
 
     /** Starts the session loop in [scope]. Call once. */
     fun connect(scope: CoroutineScope): Job {
@@ -917,6 +944,27 @@ class PcLinkClient(
         audioEnabled = enabled
     }
 
+    /**
+     * Re-offers this phone's audio capabilities to the server (§2.17's late offer).
+     *
+     * For the moment a route appears that was not there at `hello` — the glasses plugged back in,
+     * a USB DAC finished enumerating. The server negotiates against the offer exactly as it would
+     * have at `hello` and answers with a `config` carrying `audio`, and the sound starts on the
+     * connection that is already open: no reconnect, no rebuilt decoder, no interruption to the
+     * picture. Safe from any thread and safe to call repeatedly; the writer sends one line.
+     *
+     * Only meaningful while the stream carries no audio — a session that already has some has
+     * nothing to renegotiate — so the caller need not check, but the writer does.
+     *
+     * Deliberately does **not** unmute. A re-offer is new information about this phone, not a
+     * change of mind on the user's behalf: someone who muted before plugging their glasses in
+     * stays muted, and the server records the capability so that unmuting later is enough.
+     */
+    fun reofferAudio() {
+        if (audioCapability == null) return
+        audioReofferPending = true
+    }
+
     /** The audio format currently in force, or null when this stream carries none. */
     val currentAudioFormat: PcAudioFormat? get() = audioFormat
 
@@ -934,6 +982,15 @@ class PcLinkClient(
      * window, so a PC that drops once an hour never accumulates its way to "failed".
      */
     private suspend fun runSessions() {
+        watchAudioRoute()
+        try {
+            runSessionsLoop()
+        } finally {
+            unwatchAudioRoute()
+        }
+    }
+
+    private suspend fun runSessionsLoop() {
         var attempt = 0
         var failingSince = 0L
         while (currentCoroutineContext().isActive) {
@@ -979,6 +1036,59 @@ class PcLinkClient(
     }
 
     /**
+     * Watches this phone's output routes for as long as the client runs, and re-offers audio
+     * whenever one appears.
+     *
+     * The owner's sequence: unplug the glasses, plug them back in, connect. The route is still
+     * switching when `hello` goes out, so whatever was advertised described a phone that no longer
+     * exists a second later — and under §2.1 the server honours that description for the whole
+     * session. A device arriving is exactly the moment to say so again.
+     *
+     * Deliberately not filtered by device type. "Which output is the sound going to" is the audio
+     * framework's decision, not ours, and a re-offer costs one line of JSON that the server
+     * ignores when it already has audio flowing.
+     */
+    private fun watchAudioRoute() {
+        if (audioCapability == null) return
+        val context = appContext ?: return
+        val manager = try {
+            context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+        } catch (_: Throwable) {
+            null
+        } ?: return
+        val callback = object : android.media.AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(added: Array<out android.media.AudioDeviceInfo>?) {
+                if (added.isNullOrEmpty()) return
+                // Only while the stream carries no audio: a session that already has some has
+                // nothing to renegotiate, and AudioTrack follows the default route on its own.
+                if (audioFormat == null) reofferAudio()
+            }
+        }
+        audioRouteWatcher = try {
+            manager.registerAudioDeviceCallback(callback, null)
+            callback
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun unwatchAudioRoute() {
+        val callback = audioRouteWatcher ?: return
+        audioRouteWatcher = null
+        val manager = try {
+            appContext?.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+        } catch (_: Throwable) {
+            null
+        }
+        try {
+            manager?.unregisterAudioDeviceCallback(callback)
+        } catch (_: Throwable) {
+            // Nothing to do: the callback outliving us is the only cost, and the process is the
+            // same one that registered it.
+        }
+    }
+
+    /**
      * One full session. Sets [sessionStreamed] once video actually started (which resets the
      * backoff); throws on any failure, and returns normally only when the caller cancelled us.
      */
@@ -992,6 +1102,7 @@ class PcLinkClient(
         glassesSent = null
         audioEnabledSent = null
         audioFormat = null
+        audioReofferPending = false
         unansweredPings = 0
         lastRxMs = nowMs()
 
@@ -1255,6 +1366,16 @@ class PcLinkClient(
             // `hello` carried none the server ignores `set_audio` anyway (§2.16).
             if (audioCapability != null) {
                 val want = audioEnabled
+                // The late offer jumps the "only say it when it changed" rule, because it is not
+                // a change of mind — it is new information about this phone. It goes out once per
+                // route change, and only while the stream has no audio to renegotiate.
+                if (audioReofferPending) {
+                    audioReofferPending = false
+                    if (audioFormat == null) {
+                        audioEnabledSent = want
+                        writeLine(output, PcLinkProtocol.setAudioLine(want, audioCapability))
+                    }
+                }
                 // Sending "enabled" before anything was ever said is redundant — `hello` already
                 // asked for audio — so only an unmute that follows a mute goes out.
                 if (audioEnabledSent != want && !(audioEnabledSent == null && want)) {
@@ -1445,28 +1566,42 @@ class PcLinkClient(
         private val AUDIO_RATE_PREFERENCE = intArrayOf(48_000, 44_100)
 
         /**
-         * What this phone can actually play back, or null if it can play nothing (in which case
-         * `hello` carries no `audio` object and the session is video-only, byte-for-byte as
-         * before).
+         * 48 kHz stereo PCM: what this phone offers when the probe below tells it nothing.
          *
-         * Probed rather than asserted. Every rate offered is one [AudioTrack] itself accepts for
-         * a 16-bit track at the channel count we offer, and the channel count is stereo only if
-         * a stereo track is constructible — the glasses are stereo USB sinks, but the phone is
-         * what actually opens the track, and a device that would refuse one must ask the PC to
-         * downmix instead of discovering the problem after negotiation.
-         *
-         * 48 kHz leads regardless of the device's native rate: it is the only rate every server
-         * capture path can deliver (macOS ScreenCaptureKit has no 44.1 kHz at all), and the rate
-         * list is a preference the server walks in order, not a demand. The native rate is added
-         * when it is something else, so a 44.1 kHz-native phone can still avoid a resampler if
-         * the PC happens to be able to produce it.
-         *
-         * Every call is wrapped: these are static AudioTrack entry points, which throw against
-         * the stubbed android.jar under JVM unit tests — and a probe failure must mean "no
-         * audio", never "no session".
+         * Not a guess. It is the rate every server capture path can deliver, the rate both
+         * shipped servers negotiate, and the format an [AudioTrack] opens on every Android device
+         * this app runs on. Offering it costs nothing if it turns out to be wrong — the audio
+         * player reports a failure and the wire goes quiet — and offering *nothing* costs the
+         * whole session its sound.
          */
-        fun deviceAudio(): PcAudioCapability? = try {
-            val channels = if (minBufferSize(48_000, 2) > 0) 2 else 1
+        private val DEFAULT_AUDIO = PcAudioCapability(
+            codecs = listOf(PcLinkProtocol.AUDIO_CODEC_PCM_S16LE),
+            rates = listOf(48_000),
+            channels = 2
+        )
+
+        /**
+         * What this phone can play back. **Never absent**, because absence is permanent.
+         *
+         * Probed rather than asserted, but the probe only ever *refines* the answer. That is the
+         * field bug this used to have: `hello.audio` being absent tells the server "this client
+         * predates audio", which the server then honours for the life of the session — so a probe
+         * that came back empty for one second, because the glasses were being plugged in and the
+         * output route was mid-switch, cost the user their sound for the whole film. A momentary
+         * route state must not decide a session.
+         *
+         * So: every rate offered is one [AudioTrack] itself accepts for a 16-bit track at the
+         * channel count we offer, and the native rate joins the list when it is something else, so
+         * a 44.1 kHz-native phone can avoid a resampler if the PC can produce it — but an empty
+         * or throwing probe falls back to [DEFAULT_AUDIO] rather than to silence.
+         *
+         * Mono is claimed only when the probe positively says so: stereo refused *and* mono
+         * accepted. Both refused means the probe knows nothing, and guessing mono there would ask
+         * the PC to downmix a stereo film for no reason.
+         */
+        fun deviceAudio(): PcAudioCapability = try {
+            val stereo = minBufferSize(48_000, 2) > 0
+            val channels = if (!stereo && minBufferSize(48_000, 1) > 0) 1 else 2
             val rates = ArrayList<Int>(3)
             AUDIO_RATE_PREFERENCE.forEach { rate ->
                 if (minBufferSize(rate, channels) > 0) rates.add(rate)
@@ -1477,14 +1612,20 @@ class PcLinkClient(
             if (native > 0 && !rates.contains(native) && minBufferSize(native, channels) > 0) {
                 rates.add(native)
             }
-            if (rates.isEmpty()) null
-            else PcAudioCapability(
-                codecs = listOf(PcLinkProtocol.AUDIO_CODEC_PCM_S16LE),
-                rates = rates,
-                channels = channels
-            )
+            if (rates.isEmpty()) {
+                if (channels == 2) DEFAULT_AUDIO else DEFAULT_AUDIO.copy(channels = 1)
+            } else {
+                PcAudioCapability(
+                    codecs = listOf(PcLinkProtocol.AUDIO_CODEC_PCM_S16LE),
+                    rates = rates,
+                    channels = channels
+                )
+            }
         } catch (_: Throwable) {
-            null
+            // The static AudioTrack entry points throw against the stubbed android.jar under JVM
+            // unit tests, and can fail on a device mid-route-change. Neither is a reason to tell
+            // the server this client cannot play sound.
+            DEFAULT_AUDIO
         }
 
         /** AudioTrack's own answer for "can I open a 16-bit track like this?" (bytes, or <= 0). */

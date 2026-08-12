@@ -250,6 +250,109 @@ class PcLinkAudioTest {
         assertEquals(listOf(false, true), pc.setAudio())
     }
 
+    // --- audio the session gains after it started -----------------------------------------------
+
+    /**
+     * The probe must never be able to opt a session out of sound.
+     *
+     * The owner's sequence: unplug the glasses, plug them back in, connect. The output route is
+     * still switching while `hello` is being built — and a `hello` without an `audio` object tells
+     * the server "this client predates audio", which it honours for the life of the session. The
+     * probe is allowed to refine what we ask for; it is not allowed to answer "nothing".
+     *
+     * (Under the stubbed android.jar every static `AudioTrack` call throws, so this test *is* the
+     * failing-probe case rather than a simulation of one.)
+     */
+    @Test
+    fun `a phone whose audio probe tells it nothing still offers what every PC can send`() {
+        val probed = PcLinkClient.deviceAudio()
+        assertEquals(listOf("pcm_s16le"), probed.codecs)
+        assertEquals(listOf(48_000), probed.rates)
+        assertEquals(2, probed.channels)
+    }
+
+    @Test
+    fun `set_audio can carry a late offer, and says nothing extra without one`() {
+        assertEquals(
+            """{"type":"set_audio","enabled":true}""",
+            PcLinkProtocol.setAudioLine(true).trim()
+        )
+        val offer = JSONObject(PcLinkProtocol.setAudioLine(true, capability).trim())
+        assertTrue(offer.getBoolean("enabled"))
+        val audio = offer.getJSONObject("audio")
+        assertEquals("pcm_s16le", audio.getJSONArray("codecs").getString(0))
+        assertEquals(48_000, audio.getJSONArray("rates").getInt(0))
+        assertEquals(2, audio.getInt("channels"))
+    }
+
+    /**
+     * **The field-bug regression (client side).** A session that started video-only must be able
+     * to gain audio without being torn down.
+     *
+     * End to end against a scripted PC: `hello` is answered with a `config` that has no `audio`
+     * (the route was not ready, or the PC's capture was not), the client's route settles, it
+     * re-offers, the PC answers with a `config` that has `audio` — and the chunks that follow
+     * reach the audio path on the connection that was already open. Before the fix the re-offer
+     * had nowhere to go and every one of those chunks was dropped as "no negotiated format".
+     */
+    @Test
+    fun `a session that started without audio gains it when the route settles`() {
+        val pc = start(ScriptedPc(audio = null))
+        pc.honourLateOffer = """{"codec":"pcm_s16le","rate":48000,"channels":2}"""
+        val listener = RecordingListener(expectVideo = 1, expectAudio = 2)
+        val client = client(pc, listener)
+        client.connect(scope)
+        assertTrue(pc.preamble.await(15, TimeUnit.SECONDS))
+
+        // Video-only to start with: an audio chunk now would be dropped, correctly.
+        pc.writeFrame(0, 0L, videoAu(1))
+        assertTrue(listener.video.await(15, TimeUnit.SECONDS))
+        pc.writeFrame(PcLinkProtocol.FLAG_AUDIO, 1_000L, pcm(9))
+        Thread.sleep(300)
+        assertEquals(0, listener.audioPts().size)
+
+        // The glasses are plugged in and the route appears.
+        client.reofferAudio()
+        assertTrue("the late offer never reached the PC", pc.awaitSetAudio(1))
+        val offered = pc.setAudioMessages().first().optJSONObject("audio")
+        assertNotNull("set_audio must carry what this phone can play now", offered)
+        assertEquals(48_000, offered!!.getJSONArray("rates").getInt(0))
+
+        // The PC answers with a config that has audio, and the sound flows on the same sockets.
+        pc.writeFrame(PcLinkProtocol.FLAG_AUDIO, 10_000L, pcm(1))
+        pc.writeFrame(PcLinkProtocol.FLAG_AUDIO, 20_000L, pcm(2))
+        assertTrue("audio never arrived after the late offer", listener.audio.await(15, TimeUnit.SECONDS))
+        assertEquals(listOf(10_000L, 20_000L), listener.audioPts())
+        client.close()
+    }
+
+    /** A phone with genuinely no output path never sends one, and never gets a 0x04 frame. */
+    @Test
+    fun `a client with no capability at all makes no late offer`() {
+        val pc = start(ScriptedPc(audio = null))
+        pc.honourLateOffer = """{"codec":"pcm_s16le","rate":48000,"channels":2}"""
+        val listener = RecordingListener(expectVideo = 1, expectAudio = 1)
+        val client = PcLinkClient(
+            context = null,
+            host = "127.0.0.1",
+            controlPort = pc.controlPort,
+            videoPort = pc.videoPort,
+            listener = listener,
+            clientName = "Pixel 9 Pro",
+            codecs = codecs,
+            nowMs = { System.nanoTime() / 1_000_000 },
+            audioCapability = null,
+            authProvider = { null }
+        )
+        client.connect(scope)
+        assertTrue(pc.preamble.await(15, TimeUnit.SECONDS))
+
+        client.reofferAudio()
+        Thread.sleep(500)
+        assertEquals(emptyList<JSONObject>(), pc.setAudioMessages())
+        client.close()
+    }
+
     // --- harness ------------------------------------------------------------------------------
 
     private fun configJson(audio: String?): String = buildString {
@@ -326,10 +429,20 @@ class PcLinkAudioTest {
 
         @Volatile private var videoOut: OutputStream? = null
         private val setAudioSeen = Collections.synchronizedList(ArrayList<Boolean>())
+        private val setAudioLines = Collections.synchronizedList(ArrayList<JSONObject>())
         private val threads = ArrayList<Thread>()
         private val sockets = Collections.synchronizedList(ArrayList<Socket>())
 
+        /**
+         * Answer a `set_audio` that carries a late offer with a `config` that has audio — a
+         * server with the §2.17 fix, as against one that ignores the object.
+         */
+        @Volatile var honourLateOffer: String? = null
+
         fun setAudio(): List<Boolean> = ArrayList(setAudioSeen)
+
+        /** Every `set_audio` message as it arrived, so its `audio` object can be inspected. */
+        fun setAudioMessages(): List<JSONObject> = ArrayList(setAudioLines)
 
         /** Waits for at least [count] `set_audio` messages to have arrived. */
         fun awaitSetAudio(count: Int): Boolean {
@@ -379,7 +492,18 @@ class PcLinkAudioTest {
                                 writer.write(configJson(audio) + "\n")
                                 writer.flush()
                             }
-                            "set_audio" -> setAudioSeen += message.optBoolean("enabled")
+                            "set_audio" -> {
+                                setAudioSeen += message.optBoolean("enabled")
+                                setAudioLines += message
+                                // The fixed server: a late offer is negotiated against and
+                                // answered with a fresh `config` carrying `audio`, on the same
+                                // connection the client is already streaming on.
+                                val late = honourLateOffer
+                                if (late != null && message.optJSONObject("audio") != null) {
+                                    writer.write(configJson(late) + "\n")
+                                    writer.flush()
+                                }
+                            }
                             else -> Unit
                         }
                     }
