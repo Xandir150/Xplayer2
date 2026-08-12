@@ -87,6 +87,12 @@ class PcLinkRemoteActivity : AppCompatActivity() {
     /** True once [leave] has run, so a late tick can't start a second exit. */
     private var leaving = false
 
+    /**
+     * The link state the dim policy last acted on — see [PcLinkRemotePolicy.dimAction]. Only a
+     * transition may touch the timer, exactly as on the film remote's play/pause.
+     */
+    private var lastLink: PcLinkSession.Link? = null
+
     private val tick = object : Runnable {
         override fun run() {
             sample()
@@ -128,12 +134,19 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         btnRecenter.setOnClickListener {
             haptics.click()
             PcLinkSession.recenter()
-            showFeedback(getString(R.string.pclink_recentered))
+            // The same mark the long-press leaves (see [setupSurface]), because it is the same
+            // action. The slot is one 40sp glyph wide; a sentence in it wrapped across the card.
+            showFeedback(RECENTER_MARK)
         }
 
         btnAudioRoute.setOnClickListener {
             haptics.click()
-            PcLinkSession.setAudioToGlasses(!btnAudioRoute.isChecked)
+            // Truth is the session, never the widget: this button is `checkable`, and
+            // MaterialButton.performClick() flips isChecked BEFORE it dispatches this listener —
+            // see [PcLinkRemotePolicy.audioTapCommand].
+            val wanted = PcLinkRemotePolicy.audioTapCommand(PcLinkSession.stats()?.audioToGlasses)
+                ?: return@setOnClickListener
+            PcLinkSession.setAudioToGlasses(wanted)
             // Don't wait out the next tick to show what the tap did.
             sample()
         }
@@ -161,7 +174,19 @@ class PcLinkRemoteActivity : AppCompatActivity() {
 
         // Back never reveals the player behind us — for a cast that window is a grey rectangle,
         // since PC Link decodes into the glasses' presentation and not into it.
-        onBackPressedDispatcher.addCallback(this) { leave() }
+        onBackPressedDispatcher.addCallback(this) {
+            // A black screen swallows every other input and turns it into a wake (see
+            // [dispatchTouchEvent] and [dispatchKeyEvent]); Back must not be the exception that
+            // tears the cast down instead. It cannot reuse those guards: at targetSdk 35+ the
+            // platform intercepts Back before the view tree and routes it straight here, so
+            // dispatchKeyEvent is never consulted for it.
+            if (dim.isDimmed) {
+                haptics.tick()
+                dim.wake()
+                return@addCallback
+            }
+            leave()
+        }
     }
 
     /**
@@ -219,7 +244,7 @@ class PcLinkRemoteActivity : AppCompatActivity() {
             override fun onLongPress(e: MotionEvent) {
                 haptics.heavy()
                 PcLinkSession.recenter()
-                showFeedback("⌖")
+                showFeedback(RECENTER_MARK)
             }
         })
 
@@ -232,6 +257,19 @@ class PcLinkRemoteActivity : AppCompatActivity() {
 
     private fun adjustVolume(up: Boolean) {
         val am = audioManager ?: return
+        // The phone's media stream is what the user hears only while the PC's sound is being played
+        // here. Handed back to the computer (or never offered), a tick and a percentage would
+        // confirm a change nobody can hear — and would quietly move the level it comes back at.
+        val stats = PcLinkSession.stats()
+        if (stats == null ||
+            !PcLinkRemotePolicy.localVolumeIsHeard(stats.audioAvailable, stats.audioToGlasses)
+        ) {
+            // A glyph rather than a sentence (the slot is one 40sp mark wide) and deliberately no
+            // haptic: on an eyes-free surface, silence under the finger IS the distinction. The
+            // hint row under the routing switch already names where the sound is.
+            showFeedback(SOUND_ON_PC_MARK)
+            return
+        }
         am.adjustStreamVolume(
             AudioManager.STREAM_MUSIC,
             if (up) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER,
@@ -297,6 +335,9 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         // What was collected describes seconds that were being watched; splicing across the gap
         // would draw a minute that never happened.
         history.reset()
+        // Same reasoning for the dim policy: onResume arms from live state, and the first tick back
+        // re-decides from scratch rather than against a state remembered from before the gap.
+        lastLink = null
         dim.onPause()
     }
 
@@ -331,6 +372,18 @@ class PcLinkRemoteActivity : AppCompatActivity() {
                 PcLinkSession.Link.FAILED -> R.string.pclink_state_failed
             }
         )
+        // The dim policy is only consulted when the timer is armed, and every arming point on this
+        // screen is a user action or onResume — which lands while the link is still CONNECTING. So
+        // the tick that already runs once a second is what tells the timer the answer changed.
+        when (PcLinkRemotePolicy.dimAction(stats.link, lastLink)) {
+            PcLinkRemotePolicy.Dim.LEAVE_ALONE -> Unit
+            PcLinkRemotePolicy.Dim.ARM -> dim.schedule()
+            PcLinkRemotePolicy.Dim.DISARM_AND_WAKE -> {
+                dim.cancel()
+                dim.wake()
+            }
+        }
+        lastLink = stats.link
         // A dash until the second reading: one counter is not a rate, and a made-up zero in the
         // first second of a session would be the one lie this screen exists to avoid.
         val fps = history.fps.latest()
@@ -526,6 +579,14 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         var currentInstance: PcLinkRemoteActivity? = null
 
         private const val SAMPLE_INTERVAL_MS = 1_000L
+
+        /**
+         * The feedback slot is one big glyph wide (40sp, centred, single-line), so everything that
+         * lands in it is a mark rather than a sentence — a word here wraps across the card and over
+         * the sparklines, and it cannot be read from under the goggles anyway.
+         */
+        private const val RECENTER_MARK = "⌖"
+        private const val SOUND_ON_PC_MARK = "🖥"
 
         // Same store and key the PC-Mirror tab used for this door, so a user who opened it there
         // finds it open here.

@@ -125,12 +125,20 @@
                 android:alpha="0.65"
                 android:lineSpacingExtra="6dp" />
 
-            <!-- Big last-action feedback (volume %, the re-centre mark), fades out on its own. -->
+            <!-- Big last-action feedback (volume %, the re-centre mark), fades out on its own.
+                 One line, centred across the card: at 40sp bold anything longer than a mark or a
+                 percentage is wider than the card and would wrap into a ragged two-line slab over
+                 the sparklines. Kept structurally impossible rather than left to the callers. -->
             <TextView
                 android:id="@+id/tvSurfaceFeedback"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
+                android:gravity="center"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
                 android:textColor="@color/rc_on_surface"
                 android:textSize="40sp"
                 android:textStyle="bold"
