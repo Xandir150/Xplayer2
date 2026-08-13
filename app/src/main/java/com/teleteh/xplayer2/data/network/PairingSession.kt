@@ -440,7 +440,9 @@ class PairingSession private constructor(
         val selected = selectionOf(message) ?: return failProtocol()
         if (selected > encryptionOffer) return failProtocol()
         if (selected < PcLinkEnvelope.AEAD && requireEncryption) {
-            return fail(PairingFailure.ENCRYPTION_REQUIRED)
+            // Announced rather than silently dropped: the ceremony is still in the clear and the
+            // PC has a dialog up, so saying why takes it down now instead of in 90 seconds.
+            return reject(REASON_ENCRYPTION_REQUIRED, PairingFailure.ENCRYPTION_REQUIRED)
         }
         encryptionSelected = selected
 

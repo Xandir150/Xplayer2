@@ -958,7 +958,16 @@ class PairingSessionTest {
             clock = clock, random = fixedRandom, requireEncryption = true
         )
         val reveal = ScriptedServer().onPairStart(JSONObject(ceremony.start().sends().single()))
-        assertEquals(PairingFailure.ENCRYPTION_REQUIRED, ceremony.onLine(reveal).finishedFailure())
+        val refused = ceremony.onLine(reveal)
+        assertEquals(PairingFailure.ENCRYPTION_REQUIRED, refused.finishedFailure())
+        // The ceremony is still plaintext and the PC has a dialog up, so it is told why.
+        val sent = JSONObject(refused.sends().single())
+        assertEquals("pair_reject", sent.getString("type"))
+        assertEquals("encryption_required", sent.getString("reason"))
+        assertTrue(
+            "and nothing of ours is revealed",
+            refused.none { it is PairingEffect.ShowSas || it is PairingEffect.Persist }
+        )
     }
 
     // ---- helpers -------------------------------------------------------------------------------
