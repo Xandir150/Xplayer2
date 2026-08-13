@@ -18,6 +18,10 @@ Your XReal glasses are an amazing piece of hardware, but finding good 3D content
 
 - **AI 2D→3D Conversion** — No 3D source? No problem. XPlayer2 uses on-device AI to estimate depth and convert ordinary 2D video into stereoscopic 3D on the fly — so even your regular movies come to life in the glasses, with no internet upload and no pre-processing.
 
+- **Your PC, in the glasses (PC Link)** — Run the free companion app on your computer and your whole desktop appears in the glasses over your own Wi‑Fi. Games, films, work, anything on screen. The phone becomes the remote; the computer does the heavy lifting.
+
+- **Real 3D from a 2D computer** — With the glasses in 3D mode, the depth is computed **on the PC** and sent to you already as a stereo pair. That is the part that matters: your phone never has to think about it, so there is no cost to your battery and no limit on what you can convert. Any game, in stereo. Any video, any window, any app — if your computer can show it, you can watch it in 3D. Depth strength, convergence and the model itself are tuned on the PC, where there is room to do it properly.
+
 - **Play From Anywhere** — Local files, network streams, or internet links — it all works. Stream from your NAS, play downloaded movies, or paste a URL.
 
 - **Share & Play** — Found a video on VK, OK, or any other app? Just tap "Share" and select XPlayer2. No need to copy links manually.
@@ -27,6 +31,22 @@ Your XReal glasses are an amazing piece of hardware, but finding good 3D content
 - **Resume Where You Left Off** — The app remembers your position in every video. Come back anytime and continue watching.
 
 - **Wide Format Support** — Plays virtually any video format thanks to built-in codec support. If it's a video file, chances are XPlayer2 can play it.
+
+## PC Link — get the desktop app
+
+Free, and required only if you want your computer in the glasses. The phone app alone does
+everything else.
+
+| | |
+|---|---|
+| **Windows 11** | [XPlayer2-PC-Link_x64-setup.exe](https://github.com/Xandir150/xplayer2-link-releases/releases/latest) |
+| **macOS (Apple Silicon)** | [XPlayer2-PC-Link_apple-silicon.dmg](https://github.com/Xandir150/xplayer2-link-releases/releases/latest) |
+
+All releases: **https://github.com/Xandir150/xplayer2-link-releases/releases**
+
+Install it, plug the glasses into your phone, and pair the two by comparing a six-digit code shown
+on both screens — the same check your headphones use, so nobody on your network can connect to your
+computer by accident. Everything stays on your own network; nothing goes through us.
 
 ## How to Use
 
