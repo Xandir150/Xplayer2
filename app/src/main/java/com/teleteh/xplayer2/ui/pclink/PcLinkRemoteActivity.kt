@@ -82,6 +82,29 @@ class PcLinkRemoteActivity : AppCompatActivity() {
     private val detailRows = ArrayList<Pair<TextView, TextView>>()
     private var detailsOpen = false
 
+    /** The "control the PC" block: gone entirely until the session says something about input. */
+    private lateinit var boxInput: LinearLayout
+    private lateinit var btnInputControl: LinearLayout
+    private lateinit var swInputControl: com.google.android.material.materialswitch.MaterialSwitch
+    private lateinit var btnInputAbsolute: LinearLayout
+    private lateinit var swInputAbsolute: com.google.android.material.materialswitch.MaterialSwitch
+    private lateinit var btnInputKeyboard: MaterialButton
+    private lateinit var tvInputHint: TextView
+    private lateinit var tvSurfaceHint: TextView
+
+    private lateinit var inputSurface: PcLinkInputSurface
+    private lateinit var textInput: PcTextInputView
+
+    /**
+     * Whether the user has asked this pad to drive the PC.
+     *
+     * Deliberately not remembered across sessions. Control is a thing you turn on to do something
+     * and it changes what every gesture on this screen means; coming back to a remote that is
+     * silently already driving a computer — with the volume drag gone and the pad clicking things —
+     * is a surprise nobody asked for.
+     */
+    private var controlOn = false
+
     private lateinit var gestures: GestureDetector
     private enum class SwipeAxis { NONE, HORIZONTAL, VERTICAL }
     private var swipeAxis = SwipeAxis.NONE
@@ -122,6 +145,14 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         tvAudioRoute = findViewById(R.id.tvAudioRoute)
         swAudioRoute = findViewById(R.id.swAudioRoute)
         btnRecenter = findViewById(R.id.btnRecenter)
+        boxInput = findViewById(R.id.boxInput)
+        btnInputControl = findViewById(R.id.btnInputControl)
+        swInputControl = findViewById(R.id.swInputControl)
+        btnInputAbsolute = findViewById(R.id.btnInputAbsolute)
+        swInputAbsolute = findViewById(R.id.swInputAbsolute)
+        btnInputKeyboard = findViewById(R.id.btnInputKeyboard)
+        tvInputHint = findViewById(R.id.tvInputHint)
+        tvSurfaceHint = findViewById(R.id.tvSurfaceHint)
         chevron = findViewById(R.id.ivDetailsChevron)
         detailsBox = findViewById(R.id.boxDetails)
         fpsChip = Chip(findViewById(R.id.chipFps), getString(R.string.pclink_stat_fps), history.fps)
@@ -137,6 +168,7 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         }
         dim.attach()
         setupSurface()
+        setupInput()
 
         btnRecenter.setOnClickListener {
             haptics.click()
@@ -191,6 +223,15 @@ class PcLinkRemoteActivity : AppCompatActivity() {
             if (dim.isDimmed) {
                 haptics.tick()
                 dim.wake()
+                return@addCallback
+            }
+            // The way out of pointer capture, and the only one there is: while the mouse is
+            // captured the phone's cursor is gone and nothing on screen can be aimed at, so Back
+            // has to mean "give me my phone back" before it can mean "end the cast". The hint
+            // under the pad says so while it is held.
+            if (findViewById<View>(R.id.surface).hasPointerCapture()) {
+                haptics.click()
+                setControl(false)
                 return@addCallback
             }
             leave()
@@ -258,9 +299,228 @@ class PcLinkRemoteActivity : AppCompatActivity() {
 
         surface.setOnTouchListener { v, ev ->
             if (ev.actionMasked == MotionEvent.ACTION_UP) v.performClick()
+            // Driving the PC takes the pad over completely: while control is on, this is a
+            // touchpad and nothing else. Sharing it with the volume drag was tried and is worse
+            // than either — every gesture becomes ambiguous, and the ambiguity is resolved
+            // differently by the two things the user cannot see.
+            if (inputSurface.onTouch(ev)) return@setOnTouchListener true
             gestures.onTouchEvent(ev)
             true
         }
+    }
+
+    /**
+     * The mouse-and-keyboard block (`protocol.md` §2.19).
+     *
+     * Everything here stays invisible until the PC has actually granted input — see [applyInputState]
+     * — because the alternative is a switch that a user flips and nothing happens, on a screen they
+     * cannot see while they are using it.
+     */
+    private fun setupInput() {
+        val surface = findViewById<View>(R.id.surface)
+        inputSurface = PcLinkInputSurface(
+            surface = surface,
+            sender = { PcLinkSession.input() },
+            contentSize = ::desktopContentSize,
+            onTap = { haptics.tick() },
+            onDragStart = { haptics.heavy() }
+        )
+
+        // The IME's landing place. Built here rather than in the layout because it is a mechanism,
+        // not a control: it is never seen and nothing navigates to it.
+        //
+        // One pixel, not zero. From targetSdk P onwards a laid-out view with no size cannot take
+        // focus at all (`View.canTakeFocus`), and a view that cannot take focus never gets an
+        // InputConnection — so the keyboard button would open an IME that types into nothing.
+        textInput = PcTextInputView(this).apply {
+            onText = { s -> PcLinkSession.input()?.text(s) }
+            onKey = { event -> inputSurface.onKey(event) }
+        }
+        (surface as ViewGroup).addView(textInput, 1, 1)
+
+        btnInputControl.setOnClickListener {
+            haptics.click()
+            setControl(!controlOn)
+        }
+        btnInputAbsolute.setOnClickListener {
+            haptics.click()
+            inputSurface.absoluteTaps = !inputSurface.absoluteTaps
+            swInputAbsolute.isChecked = inputSurface.absoluteTaps
+            applySurfaceHint()
+        }
+        btnInputKeyboard.setOnClickListener {
+            haptics.click()
+            showPcKeyboard()
+        }
+        // Captured pointer events go to whichever view holds focus, and focus moves to [textInput]
+        // the moment the user opens the keyboard. Listening on both is two lines and removes the
+        // whole class of "the mouse stopped working after I typed something".
+        surface.setOnCapturedPointerListener { _, ev -> inputSurface.onCapturedPointer(ev) }
+        textInput.setOnCapturedPointerListener { _, ev -> inputSurface.onCapturedPointer(ev) }
+    }
+
+    /**
+     * Turns driving the PC on or off, and everything that hangs off it.
+     *
+     * The off path is the one that matters, and it runs on every route out — the switch, the
+     * session ending, the PC withdrawing permission, this screen pausing. It releases whatever is
+     * held down on the PC first, because §2.19.5 only makes the *server* let go when a session
+     * dies, and none of these kills the session.
+     */
+    private fun setControl(on: Boolean) {
+        controlOn = on
+        inputSurface.enabled = on
+        swInputControl.isChecked = on
+        btnInputAbsolute.visibility = if (on) View.VISIBLE else View.GONE
+        btnInputKeyboard.visibility = if (on) View.VISIBLE else View.GONE
+        if (on) {
+            // A dark screen swallows the first touch of every gesture to wake itself (see
+            // [dispatchTouchEvent]), which on a touchpad means every gesture after a pause is
+            // eaten. Control and dimming cannot both be on, so control wins while it is on.
+            dim.cancel()
+            dim.wake()
+            syncPointerCapture()
+        } else {
+            releasePointer()
+            hidePcKeyboard()
+            inputSurface.releaseHeld()
+            inputSurface.absoluteTaps = false
+            swInputAbsolute.isChecked = false
+            dim.schedule()
+        }
+        applySurfaceHint()
+    }
+
+    /**
+     * Takes the phone's physical mouse, if one is attached.
+     *
+     * Capture is what turns a mouse into the stream of deltas the wire wants, and there is no
+     * halfway version of it: while it is held, the phone's own cursor disappears and nothing on
+     * this screen reacts to the mouse at all. That is a real cost, so it is taken only while
+     * control is on, and given back on Back (see the back callback), on losing window focus, and on
+     * every path through [setControl] and [onPause]. The hint under the pad says so, because a
+     * vanished cursor with no explanation is indistinguishable from a crash.
+     */
+    private fun capturePointer() {
+        val surface = findViewById<View>(R.id.surface)
+        surface.isFocusableInTouchMode = true
+        surface.isFocusable = true
+        surface.requestFocus()
+        surface.requestPointerCapture()
+    }
+
+    private fun releasePointer() {
+        val surface = findViewById<View>(R.id.surface)
+        if (surface.hasPointerCapture()) surface.releasePointerCapture()
+    }
+
+    /**
+     * Takes the mouse when there is one and gives it back when there is not.
+     *
+     * Capture is a window mode, not a device binding: it succeeds whether or not a mouse is
+     * plugged in. Requesting it unconditionally would put "Mouse captured — Back releases it" under
+     * the pad of every phone with no mouse anywhere near it, which is worse than saying nothing.
+     *
+     * Re-checked on the one-second tick as well as on the switch, so a mouse plugged in *after*
+     * control was turned on is picked up. That is the case the bug report was about: the phone sees
+     * the mouse — Android enumerates it — and until something asks for its events, nothing happens.
+     */
+    private fun syncPointerCapture() {
+        val surface = findViewById<View>(R.id.surface)
+        // Not while the keyboard is up. Capture is requested on a *focused* view, so re-taking it
+        // here would pull focus off the text view once a second and shut the IME under the user's
+        // fingers. Captured events reach the same handler from either view (see [setupInput]), so
+        // there is nothing to win by fighting for focus.
+        if (textInput.hasFocus()) return
+        val want = controlOn && hasPhysicalMouse()
+        if (want && !surface.hasPointerCapture()) {
+            capturePointer()
+        } else if (!want && surface.hasPointerCapture()) {
+            releasePointer()
+        }
+    }
+
+    /** Whether a real mouse or trackpad is attached to this phone right now. */
+    private fun hasPhysicalMouse(): Boolean = android.view.InputDevice.getDeviceIds().any { id ->
+        val device = android.view.InputDevice.getDevice(id) ?: return@any false
+        if (device.isVirtual) return@any false
+        val sources = device.sources
+        (sources and android.view.InputDevice.SOURCE_MOUSE) == android.view.InputDevice.SOURCE_MOUSE ||
+            (sources and android.view.InputDevice.SOURCE_MOUSE_RELATIVE) ==
+            android.view.InputDevice.SOURCE_MOUSE_RELATIVE
+    }
+
+    private fun showPcKeyboard() {
+        textInput.requestFocus()
+        getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+            ?.showSoftInput(textInput, 0)
+    }
+
+    private fun hidePcKeyboard() {
+        getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+            ?.hideSoftInputFromWindow(textInput.windowToken, 0)
+    }
+
+    /**
+     * The desktop's shape as the phone is showing it, one eye wide — what an absolute tap is a
+     * fraction of.
+     *
+     * An `sbs` stream is a double-width frame carrying both eyes, and the viewer sees one of them.
+     * Feeding the packed width in here would halve every horizontal position, which looks like a
+     * pad that only reaches the left half of the screen.
+     */
+    private fun desktopContentSize(): Pair<Int, Int>? {
+        val stats = PcLinkSession.stats() ?: return null
+        if (stats.width <= 0 || stats.height <= 0) return null
+        val width = if (stats.stereo == PC_STEREO_SBS) stats.width / 2 else stats.width
+        return width to stats.height
+    }
+
+    /** What the pad does right now, in the faint line under it. */
+    private fun applySurfaceHint() {
+        tvSurfaceHint.setText(
+            when {
+                !controlOn -> R.string.pclink_remote_surface_hint
+                findViewById<View>(R.id.surface).hasPointerCapture() ->
+                    R.string.pclink_input_hint_captured
+                inputSurface.absoluteTaps -> R.string.pclink_input_hint_absolute
+                else -> R.string.pclink_input_surface_hint
+            }
+        )
+    }
+
+    /**
+     * Shows what this session says about input, and takes control away when it stops saying yes.
+     *
+     * The two refusals are spelled out rather than merged: one is fixed by re-pairing this phone,
+     * the other by a switch on the PC, and a user who is told only "unavailable" has no way to know
+     * which — see [PcLinkRemotePolicy.inputRow].
+     */
+    private fun applyInputState(stats: PcLinkSession.Stats) {
+        val row = PcLinkRemotePolicy.inputRow(stats.input)
+        boxInput.visibility =
+            if (row == PcLinkRemotePolicy.InputRow.HIDDEN) View.GONE else View.VISIBLE
+        val ready = row == PcLinkRemotePolicy.InputRow.READY
+        btnInputControl.isEnabled = ready
+        swInputControl.isEnabled = ready
+        btnInputControl.alpha = if (ready) 1f else 0.45f
+        tvInputHint.setText(
+            when (row) {
+                PcLinkRemotePolicy.InputRow.NOT_ENCRYPTED -> R.string.pclink_input_hint_not_encrypted
+                PcLinkRemotePolicy.InputRow.OPERATOR_OFF -> R.string.pclink_input_hint_operator_off
+                else -> R.string.pclink_input_hint_ready
+            }
+        )
+        // Permission can be withdrawn mid-session, and when it is, whatever this pad was holding
+        // has to be let go of on the way down.
+        if (!PcLinkRemotePolicy.controlHolds(controlOn, stats.input)) {
+            if (controlOn) setControl(false)
+            return
+        }
+        // A mouse plugged in mid-session is picked up on this tick rather than on the next time
+        // the user thinks to toggle the switch.
+        syncPointerCapture()
+        applySurfaceHint()
     }
 
     private fun adjustVolume(up: Boolean) {
@@ -327,7 +587,31 @@ class PcLinkRemoteActivity : AppCompatActivity() {
             }
             dim.schedule()
         }
+        // A keyboard attached to the phone belongs to the PC while control is on — that is the
+        // whole feature. It is consulted before the view tree, and never for Back or for a key with
+        // no injectable position behind it, so the way out of this screen and the phone's own
+        // volume keys keep working with someone's hand on the keyboard.
+        if (controlOn && inputSurface.onKey(event)) return true
         return super.dispatchKeyEvent(event)
+    }
+
+    /**
+     * Losing the window gives the mouse back.
+     *
+     * The platform already drops pointer capture when the window loses focus, so this is not what
+     * frees the mouse — it is what stops this screen from believing it still has it. A hint that
+     * says "Mouse captured" over a session that no longer is, is worse than no hint.
+     */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // Focus can be reported before the views exist on a window that never finished coming up.
+        if (!::inputSurface.isInitialized) return
+        if (!hasFocus) {
+            inputSurface.releaseHeld()
+        } else {
+            syncPointerCapture()
+        }
+        applySurfaceHint()
     }
 
     override fun onResume() {
@@ -339,6 +623,11 @@ class PcLinkRemoteActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        // Whatever this pad is holding on the PC goes with it. The session survives a pause — the
+        // desktop is still on the glasses — so nothing on the PC would otherwise let go, and a Ctrl
+        // held at the moment a call came in would turn every later keystroke on that computer into
+        // a shortcut. Control itself is switched off too, so coming back is a deliberate act.
+        if (controlOn) setControl(false)
         handler.removeCallbacks(tick)
         // What was collected describes seconds that were being watched; splicing across the gap
         // would draw a minute that never happened.
@@ -405,6 +694,7 @@ class PcLinkRemoteActivity : AppCompatActivity() {
             else getString(R.string.pclink_value_mbps, "%.1f".format(mbps))
         )
         applyAudioState(stats)
+        applyInputState(stats)
         if (detailsOpen) applyDetails(stats)
     }
 
@@ -486,6 +776,11 @@ class PcLinkRemoteActivity : AppCompatActivity() {
     private fun leave() {
         if (leaving) return
         leaving = true
+        // Before the session goes, not after: once [PcLinkSession.end] has run there is no sender
+        // left to carry the releases, and the phone would be relying on the PC noticing the socket
+        // die to work out that Ctrl is still down. It does notice — §2.19.5 requires it — but the
+        // half of that promise this phone owns is saying so while it still can.
+        if (controlOn) setControl(false)
         handler.removeCallbacks(tick)
         PcLinkSession.end()
         val intent = Intent(this, MainActivity::class.java).apply {
@@ -632,6 +927,9 @@ class PcLinkRemoteActivity : AppCompatActivity() {
 
         // Same store and key the PC-Mirror tab used for this door, so a user who opened it there
         // finds it open here.
+        /** `config.stereo` for a packed left|right frame — the case an absolute tap must halve. */
+        private const val PC_STEREO_SBS = "sbs"
+
         private const val PREFS = "pc_mirror"
         private const val PREF_DETAILS_OPEN = "details_open"
     }

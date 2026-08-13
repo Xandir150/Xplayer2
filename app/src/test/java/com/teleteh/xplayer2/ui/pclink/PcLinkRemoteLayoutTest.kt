@@ -55,4 +55,55 @@ class PcLinkRemoteLayoutTest {
         assertTrue(feedbackAttributes.contains("""android:layout_width="match_parent""""))
         assertTrue(feedbackAttributes.contains("""android:gravity="center""""))
     }
+
+    /** The attributes of one `<LinearLayout>`/`<...Button>` block, by its id. */
+    private fun attributesOf(id: String): String {
+        val at = layout.indexOf("@+id/$id")
+        assertTrue("$id is not in the layout", at >= 0)
+        val open = layout.lastIndexOf('<', at)
+        val close = layout.indexOf('>', at)
+        return layout.substring(open, close)
+    }
+
+    /**
+     * Nothing about driving the PC is on screen until the PC has said it allows it.
+     *
+     * §2.19 makes input the exception among this app's features: it is off by default on the PC, it
+     * exists only inside an encrypted session, and the phone finds out about it in a `config` that
+     * arrives after the picture. A block that started visible would spend the first second of every
+     * cast offering a switch that does nothing — and, for the majority of sessions where the
+     * operator never turned input on, would offer it for the whole cast.
+     */
+    @Test
+    fun `the control-the-PC block starts hidden`() {
+        assertTrue(
+            "boxInput must start GONE — the PC has not answered yet",
+            attributesOf("boxInput").contains("""android:visibility="gone"""")
+        )
+    }
+
+    /**
+     * The two controls that only make sense while control is on start hidden too.
+     *
+     * A "pad is the screen" switch with the pad still being a volume slider, or a keyboard button
+     * that types into nothing, are both worse than absent: they are affordances that lie.
+     */
+    @Test
+    fun `the absolute switch and the keyboard button start hidden`() {
+        assertTrue(attributesOf("btnInputAbsolute").contains("""android:visibility="gone""""))
+        assertTrue(attributesOf("btnInputKeyboard").contains("""android:visibility="gone""""))
+    }
+
+    /**
+     * The switch inside the row is not clickable, the same rule the audio row above it follows.
+     *
+     * The row is the tap target; a switch that could also be tapped would toggle itself and get
+     * ahead of the session's own state, which is the defect `PcLinkRemotePolicy.audioTapCommand`
+     * exists to document next door.
+     */
+    @Test
+    fun `the input switch is an affordance, not a second tap target`() {
+        assertTrue(attributesOf("swInputControl").contains("""android:clickable="false""""))
+        assertTrue(attributesOf("swInputAbsolute").contains("""android:clickable="false""""))
+    }
 }

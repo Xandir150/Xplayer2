@@ -1,5 +1,8 @@
 package com.teleteh.xplayer2.ui.pclink
 
+import com.teleteh.xplayer2.data.network.PcInputAvailability
+import com.teleteh.xplayer2.data.network.PcInputUnavailable
+import com.teleteh.xplayer2.data.network.PcLinkInputProtocol
 import com.teleteh.xplayer2.player.PcLinkSession
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -166,5 +169,75 @@ class PcLinkRemotePolicyTest {
             PcLinkRemotePolicy.RepairLauncher.NOBODY,
             PcLinkRemotePolicy.repairLauncher(playerStarted = false, remoteStarted = false)
         )
+    }
+
+    // --- driving the PC (protocol.md 2.19) ------------------------------------------------------
+
+    private val inputLive = PcInputAvailability.Live(PcLinkInputProtocol.CLIENT_OFFER)
+    private val notEncrypted = PcInputAvailability.Off(PcInputUnavailable.NOT_ENCRYPTED)
+    private val operatorOff = PcInputAvailability.Off(PcInputUnavailable.OPERATOR_OFF)
+
+    /**
+     * Nothing is claimed before the PC has answered.
+     *
+     * A "not encrypted" that shows for the second between the video connection and the first
+     * `config`, and then turns into a working switch, teaches the user that this message is noise —
+     * which is expensive, because when it is real it is the only thing telling them where the fix
+     * is.
+     */
+    @Test
+    fun `before the PC has answered there is nothing to show`() {
+        assertEquals(PcLinkRemotePolicy.InputRow.HIDDEN, PcLinkRemotePolicy.inputRow(null))
+    }
+
+    @Test
+    fun `a granted session offers the switch`() {
+        assertEquals(PcLinkRemotePolicy.InputRow.READY, PcLinkRemotePolicy.inputRow(inputLive))
+    }
+
+    /**
+     * The two refusals stay apart all the way to the screen.
+     *
+     * They are the reason this returns four things instead of a boolean: one is fixed on this
+     * phone (forget the PC and pair it again, against a build that speaks §2.18), the other on the
+     * PC (a switch the person holding the phone may not be standing next to). "Input unavailable"
+     * sends every one of those users to the wrong place.
+     */
+    @Test
+    fun `an unencrypted session says so, rather than saying unavailable`() {
+        assertEquals(
+            PcLinkRemotePolicy.InputRow.NOT_ENCRYPTED,
+            PcLinkRemotePolicy.inputRow(notEncrypted)
+        )
+    }
+
+    @Test
+    fun `a switch left off on the PC says that instead`() {
+        assertEquals(
+            PcLinkRemotePolicy.InputRow.OPERATOR_OFF,
+            PcLinkRemotePolicy.inputRow(operatorOff)
+        )
+    }
+
+    /** Control needs both halves: the user asking for it and the PC still allowing it. */
+    @Test
+    fun `control holds only while the user wants it and the PC allows it`() {
+        assertTrue(PcLinkRemotePolicy.controlHolds(userWantsControl = true, availability = inputLive))
+        assertFalse(PcLinkRemotePolicy.controlHolds(userWantsControl = false, availability = inputLive))
+    }
+
+    /**
+     * The PC withdrawing permission mid-session takes control away, which is what runs the release
+     * of whatever is held down.
+     *
+     * §2.19.1 has the server repeat `input` on every `config` while input is live, so the field
+     * going missing is a real event and not a gap in a message — and §2.19.5 only makes the server
+     * let go when a *session* ends, which this is not. If the phone did not notice, a Ctrl held at
+     * the moment the operator flipped the switch would stay down until the PC rebooted.
+     */
+    @Test
+    fun `permission withdrawn mid-session drops control`() {
+        assertFalse(PcLinkRemotePolicy.controlHolds(userWantsControl = true, availability = operatorOff))
+        assertFalse(PcLinkRemotePolicy.controlHolds(userWantsControl = true, availability = null))
     }
 }

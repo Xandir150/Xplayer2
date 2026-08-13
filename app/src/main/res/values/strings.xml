@@ -174,6 +174,19 @@
     <string name="pclink_recenter">Re-centre the screen</string>
     <string name="pclink_remote_surface_hint">Drag up or down for volume\nLong-press to re-centre</string>
 
+    <!-- Driving the PC's mouse and keyboard. Both refusals name where the fix is: neither of them
+         can be fixed from this phone, and "unavailable" would send the user looking here. -->
+    <string name="pclink_section_input">Control the PC</string>
+    <string name="pclink_input_control">Mouse and keyboard</string>
+    <string name="pclink_input_absolute">Pad is the screen</string>
+    <string name="pclink_input_keyboard">Type on the PC</string>
+    <string name="pclink_input_hint_ready">Drag to move, tap to click, two fingers to scroll</string>
+    <string name="pclink_input_hint_absolute">Tap a spot on the pad to send the cursor there</string>
+    <string name="pclink_input_hint_captured">Mouse captured — Back releases it</string>
+    <string name="pclink_input_hint_not_encrypted">This connection isn\'t encrypted, so control is off. Forget this PC and pair it again.</string>
+    <string name="pclink_input_hint_operator_off">Turn on \"allow this phone to control me\" on the PC.</string>
+    <string name="pclink_input_surface_hint">Drag to move · tap to click\nTwo fingers to scroll</string>
+
     <!-- PC Link pairing: the 6-digit comparison code (SAS) and the states around it -->
     <string name="pclink_pair_title">Pair with \"%1$s\"?</string>
     <string name="pclink_pair_body">Make sure your PC shows the same code:</string>

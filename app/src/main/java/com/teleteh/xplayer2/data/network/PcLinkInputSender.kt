@@ -35,9 +35,13 @@ class PcLinkInputSender(
     /** What the server said it will act on (`config.input`, §2.19.1). Modes it did not offer are dropped here rather than sent and ignored. */
     private val offer: PcInputOffer,
     /**
-     * Asks the control writer to flush now rather than at its next tick. Called for events whose
-     * timing carries meaning; motion deliberately does not wake anything, because its whole point
-     * is to ride the next frame with everything else sampled alongside it.
+     * Nudges the control writer, which sleeps for a fifth of a second when nothing is happening.
+     *
+     * Called for *every* kind of event, including motion, and that is not a contradiction of the
+     * coalescing: the writer ignores nudges while it is already running at frame rate, so this only
+     * ever ends an idle sleep. Without it the first sample of a gesture would wait out that sleep
+     * and the drag would begin with a jump; with it, the writer wakes on the first sample and the
+     * rest of the gesture rides the frame cadence and coalesces normally.
      */
     private val wake: () -> Unit = {}
 ) {
@@ -89,6 +93,7 @@ class PcLinkInputSender(
                 }
             }
         }
+        wake()
     }
 
     /**
@@ -117,6 +122,7 @@ class PcLinkInputSender(
                 }
             }
         }
+        wake()
     }
 
     /** A button press or release. `0` left, `1` right, `2` middle. */

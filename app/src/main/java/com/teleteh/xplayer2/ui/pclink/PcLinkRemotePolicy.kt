@@ -1,5 +1,7 @@
 package com.teleteh.xplayer2.ui.pclink
 
+import com.teleteh.xplayer2.data.network.PcInputAvailability
+import com.teleteh.xplayer2.data.network.PcInputUnavailable
 import com.teleteh.xplayer2.player.PcLinkSession
 
 /**
@@ -104,4 +106,53 @@ object PcLinkRemotePolicy {
         remoteStarted -> RepairLauncher.REMOTE
         else -> RepairLauncher.NOBODY
     }
+
+    /** What the "control the PC" section of the remote shows for a given session. */
+    enum class InputRow {
+        /** Nothing at all: there is no session yet, or nothing useful to say about one. */
+        HIDDEN,
+
+        /** The PC is accepting input — offer the switch. */
+        READY,
+
+        /** Refused because this session is not encrypted. The fix is on this phone: re-pair. */
+        NOT_ENCRYPTED,
+
+        /** Refused because the PC's operator has not turned input on. The fix is on the PC. */
+        OPERATOR_OFF
+    }
+
+    /**
+     * What to show where the input switch goes.
+     *
+     * The two refusals are the whole reason this returns four things instead of a boolean.
+     * "Input unavailable" is a dead end for a user: there is nothing on this screen that fixes it,
+     * and nothing that says where the fix is. [NOT_ENCRYPTED] and [OPERATOR_OFF] are genuinely
+     * different problems with different owners — one is answered by re-pairing this phone against a
+     * PC that speaks §2.18, the other by a switch on the PC that the person holding the phone may
+     * not even be standing next to — and telling them apart is the entire help this screen can give.
+     *
+     * Hidden until the first `config` arrives ([availability] null) rather than showing a refusal:
+     * during the handshake there is no answer yet, and a "not encrypted" that appears for a second
+     * and then turns into a working switch teaches the user to distrust the message.
+     */
+    fun inputRow(availability: PcInputAvailability?): InputRow = when (availability) {
+        null -> InputRow.HIDDEN
+        is PcInputAvailability.Live -> InputRow.READY
+        is PcInputAvailability.Off -> when (availability.reason) {
+            PcInputUnavailable.NOT_ENCRYPTED -> InputRow.NOT_ENCRYPTED
+            PcInputUnavailable.OPERATOR_OFF -> InputRow.OPERATOR_OFF
+        }
+    }
+
+    /**
+     * Whether the remote may keep driving the PC right now.
+     *
+     * Control is switched on by the user but revoked by the world: the PC's operator can flip input
+     * off, the link can drop, the session can end. Every one of those has to put the pad back to
+     * being a volume slider rather than leaving it sending into nothing — and, more importantly,
+     * has to run the release of whatever is still held down.
+     */
+    fun controlHolds(userWantsControl: Boolean, availability: PcInputAvailability?): Boolean =
+        userWantsControl && availability is PcInputAvailability.Live
 }

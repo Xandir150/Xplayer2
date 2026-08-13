@@ -1520,6 +1520,9 @@ class PcLinkClient(
      */
     private suspend fun writeControl(output: OutputStream) {
         var nextPingAt = nowMs() + PING_INTERVAL_MS
+        // While this is in the future the loop runs at frame rate and stops listening for wakes —
+        // see the tick at the bottom for why both halves are needed.
+        var inputActiveUntil = 0L
         while (currentCoroutineContext().isActive) {
             pendingPong?.let { t ->
                 pendingPong = null
@@ -1564,6 +1567,7 @@ class PcLinkClient(
                 while (true) {
                     val batch = sender.drain() ?: break
                     writeLine(output, PcLinkInputProtocol.inputLine(batch))
+                    inputActiveUntil = nowMs() + INPUT_ACTIVE_MS
                 }
             }
             if (nowMs() >= nextPingAt) {
@@ -1574,13 +1578,24 @@ class PcLinkClient(
             if (nowMs() - lastRxMs > LIVENESS_TIMEOUT_MS && unansweredPings >= 2) {
                 throw IOException("server stopped responding")
             }
-            // Idle sessions keep the old fifth-of-a-second tick — there is nothing to say more
-            // often, and waking sixty times a second to discover that costs a phone battery. A
-            // session with a pointer in flight ticks at frame rate instead, and anything whose
-            // *timing* is its meaning (a click, a keystroke) does not wait for either: it wakes the
-            // loop on arrival.
-            val tick = if (sender != null && sender.hasPending()) INPUT_TICK_MS else WRITER_TICK_MS
-            withTimeoutOrNull(tick) { writerWake.receive() }
+            // Two cadences, and the switch between them is what makes §2.19.5 work.
+            //
+            // **Idle** — the old fifth-of-a-second sleep, interrupted by a wake. There is nothing to
+            // say more often, and waking sixty times a second to discover that costs a phone
+            // battery. The wake is what keeps the *first* event of a gesture from waiting out the
+            // 200 ms: without it a drag would start with a fifth of a second of nothing and then a
+            // jump, which reads as a broken touchpad.
+            //
+            // **Active** — a frame at a time, deliberately *not* listening for wakes. This is the
+            // coalescing: every sample taken during the frame is summed into one message rather
+            // than each one dragging the loop awake and sealing an envelope of its own. It holds
+            // for a moment past the last thing sent so that a gesture is not re-entered through the
+            // idle path between two of its own samples.
+            if (nowMs() < inputActiveUntil) {
+                delay(INPUT_TICK_MS)
+            } else {
+                withTimeoutOrNull(WRITER_TICK_MS) { writerWake.receive() }
+            }
         }
     }
 
@@ -1753,6 +1768,15 @@ class PcLinkClient(
          * exactly §2.19.5's coalescing interval.
          */
         private const val INPUT_TICK_MS = 16L
+
+        /**
+         * How long after the last `input` the writer keeps ticking at frame rate.
+         *
+         * Long enough to cover the gap between two samples of one gesture — including the pause
+         * while a finger is lifted and put back down — and short enough that a session nobody is
+         * touching goes back to sleep within a blink.
+         */
+        private const val INPUT_ACTIVE_MS = 400L
         private const val READ_BUFFER = 8 * 1024
         private const val VIDEO_READ_BUFFER = 128 * 1024
 

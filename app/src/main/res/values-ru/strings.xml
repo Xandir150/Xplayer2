@@ -152,6 +152,19 @@
     <string name="pclink_recenter">Отцентрировать экран</string>
     <string name="pclink_remote_surface_hint">Проведите вверх или вниз — громкость\nДолгое нажатие — отцентрировать</string>
 
+    <!-- Управление мышью и клавиатурой компьютера. Оба отказа говорят, где чинить: с телефона не
+         чинится ни один, а «недоступно» отправило бы искать причину здесь. -->
+    <string name="pclink_section_input">Управление компьютером</string>
+    <string name="pclink_input_control">Мышь и клавиатура</string>
+    <string name="pclink_input_absolute">Панель — это экран</string>
+    <string name="pclink_input_keyboard">Печатать на компьютере</string>
+    <string name="pclink_input_hint_ready">Ведите — курсор, касание — щелчок, два пальца — прокрутка</string>
+    <string name="pclink_input_hint_absolute">Коснитесь точки на панели — курсор встанет туда</string>
+    <string name="pclink_input_hint_captured">Мышь захвачена — «Назад» отпускает</string>
+    <string name="pclink_input_hint_not_encrypted">Соединение без шифрования, управление выключено. Забудьте этот ПК и подключите заново.</string>
+    <string name="pclink_input_hint_operator_off">Включите на компьютере «разрешить этому телефону управлять».</string>
+    <string name="pclink_input_surface_hint">Ведите — курсор · касание — щелчок\nДва пальца — прокрутка</string>
+
     <!-- Сопряжение PC Link: код из 6 цифр и всё вокруг него -->
     <string name="pclink_pair_title">Подключить «%1$s»?</string>
     <string name="pclink_pair_body">Убедитесь, что на компьютере показан такой же код:</string>

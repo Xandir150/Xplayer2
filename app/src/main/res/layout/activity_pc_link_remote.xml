@@ -267,6 +267,149 @@
                         android:textColor="@color/rc_secondary"
                         android:textSize="12sp" />
 
+                    <!-- Driving the PC's mouse and keyboard (protocol.md 2.19). The whole block is
+                         gone unless the session has an answer about input, and the answer is not
+                         always yes: input rides only inside the sealed control channel, and the
+                         PC's operator has a switch of their own. Both refusals name where the fix
+                         is, because neither of them can be fixed from here. -->
+                    <LinearLayout
+                        android:id="@+id/boxInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="12dp"
+                            android:layout_marginBottom="10dp"
+                            android:background="@color/rc_outline" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="6dp"
+                            android:text="@string/pclink_section_input"
+                            android:textAppearance="@style/TextAppearance.XPlayer.Section" />
+
+                        <!-- Same shape as the audio row above: the row is the tap target and the
+                             switch inside it is only the affordance, never clickable on its own. -->
+                        <LinearLayout
+                            android:id="@+id/btnInputControl"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingStart="18dp"
+                            android:paddingEnd="12dp"
+                            android:background="@drawable/rc_row_background"
+                            android:clickable="true"
+                            android:focusable="true">
+
+                            <ImageView
+                                android:id="@+id/ivInputControl"
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:importantForAccessibility="no"
+                                app:tint="?attr/colorPrimary"
+                                android:src="@drawable/ic_pclink_24" />
+
+                            <TextView
+                                android:id="@+id/tvInputControl"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="14dp"
+                                android:maxLines="1"
+                                android:ellipsize="end"
+                                android:textColor="@color/rc_on_surface"
+                                android:textSize="15sp"
+                                android:text="@string/pclink_input_control" />
+
+                            <com.google.android.material.materialswitch.MaterialSwitch
+                                android:id="@+id/swInputControl"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:clickable="false"
+                                android:focusable="false"
+                                android:importantForAccessibility="no"
+                                android:text=""
+                                android:textOn=""
+                                android:textOff=""
+                                app:showText="false" />
+                        </LinearLayout>
+
+                        <!-- Only while control is on: the pad stops being a relative touchpad and
+                             becomes the desktop itself, aspect-corrected, so a tap in its corner
+                             puts the cursor in the matching corner of the PC. -->
+                        <LinearLayout
+                            android:id="@+id/btnInputAbsolute"
+                            android:layout_width="match_parent"
+                            android:layout_height="52dp"
+                            android:layout_marginTop="6dp"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:paddingStart="18dp"
+                            android:paddingEnd="12dp"
+                            android:background="@drawable/rc_row_background"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:visibility="gone">
+
+                            <ImageView
+                                android:layout_width="24dp"
+                                android:layout_height="24dp"
+                                android:importantForAccessibility="no"
+                                app:tint="?attr/colorPrimary"
+                                android:src="@drawable/ic_recenter_24" />
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginStart="14dp"
+                                android:maxLines="1"
+                                android:ellipsize="end"
+                                android:textColor="@color/rc_on_surface"
+                                android:textSize="15sp"
+                                android:text="@string/pclink_input_absolute" />
+
+                            <com.google.android.material.materialswitch.MaterialSwitch
+                                android:id="@+id/swInputAbsolute"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:clickable="false"
+                                android:focusable="false"
+                                android:importantForAccessibility="no"
+                                android:text=""
+                                android:textOn=""
+                                android:textOff=""
+                                app:showText="false" />
+                        </LinearLayout>
+
+                        <!-- The IME path (2.19.4's "s"): the only way to type a character no key
+                             position produces. Hidden until control is on, because a keyboard that
+                             types into nothing is worse than no keyboard. -->
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnInputKeyboard"
+                            style="@style/Widget.XPlayer.RemoteRow"
+                            android:layout_width="match_parent"
+                            android:layout_height="44dp"
+                            android:layout_marginTop="6dp"
+                            android:text="@string/pclink_input_keyboard"
+                            android:visibility="gone"
+                            app:icon="@drawable/ic_pclink_24" />
+
+                        <TextView
+                            android:id="@+id/tvInputHint"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:textColor="@color/rc_secondary"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
                     <View
                         android:layout_width="match_parent"
                         android:layout_height="1dp"

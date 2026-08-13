@@ -47,7 +47,17 @@ class PcLinkRemoteLayoutTest {
             R.id.rowDetails,
             R.id.surface,
             R.id.chipFps,
-            R.id.chipBitrate
+            R.id.chipBitrate,
+            // Driving the PC's mouse and keyboard (protocol.md 2.19). The whole block starts GONE
+            // and only appears once the PC has answered about input, so nothing on screen would
+            // ever reveal a missing id here until someone with input enabled opened this screen.
+            R.id.boxInput,
+            R.id.btnInputControl,
+            R.id.swInputControl,
+            R.id.btnInputAbsolute,
+            R.id.swInputAbsolute,
+            R.id.btnInputKeyboard,
+            R.id.tvInputHint
         )) {
             assertNotNull(
                 "activity_pc_link_remote is missing a view PcLinkRemoteActivity binds",

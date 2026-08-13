@@ -72,7 +72,16 @@ object PcLinkSession {
         /** True while the PC's sound is being played here rather than on the PC itself. */
         val audioToGlasses: Boolean,
         /** True when there is sound to route at all — an older server sends none. */
-        val audioAvailable: Boolean
+        val audioAvailable: Boolean,
+        /**
+         * Whether this phone may drive the PC's mouse and keyboard, and when it may not, which of
+         * the two reasons applies (`protocol.md` §2.19.1). Null before the server's first `config`.
+         *
+         * Carried in the stats rather than fetched separately because the remote already samples
+         * these once a second and the answer changes about that often: the operator's switch on the
+         * PC can flip mid-session, and the row that offers control has to follow it.
+         */
+        val input: com.teleteh.xplayer2.data.network.PcInputAvailability? = null
     )
 
     /**
@@ -100,6 +109,17 @@ object PcLinkSession {
          * button *and* as a long-press anywhere on its surface.
          */
         fun recenterPcLink()
+
+        /**
+         * The input path of this host's session, or null when it has none (`protocol.md` §2.19).
+         *
+         * Handed out rather than wrapped in verbs the way audio and re-centre are, because the
+         * traffic is nothing like theirs: a drag is sixty batches a second, each one a handful of
+         * coalesced samples, and routing every one of them through a registry lookup and a
+         * main-thread hop would cost more than the gesture. The caller holds it for the length of a
+         * gesture and asks again for the next one — a session that ends in between answers null.
+         */
+        fun pcLinkInput(): com.teleteh.xplayer2.data.network.PcLinkInputSender? = null
     }
 
     private val hosts = ArrayList<Host>()
@@ -137,6 +157,15 @@ object PcLinkSession {
     fun recenter() {
         liveHost()?.first?.recenterPcLink()
     }
+
+    /**
+     * The live session's input path, or null when there is no session or the PC has not granted
+     * input (§2.19.1).
+     *
+     * Null is the normal answer and the only gate a caller needs: there is nothing to check before
+     * asking, and nothing that can be sent once it answers null.
+     */
+    fun input(): com.teleteh.xplayer2.data.network.PcLinkInputSender? = liveHost()?.first?.pcLinkInput()
 
     private fun liveHost(): Pair<Host, Stats>? {
         for (i in hosts.indices.reversed()) {

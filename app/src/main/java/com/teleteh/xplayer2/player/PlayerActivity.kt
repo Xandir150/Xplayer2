@@ -88,6 +88,7 @@ import com.teleteh.xplayer2.data.network.PairingFailure
 import com.teleteh.xplayer2.data.network.PcAudioFormat
 import com.teleteh.xplayer2.data.network.PcLinkAuth
 import com.teleteh.xplayer2.data.network.PcLinkClient
+import com.teleteh.xplayer2.data.network.PcLinkInputSender
 import com.teleteh.xplayer2.data.network.PcLinkPairingStore
 import com.teleteh.xplayer2.data.network.PcLinkState
 import com.teleteh.xplayer2.data.network.PcLinkStreamConfig
@@ -3820,8 +3821,24 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             audioDropouts = (buffer?.underruns ?: 0L) + (audio?.platformUnderruns?.toLong() ?: 0L),
             audioSkewMs = if (videoPts > 0L && audioPts > 0L) (videoPts - audioPts) / 1000L else null,
             audioToGlasses = !pcAudioMuted,
-            audioAvailable = pcHasSoundToRoute()
+            audioAvailable = pcHasSoundToRoute(),
+            // The client's own answer, not a remembered one: `config.input` is a standing statement
+            // the PC repeats and can retract mid-session (§2.19.1), so this has to be read fresh
+            // like every other field here.
+            input = client?.inputAvailability
         )
+    }
+
+    /**
+     * The input path of this session (§2.19), or null when the PC has not granted input.
+     *
+     * A bare pass-through — the negotiation, the encryption gate and the "not before the video
+     * connection" rule all live in [PcLinkClient], which is the only place that knows the answers.
+     * Nothing here may add a condition of its own: a second gate is a second thing to get wrong.
+     */
+    override fun pcLinkInput(): PcLinkInputSender? {
+        if (!isPcLinkMode) return null
+        return pcLinkClient?.input
     }
 
     /**

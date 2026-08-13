@@ -119,7 +119,7 @@ class PcLinkInputVectorsTest {
     fun `text escaping matches the reference encoder`() {
         assertEquals(
             "{\"type\":\"input\",\"ev\":[{\"t\":\"s\",\"s\":\"a\\\"b\\\\c\\nd\\te\\u0001f/g\"}]}\n",
-            PcLinkInputProtocol.inputLine(listOf(PcInputEvent.Text("a\"b\\c\nd\tef/g")))
+            PcLinkInputProtocol.inputLine(listOf(PcInputEvent.Text("a\"b\\c\nd\te\u0001f/g")))
         )
     }
 
