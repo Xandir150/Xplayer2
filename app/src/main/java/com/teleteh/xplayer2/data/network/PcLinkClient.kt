@@ -13,7 +13,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
@@ -132,7 +134,20 @@ data class PcLinkStreamConfig(
      * either because it can't, because the user muted it on either end, or because it predates
      * audio entirely. Null must behave exactly like the pre-audio client did.
      */
-    val audio: PcAudioFormat? = null
+    val audio: PcAudioFormat? = null,
+    /**
+     * Input passthrough on this session (§2.19.1), or null for "send none".
+     *
+     * The authoritative half of the negotiation, and null is by far the common answer: a server
+     * includes it **iff** its operator enabled input *and* the session negotiated `encryption` ≥ 2,
+     * so every plaintext session, every session with the switch off and every server built before
+     * §2.19 leaves it out. Presence is the only cue this client has to enable its input UI.
+     *
+     * Repeated on every `config` while input is live, so a stereo switch or a mute does not
+     * silently retract it — which also means its *disappearance* from a later `config` is the
+     * operator switching input off, and is acted on as such.
+     */
+    val input: PcInputOffer? = null
 ) {
     val isSbs: Boolean get() = stereo == PcLinkProtocol.STEREO_SBS
 }
@@ -282,7 +297,18 @@ object PcLinkProtocol {
          * a server "this client predates audio" — so it is the one knob that keeps the stream
          * byte-identical to the pre-audio wire.
          */
-        audio: PcAudioCapability? = null
+        audio: PcAudioCapability? = null,
+        /**
+         * What this phone could drive the PC with (§2.19.1) — an advisory hint, on by default
+         * because every Android phone qualifies: the remote's touchpad view is a pointer with no
+         * mouse plugged in, and the IME is the text path with no keyboard.
+         *
+         * It rides the plaintext handshake, so it authorizes nothing and cannot: input is granted
+         * only by `config.input`, which a server sends only on an encrypted session. What it buys
+         * is the PC's UI being able to offer its "let this phone control me" switch at all, which
+         * it cannot do for a phone that never said it had anything to drive with.
+         */
+        input: PcInputOffer? = PcLinkInputProtocol.CLIENT_OFFER
     ): String {
         val arr = JSONArray()
         for (c in codecs) {
@@ -309,6 +335,7 @@ object PcLinkProtocol {
                     .put("channels", audio.channels)
             )
         }
+        if (input != null) obj.put("input", input.toJson())
         return obj.toString() + "\n"
     }
 
@@ -409,7 +436,11 @@ object PcLinkProtocol {
             canvasAngularWidthDeg = canvasWidthDeg,
             canvasDistanceM = canvasDistanceM,
             videoToken = token,
-            audio = parseAudioFormat(obj.optJSONObject("audio"))
+            audio = parseAudioFormat(obj.optJSONObject("audio")),
+            // Absent is the default and means "no input" — never an error, and never a reason to
+            // refuse the `config` that carries the picture (§2.19.1, and the same reasoning as
+            // `audio`: a capability that fails to negotiate must not take the desktop down).
+            input = PcInputOffer.parse(obj.optJSONObject("input"))
         )
     }
 
@@ -925,6 +956,50 @@ class PcLinkClient(
     // unregistered: an AudioDeviceCallback outlives the session that wanted it otherwise.
     private var audioRouteWatcher: android.media.AudioDeviceCallback? = null
 
+    /**
+     * The §2.19 input path for the session in flight. Kept even after input is retracted, because
+     * the releases it owes the PC still have to be written; [input] is what callers may use.
+     */
+    @Volatile
+    private var inputSender: PcLinkInputSender? = null
+
+    /**
+     * Whether [inputSender] may still be *fed*. Goes true when the server grants input and the
+     * video connection is up, false the moment either stops being true.
+     */
+    @Volatile
+    private var inputLive = false
+
+    /**
+     * The input path, or null when this session has none — which is how every caller asks "may I
+     * send input?", so there is no separate flag for anyone to keep in step with it.
+     *
+     * Non-null **only** once the server has granted input (`config.input`) *and* the video
+     * connection is up. Both halves matter: the first is the negotiation, and the second is
+     * §2.19's timing rule — an `input` arriving between `config` and the video connection is
+     * dropped by the server, so a sender that started early would spend its first gestures on
+     * nothing and look broken exactly when the user first tries it.
+     */
+    val input: PcLinkInputSender? get() = if (inputLive) inputSender else null
+
+    /**
+     * Whether input is live on this session and, when it is not, which of the two reasons applies —
+     * for a UI that has to tell the user something they can act on. Null before the first `config`.
+     */
+    @Volatile
+    var inputAvailability: PcInputAvailability? = null
+        private set
+
+    /**
+     * Wakes the control writer between its ticks.
+     *
+     * Conflated, because it carries no information beyond "there is something to send": five
+     * keystrokes queued in one tick still mean one flush. Without it a click would wait out
+     * [WRITER_TICK_MS] — a fifth of a second of nothing happening after a tap, which reads as a
+     * broken button rather than as latency.
+     */
+    private val writerWake = Channel<Unit>(Channel.CONFLATED)
+
     /** Starts the session loop in [scope]. Call once. */
     fun connect(scope: CoroutineScope): Job {
         val started = scope.launch(Dispatchers.IO) { runSessions() }
@@ -1128,6 +1203,12 @@ class PcLinkClient(
         audioEnabledSent = null
         audioFormat = null
         audioReofferPending = false
+        // A new session grants nothing until its own `config` says so, and whatever the previous
+        // one was holding down died with it — the server released it on its own teardown.
+        inputLive = false
+        inputSender?.discard()
+        inputSender = null
+        inputAvailability = null
         unansweredPings = 0
         lastRxMs = nowMs()
         link = PcLinkSessionLink(PeerRole.CLIENT)
@@ -1184,6 +1265,9 @@ class PcLinkClient(
             video.getOutputStream().apply { write(preamble); flush() }
 
             lastRxMs = nowMs()
+            // Only now, with the video connection made: §2.19 has the server drop any `input` that
+            // arrives before it, so this is the first moment a gesture would actually land.
+            applyInputOffer(config.input)
             emitState(PcLinkState.Streaming(config))
 
             // Any child ending (EOF throws) cancels the siblings and unwinds the session.
@@ -1373,6 +1457,11 @@ class PcLinkClient(
                         unansweredPings = 0
                     }
                     is PcControlMessage.Config -> {
+                        // §2.19.1 makes the server repeat `input` on every `config` while input is
+                        // live, so this is a standing answer and not just the first one: the field
+                        // going missing is the operator switching input off, and is acted on here
+                        // rather than left to be discovered by gestures that quietly do nothing.
+                        applyInputOffer(msg.config.input)
                         // A format change mid-session: the server keeps our video connection and
                         // follows this with a codec-config frame, so we only re-arm the decoder.
                         // A `config` that differs ONLY in `audio` is the mute ack (§2.16) and must
@@ -1395,9 +1484,39 @@ class PcLinkClient(
     }
 
     /**
+     * Applies the server's standing answer about input (§2.19.1) — `config.input` present or not.
+     *
+     * Three transitions, and the last is the one that matters:
+     *
+     * * **granted** — build the sender and let the UI in. The offer is what it will act on, so a
+     *   server that grants pointer but not keys gets no key events rather than ignored ones.
+     * * **still granted** — nothing to do; a `config` repeating `input` is a stereo switch or a
+     *   mute, not an input change, and rebuilding the sender would drop what it is holding.
+     * * **retracted** — the operator switched input off. Stop feeding it *and* release everything
+     *   still down. §2.19.5 only makes the receiver release on the death of a session, and this
+     *   session is not dying; without this, a Ctrl held at the moment the switch flipped stays down
+     *   on that desktop for as long as the PC is up.
+     */
+    private fun applyInputOffer(offer: PcInputOffer?) {
+        inputAvailability = PcInputAvailability.of(offer, link.isEncrypted)
+        if (offer == null) {
+            if (inputLive) {
+                inputLive = false
+                inputSender?.releaseAll()
+                writerWake.trySend(Unit)
+            }
+            return
+        }
+        if (inputSender == null) {
+            inputSender = PcLinkInputSender(offer) { writerWake.trySend(Unit) }
+        }
+        inputLive = true
+    }
+
+    /**
      * Keep-alive + outbound requests. Pings every [PING_INTERVAL_MS], answers the peer's pings,
-     * flushes IDR requests, and declares the peer dead per §2.5 (no traffic for
-     * [LIVENESS_TIMEOUT_MS] with at least two unanswered pings).
+     * flushes IDR requests, drains input (§2.19.5), and declares the peer dead per §2.5 (no traffic
+     * for [LIVENESS_TIMEOUT_MS] with at least two unanswered pings).
      */
     private suspend fun writeControl(output: OutputStream) {
         var nextPingAt = nowMs() + PING_INTERVAL_MS
@@ -1437,6 +1556,16 @@ class PcLinkClient(
                     writeLine(output, PcLinkProtocol.setAudioLine(want))
                 }
             }
+            // §2.19.5: at most one `input` per rendered frame, everything sampled in the interval
+            // in one message. The batching lives in the sender; all this has to do is take what it
+            // has, and keep taking while a burst is still splitting across the 512-event cap.
+            val sender = inputSender
+            if (sender != null) {
+                while (true) {
+                    val batch = sender.drain() ?: break
+                    writeLine(output, PcLinkInputProtocol.inputLine(batch))
+                }
+            }
             if (nowMs() >= nextPingAt) {
                 nextPingAt = nowMs() + PING_INTERVAL_MS
                 unansweredPings++
@@ -1445,7 +1574,13 @@ class PcLinkClient(
             if (nowMs() - lastRxMs > LIVENESS_TIMEOUT_MS && unansweredPings >= 2) {
                 throw IOException("server stopped responding")
             }
-            delay(WRITER_TICK_MS)
+            // Idle sessions keep the old fifth-of-a-second tick — there is nothing to say more
+            // often, and waking sixty times a second to discover that costs a phone battery. A
+            // session with a pointer in flight ticks at frame rate instead, and anything whose
+            // *timing* is its meaning (a click, a keystroke) does not wait for either: it wakes the
+            // loop on arrival.
+            val tick = if (sender != null && sender.hasPending()) INPUT_TICK_MS else WRITER_TICK_MS
+            withTimeoutOrNull(tick) { writerWake.receive() }
         }
     }
 
@@ -1612,6 +1747,12 @@ class PcLinkClient(
         private const val CONTROL_READ_TIMEOUT_MS = 1000
         private const val VIDEO_READ_TIMEOUT_MS = 1000
         private const val WRITER_TICK_MS = 200L
+
+        /**
+         * The writer's tick while pointer motion is in flight — one rendered frame, which is
+         * exactly §2.19.5's coalescing interval.
+         */
+        private const val INPUT_TICK_MS = 16L
         private const val READ_BUFFER = 8 * 1024
         private const val VIDEO_READ_BUFFER = 128 * 1024
 
