@@ -1951,6 +1951,10 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         presentationDisplayId = ext.displayId
         try {
             pres.show()
+            // A panel this cast has had: losing it later is an ending, and one the user can see
+            // the cause of. (The reconcile records the same fact, but a presentation can be raised
+            // from the lifecycle without one having run.)
+            pcLinkSawPanel = true
             
             // Clear main surface - video will render on Presentation
             player?.clearVideoSurface()
@@ -2025,7 +2029,12 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             override fun onDisplayAdded(displayId: Int) = scheduleExternalReconcile()
             override fun onDisplayRemoved(displayId: Int) = scheduleExternalReconcile()
             override fun onDisplayChanged(displayId: Int) {
-                if (displayId != Display.DEFAULT_DISPLAY) scheduleExternalReconcile()
+                // The phone's own display changes for reasons that are none of our business
+                // (rotation, refresh rate, the screen going to sleep) — except during a cast, when
+                // display 0 may BE the glasses: a device whose only screen is the headset switches
+                // 2D↔3D by changing the shape of display 0 and raises no external-display event at
+                // all. The reconcile is debounced and, with a pair attached, ends nothing.
+                if (displayId != Display.DEFAULT_DISPLAY || isPcLinkMode) scheduleExternalReconcile()
             }
         }
         dm.registerDisplayListener(l, uiHandler)
@@ -2042,21 +2051,36 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
 
     /**
      * The one-shot a starting cast arms, because there is no event to wait for when the panel never
-     * comes up at all — see [ExternalPanelPolicy.ENTRY_GRACE_MS]. Same check, but it explains the
-     * ending, since from the user's side nothing happened for it to be the consequence of.
+     * comes up at all — see [ExternalPanelPolicy.ENTRY_GRACE_MS].
      */
-    private val pcLinkPanelGrace = Runnable { reconcileExternalDisplay(explainMissingPanel = true) }
+    private val pcLinkPanelGrace = Runnable {
+        pcLinkEntryGraceArmed = false
+        reconcileExternalDisplay()
+    }
+
+    /**
+     * Whether the starting cast's [pcLinkPanelGrace] is still pending.
+     *
+     * While it is, a reconcile that finds no panel keeps quiet rather than ending the session: the
+     * grace is the deadline, and the display events that fire in the meantime — glasses being
+     * plugged in, the panel re-enumerating, this window's own surface settling — used to cancel it
+     * and put the same verdict 1.2 s away instead of 8 s. A cast could therefore die three seconds
+     * in, silently (the explanation belonged to the timer, not to the answer), which reads exactly
+     * like a crash.
+     */
+    private var pcLinkEntryGraceArmed = false
+
+    /** An external panel has been up at some point during this cast — see [ExternalPanelPolicy]. */
+    private var pcLinkSawPanel = false
 
     // Coalesce the hot-plug burst: both add and remove reschedule the SAME check, so it never
     // gets starved by a trailing event and fires once the dust settles.
     private fun scheduleExternalReconcile() {
-        // A real display event answers the entry question too, and does it sooner.
-        uiHandler.removeCallbacks(pcLinkPanelGrace)
         uiHandler.removeCallbacks(externalReconcile)
         uiHandler.postDelayed(externalReconcile, ExternalPanelPolicy.RECONCILE_DEBOUNCE_MS)
     }
 
-    private fun reconcileExternalDisplay(explainMissingPanel: Boolean = false) {
+    private fun reconcileExternalDisplay() {
         // PC Link has no ExoPlayer, and this used to return here because of that — so switching
         // the glasses between 2D and 3D mid-cast, which tears the panel down and brings it back
         // at a different size, was never reconciled at all: the presentation was not rebuilt and
@@ -2067,6 +2091,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         val extAlive = ext != null &&
             (dm?.getDisplay(ext.displayId)?.state ?: Display.STATE_ON) != Display.STATE_OFF
         if (extAlive) {
+            pcLinkSawPanel = true
             // Panel present (e.g. glasses connected after starting on the phone): move the
             // picture to the goggles, push the saved mode and bring up the remote.
             val wasShowing = presentation != null
@@ -2083,22 +2108,42 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                 // the panel keeps its current mode and the picker reflects it.
                 showRemoteControlFront()
             }
-        } else if (ExternalPanelPolicy.shouldEndSession(
-                panelAlive = false, hasPresentation = presentation != null, isPcLink = isPcLinkMode
+            return
+        }
+        // No panel. During the entry grace that is not yet an answer — DisplayPort is still
+        // negotiating — and the deadline itself will ask.
+        if (pcLinkEntryGraceArmed) return
+        if (ExternalPanelPolicy.shouldEndSession(
+                panelAlive = false,
+                hasPresentation = presentation != null,
+                isPcLink = isPcLinkMode,
+                glassesAreOwnScreen = ExternalPanelPolicy.glassesAreTheOnlyScreen(
+                    glassesAttached = GlassesController.anyAttached(this),
+                    panelEverAlive = pcLinkSawPanel,
+                ),
             )
         ) {
-            onExternalPanelLost(explain = explainMissingPanel)
+            onExternalPanelLost()
+        } else if (isPcLinkMode) {
+            // Kept: the glasses are this device's own screen, so the picture is already on them
+            // and this window is not a fallback but the cast itself. Push the render config once
+            // — the panel's shape is the only thing that says whether the PC should send stereo,
+            // and on such a device nothing else will report it.
+            applyPcLinkRenderConfig()
         }
     }
 
     // Goggles came off (proximity sensor cut the panel) or the external display was unplugged:
     // just stop, as if the user hit Stop. The position is saved, so they pick the clip back up
     // from Recent when ready. Far simpler and more predictable than juggling player/remote layers.
-    private fun onExternalPanelLost(explain: Boolean = false) {
+    private fun onExternalPanelLost() {
         android.util.Log.i("XPlayer2", "External panel gone -> stop playback")
         // Nothing was ever on the glasses for the user to notice going away, so say what happened —
         // otherwise a cast that ends on its own a few seconds after it started reads as a crash.
-        if (explain) {
+        // Derived rather than passed in: the explanation belongs to the situation ("this cast never
+        // had a panel"), and hanging it off which callback fired meant the same ending was silent
+        // when a display event got there before the deadline.
+        if (isPcLinkMode && !pcLinkSawPanel) {
             Toast.makeText(this, R.string.pclink_needs_glasses_body, Toast.LENGTH_LONG).show()
         }
         saveProgress()
@@ -3278,6 +3323,10 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             ?.takeIf { it.isNotBlank() } ?: host
         pcLinkServerId = intent.getStringExtra(PcConnectActivity.EXTRA_PCLINK_SERVER_ID)
             ?.takeIf { it.isNotBlank() }
+        // Fresh session, fresh panel history: whether a panel ever came up is a fact about *this*
+        // cast, and it decides both whether losing it is an ending and whether that ending needs
+        // explaining. A presentation already on screen is a panel already seen.
+        pcLinkSawPanel = presentation != null
         // Not a media item: nothing to resume, nothing to put in Recents (saveProgress() bails on a
         // null sourceUri, which is exactly what we want).
         sourceUri = null
@@ -3317,6 +3366,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         // ran on with the desktop flattened into this window, the PC's speakers held, and no remote
         // (showRemoteControlFront makes none without a presentation).
         uiHandler.removeCallbacks(pcLinkPanelGrace)
+        pcLinkEntryGraceArmed = true
         uiHandler.postDelayed(pcLinkPanelGrace, ExternalPanelPolicy.ENTRY_GRACE_MS)
     }
 
@@ -3448,6 +3498,8 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         // reconcileExternalDisplay returns early once this is no longer PC Link mode — but a
         // pending "no panel, end it" against the next session is not something to leave lying.)
         uiHandler.removeCallbacks(pcLinkPanelGrace)
+        pcLinkEntryGraceArmed = false
+        pcLinkSawPanel = false
         // Leaving the mode is the user going somewhere else, so the PC is told rather than left to
         // work it out. Backgrounding (`disconnectPcLink()` on its own) is not: the session is
         // coming back, and re-muting it on the way out would only have to be undone.
