@@ -2074,10 +2074,9 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             if (isPcLinkMode) {
                 // The panel just changed shape (a 2D↔3D switch is a teardown and a re-add), so
                 // the renderer has to be told what it is looking at now — and the PC too, since
-                // its stereo decision follows the glasses.
+                // its stereo decision follows the glasses. Both happen inside this one call.
                 applyPcLinkRenderConfig()
                 updatePcLinkSurface()
-                pcLinkClient?.reportGlasses(glassesAreStereo())
             }
             if (presentation != null && !wasShowing) {
                 // No longer force a remembered glasses mode here (it sometimes restored the wrong one);
@@ -3345,16 +3344,30 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         // the user made before, or the PC would resume spending 1.5 Mbit/s on sound we discard.
         if (pcAudioMuted) client.setAudioEnabled(false)
         client.connect(lifecycleScope)
-        // Tell the PC what the glasses are showing, now and whenever it changes (protocol.md
-        // §2.16). The PC decides what to do with it — with its own setting on "follow the
-        // glasses", switching them into 3D is what turns its desktop into stereo.
-        acquiredGlasses?.setPlaybackListener { _, mode ->
-            val stereo = GlassesProtocol.is3DMode(mode)
-            pcLinkClient?.reportGlasses(stereo)
-            // The renderer needs the same fact the PC is being told. It used to be told only the
-            // PC, which is how a pair of glasses in 2D ended up showing two half-width copies of
-            // the desktop: the view divided the panel in two regardless of what the panel was.
-            runOnUiThread { presentation?.desktopView?.setPanelIsStereo(stereo) }
+        // Say what the glasses are showing straight away (protocol.md §2.16). The PC decides what
+        // to do with it — with its own setting on "follow the glasses", being told "3d" is what
+        // turns its desktop into stereo — and until it is told anything it keeps its default and
+        // sends mono. There was no report at all until a *change* was noticed, so the commonest
+        // case of the lot, glasses already in 3D before the cast started, got mono forever.
+        client.reportGlasses(glassesAreStereo())
+        // …and again whenever the glasses say their mode changed. Recomputed from the panel rather
+        // than taken from the event, because the event's mode is `lastReportedMode` — the last
+        // thing *we* commanded — which is right for XREAL and simply never moves for a brand the
+        // controller cannot read back. The measurement is brand-agnostic.
+        acquiredGlasses?.setPlaybackListener { _, _ ->
+            runOnUiThread {
+                // The hop off the glasses' thread outlives the session it was posted in: the
+                // listener is dropped on disconnect, but a callback already in flight is not, and
+                // pushing a PC Link render config onto a film's view would re-cut its picture.
+                if (!isPcLinkMode) return@runOnUiThread
+                // The renderer is handed the same fact in the same call, which is how a pair of
+                // glasses in 2D stopped showing two half-width copies of the desktop.
+                applyPcLinkRenderConfig()
+                // A mode switch tears the panel down and brings it back at a different size, so
+                // the shape read a moment ago is quite possibly the old one; take it again once
+                // the hot-plug burst settles.
+                scheduleExternalReconcile()
+            }
         }
         if (pcDebugView?.visibility == View.VISIBLE) startPcLinkDebugTicker()
     }
@@ -3491,6 +3504,44 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     }
 
     /**
+     * Whether the glasses' panel is currently the ultrawide side-by-side one — measured, in the
+     * order [StereoPanel] lays out, from whichever screen the picture is actually reaching the
+     * eyes through.
+     *
+     * Being wrong is expensive both ways: stereo for a flat panel puts two half-width desktops on
+     * it, flat for a stereo panel stretches one desktop across both eyes, which cannot be fused.
+     */
+    private fun glassesAreStereo(): Boolean = StereoPanel.isStereo(
+        // The panel we are drawing on is the authority, and it is measured, not remembered — see
+        // [StereoPanel] and `c4e62cd` for what asking the glasses over USB instead cost us.
+        externalPanel = measureDisplay(presentation?.display),
+        // …and where there is no external panel, this device's own screen may itself be the
+        // glasses (a TV box, a pocket PC in desktop mode). A phone's own screen answers "flat"
+        // here, which is exactly right: with the desktop flattened into this window there is no
+        // second eye to send.
+        ownScreen = measureDisplay(ownDisplay()),
+        remembered3d = acquiredGlasses?.let { GlassesProtocol.is3DMode(it.lastMode()) } ?: false,
+    )
+
+    /** [display]'s real pixel size, or null when there is no such display or it will not answer. */
+    private fun measureDisplay(display: Display?): StereoPanel.Size? = display?.let {
+        try {
+            val metrics = android.util.DisplayMetrics().also { m -> it.getRealMetrics(m) }
+            StereoPanel.Size(metrics.widthPixels, metrics.heightPixels)
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /** The display this activity's own window is on — the phone's screen, or the glasses. */
+    private fun ownDisplay(): Display? = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display
+        else @Suppress("DEPRECATION") windowManager.defaultDisplay
+    } catch (_: Throwable) {
+        null
+    }
+
+    /**
      * Pushes the server's `config` into whichever renderer is live:
      *
      * * glasses presentation → the world-fixed [VirtualDesktopGlView]: canvas geometry
@@ -3499,44 +3550,25 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
      *   full-screen picture, no OU→SBS conversion, no mono duplication, no auto-detection (which
      *   would read a 32:9 canvas as side-by-side content). The one thing honoured is the server
      *   saying its stream *is* already SBS.
-     */
-    /**
-     * Whether the glasses' panel is currently the ultrawide side-by-side one.
      *
-     * Falls back to the panel's own shape when no pair is attached over USB to ask — a display
-     * about twice as wide as it is tall is the SBS mode by construction, and a presentation
-     * hosted on anything else is flat. Guessing beats defaulting to stereo here: the cost of
-     * being wrong the stereo way is two half-width copies, which is unusable, while being wrong
-     * the flat way is merely a picture in one eye.
+     * …and, in the same breath, tells the PC what the glasses are showing (protocol.md §2.16).
+     * That belongs here because it is the same measurement the renderer is being handed, and this
+     * runs at every moment it can change: entering the mode, a `config` landing, a presentation
+     * created or dismissed, the panel reconciled after a hot-plug.
      */
-    private fun glassesAreStereo(): Boolean {
-        // The panel we are drawing on is the authority, and it is measured, not remembered.
-        //
-        // This asked the glasses over USB first, and that was wrong in a way that only shows up
-        // on someone else's setup: `lastMode()` is `lastReportedMode`, which starts at 2D and is
-        // only updated when *we* command a mode. Glasses already in 3D when the app started — or
-        // a brand with no read-back at all — therefore answered "2D" with total confidence, and a
-        // 3840-wide SBS panel got one desktop stretched across both eyes: an un-fusable double
-        // image. The `acquiredGlasses != null` branch also won almost always, since that field is
-        // set from a process-wide controller, so the measurement below was nearly unreachable.
-        //
-        // The USB answer is kept only for when there is no panel to measure, where a stale guess
-        // beats no answer.
-        presentation?.display?.let { display ->
-            val metrics = android.util.DisplayMetrics().also { display.getRealMetrics(it) }
-            return VirtualDesktopMath.panelIsStereo(metrics.widthPixels, metrics.heightPixels)
-        }
-        acquiredGlasses?.let { return GlassesProtocol.is3DMode(it.lastMode()) }
-        return false
-    }
-
     private fun applyPcLinkRenderConfig() {
+        val stereoPanel = glassesAreStereo()
+        // The PC is told the same fact, from the same measurement, at the same moment — this is
+        // the single place either side learns what the glasses are showing, so they cannot drift
+        // apart again. Cheap to repeat: the client sends `glasses` only when the answer changed
+        // (and once more after a reconnect, which starts with the server knowing nothing).
+        pcLinkClient?.reportGlasses(stereoPanel)
         presentation?.desktopView?.let { desktop ->
             pcLinkConfig?.let { c -> desktop.setCanvas(c.canvasAngularWidthDeg, c.canvasDistanceM) }
             desktop.setSourceIsSbs(pcLinkSourceIsSbs)
             // What the panel is, which is a different question from how the stream is packed:
             // glasses sitting in 2D are an ordinary flat display and must be drawn once.
-            desktop.setPanelIsStereo(glassesAreStereo())
+            desktop.setPanelIsStereo(stereoPanel)
             if (pcVideoWidth > 0 && pcVideoHeight > 0) {
                 desktop.setVideoSize(pcVideoWidth, pcVideoHeight)
             }
@@ -3547,7 +3579,6 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         // 1920x1080 external display — below `findUltraWideExternalDisplay`'s threshold, so no
         // presentation is made and this window is simply mirrored into them. Splitting it in two
         // there is what put a pair of half-width desktops on a flat panel.
-        val stereoPanel = glassesAreStereo()
         v.setSbsEnabled(pcLinkSourceIsSbs && stereoPanel)
         v.setSourceIsSbs(pcLinkSourceIsSbs)
         v.setDuplicateMonoToSbs(false)

@@ -50,4 +50,73 @@ class PanelShapeTest {
         assertFalse(VirtualDesktopMath.panelIsStereo(3840, 0))
         assertFalse(VirtualDesktopMath.panelIsStereo(0, 0))
     }
+
+    // --- Whose shape gets read: StereoPanel ------------------------------------------------------
+
+    private val sbsPanel = StereoPanel.Size(3840, 1080)
+    private val flatPanel = StereoPanel.Size(1920, 1080)
+    private val phoneScreen = StereoPanel.Size(2400, 1080)
+
+    @Test
+    fun `the external panel decides whenever there is one`() {
+        // The ordinary phone: the glasses are a second display and the phone's own screen has
+        // nothing to say about what they are showing.
+        assertTrue(
+            StereoPanel.isStereo(
+                externalPanel = sbsPanel, ownScreen = phoneScreen, remembered3d = false
+            )
+        )
+        assertFalse(
+            StereoPanel.isStereo(
+                externalPanel = flatPanel, ownScreen = sbsPanel, remembered3d = true
+            )
+        )
+    }
+
+    @Test
+    fun `with no external panel this device's own screen may itself be the glasses`() {
+        // A TV box or a pocket PC in desktop mode: switching the glasses to 3D changes the shape
+        // of the only display there is, and nothing else in the app will ever report it.
+        assertTrue(
+            StereoPanel.isStereo(externalPanel = null, ownScreen = sbsPanel, remembered3d = false)
+        )
+        assertFalse(
+            StereoPanel.isStereo(externalPanel = null, ownScreen = flatPanel, remembered3d = true)
+        )
+    }
+
+    @Test
+    fun `a phone answering for itself is flat`() {
+        // No panel, so the desktop is flattened into this window — there is no second eye to send,
+        // and the remembered mode must not talk the PC into stereo for a phone screen.
+        assertFalse(
+            StereoPanel.isStereo(externalPanel = null, ownScreen = phoneScreen, remembered3d = true)
+        )
+    }
+
+    @Test
+    fun `a measurement that failed is skipped, not believed`() {
+        // Zeros come back from a display that is going away; taking them at face value would
+        // answer "flat" for a stereo panel that is merely mid-handshake.
+        assertTrue(
+            StereoPanel.isStereo(
+                externalPanel = StereoPanel.Size(0, 0), ownScreen = sbsPanel, remembered3d = false
+            )
+        )
+        assertTrue(
+            StereoPanel.isStereo(
+                externalPanel = StereoPanel.Size(3840, 0),
+                ownScreen = null,
+                remembered3d = true
+            )
+        )
+    }
+
+    @Test
+    fun `the remembered mode is the last resort and only that`() {
+        // Nothing to measure at all — no panel, no readable screen. A stale guess beats no answer,
+        // but it never gets a say while anything can be measured (the cases above).
+        assertTrue(StereoPanel.isStereo(externalPanel = null, ownScreen = null, remembered3d = true))
+        assertFalse(StereoPanel.isStereo(externalPanel = null, ownScreen = null, remembered3d = false))
+    }
 }
