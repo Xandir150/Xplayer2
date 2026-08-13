@@ -35,12 +35,31 @@ data class PcLinkPairing(
     val ltk: ByteArray,
     val createdAt: String,
     val lastSeenAt: String,
-    val lastHost: String? = null
+    val lastHost: String? = null,
+    /**
+     * The `protocol.md` §2.18.7 pin: the highest control-channel encryption version a **completed**
+     * session with this PC ever selected. Absent from a record means 1 — every pairing made before
+     * either end spoke version 2 — so the field is additive and an old build round-trips it.
+     *
+     * Its job is to make stripping the negotiation worth nothing after the first clean connection:
+     * once this says 2, a selection of 1 from that PC is refused exactly like a failed server proof.
+     * The phone keeps its **own** copy rather than trusting the PC's, because the PC's can come back
+     * from a backup taken before it spoke v2 while the long-term key keeps working — and a phone
+     * with no pin of its own would have nothing left to refuse the stripped negotiation with.
+     *
+     * It resets only with the pairing itself: a deliberate re-pair or forget starts a fresh first
+     * contact, which is what lets a genuinely downgraded PC recover instead of being locked out.
+     */
+    val encryption: Int = PcLinkEnvelope.PLAINTEXT
 ) {
+    /** Whether this pairing may only run on a §2.18 encrypted control channel. */
+    val requiresEncryption: Boolean get() = encryption >= PcLinkEnvelope.AEAD
+
     // Byte-array field: the generated equals/hashCode would compare by identity.
     override fun equals(other: Any?): Boolean = other is PcLinkPairing &&
         serverId == other.serverId && name == other.name && ltk.contentEquals(other.ltk) &&
-        createdAt == other.createdAt && lastSeenAt == other.lastSeenAt && lastHost == other.lastHost
+        createdAt == other.createdAt && lastSeenAt == other.lastSeenAt &&
+        lastHost == other.lastHost && encryption == other.encryption
 
     override fun hashCode(): Int {
         var result = serverId.hashCode()
@@ -49,11 +68,12 @@ data class PcLinkPairing(
         result = 31 * result + createdAt.hashCode()
         result = 31 * result + lastSeenAt.hashCode()
         result = 31 * result + (lastHost?.hashCode() ?: 0)
+        result = 31 * result + encryption
         return result
     }
 
-    override fun toString(): String =
-        "PcLinkPairing(serverId=${serverId.take(8)}…, name=$name, lastSeenAt=$lastSeenAt)"
+    override fun toString(): String = "PcLinkPairing(serverId=${serverId.take(8)}…, name=$name, " +
+        "lastSeenAt=$lastSeenAt, encryption=$encryption)"
 }
 
 /**
@@ -136,12 +156,19 @@ class PcLinkPairingStore internal constructor(
      * Stores a pairing, or refreshes an existing one. Re-pairing the same PC overwrites the LTK
      * (each ceremony derives a fresh one) but keeps the original [PcLinkPairing.createdAt] — the
      * record is the relationship, not the handshake.
+     *
+     * [encryption] is the §2.18.7 pin, and it only ever goes **up** here: it is the highest version
+     * a completed session has selected, so a later plaintext session (an old PC, a stripped
+     * negotiation) must not lower it. A fresh ceremony is the one place it legitimately resets, and
+     * that is [reset]'s job — a re-pair is a human act, so it starts a new first contact.
      */
     fun addOrUpdate(
         serverId: String,
         name: String,
         ltk: ByteArray,
-        host: String? = null
+        host: String? = null,
+        encryption: Int = PcLinkEnvelope.PLAINTEXT,
+        reset: Boolean = false
     ): PcLinkPairing {
         val timestamp = timestamp()
         val existing = pairingBacking.get(serverId)?.let { runCatching { JSONObject(it) }.getOrNull() }
@@ -153,6 +180,8 @@ class PcLinkPairingStore internal constructor(
         if (!record.has(FIELD_CREATED_AT)) record.put(FIELD_CREATED_AT, timestamp)
         record.put(FIELD_LAST_SEEN_AT, timestamp)
         if (host != null) record.put(FIELD_LAST_HOST, host)
+        val pin = if (reset) encryption else maxOf(encryption, storedEncryption(record))
+        writeEncryption(record, pin)
         pairingBacking.put(serverId, record.toString())
         return PcLinkPairing(
             serverId = serverId,
@@ -160,8 +189,31 @@ class PcLinkPairingStore internal constructor(
             ltk = ltk,
             createdAt = record.optString(FIELD_CREATED_AT, timestamp),
             lastSeenAt = timestamp,
-            lastHost = record.optString(FIELD_LAST_HOST).ifEmpty { null }
+            lastHost = record.optString(FIELD_LAST_HOST).ifEmpty { null },
+            encryption = pin
         )
+    }
+
+    /**
+     * Raises the §2.18.7 pin for an existing pairing, monotonically. Returns true when the record
+     * actually moved.
+     *
+     * This is the half of the pin the reference implementation forgot, and the half that matters
+     * most on this side: a pairing made against a version-1 PC gets its pin **here or nowhere**,
+     * because its ceremony selected 1 and only a later reconnect can ever select 2. Without it a
+     * phone would re-open the downgrade window on every connection, and the record restored from a
+     * pre-upgrade backup on the PC would reopen it for good.
+     *
+     * Nothing is created for a PC we are not paired with, and the pin never goes down: a plaintext
+     * session after an encrypted one is precisely the thing being refused, not a new fact.
+     */
+    fun noteEncryption(serverId: String, encryption: Int): Boolean {
+        val raw = pairingBacking.get(serverId) ?: return false
+        val record = runCatching { JSONObject(raw) }.getOrNull() ?: return false
+        if (storedEncryption(record) >= encryption) return false
+        writeEncryption(record, encryption)
+        pairingBacking.put(serverId, record.toString())
+        return true
     }
 
     /**
@@ -215,8 +267,27 @@ class PcLinkPairingStore internal constructor(
             ltk = ltk,
             createdAt = record.optString(FIELD_CREATED_AT),
             lastSeenAt = record.optString(FIELD_LAST_SEEN_AT),
-            lastHost = record.optString(FIELD_LAST_HOST).ifEmpty { null }
+            lastHost = record.optString(FIELD_LAST_HOST).ifEmpty { null },
+            encryption = storedEncryption(record)
         )
+    }
+
+    /**
+     * The record's §2.18.7 pin. Absent means 1, per the field's additive definition — and so does
+     * anything that isn't a plain number, because a record we cannot read a pin out of must not be
+     * allowed to *lower* one either. (`optInt` already answers 1 for `"encryption": "banana"`.)
+     */
+    private fun storedEncryption(record: JSONObject): Int =
+        record.optInt(FIELD_ENCRYPTION, PcLinkEnvelope.PLAINTEXT)
+            .coerceAtLeast(PcLinkEnvelope.PLAINTEXT)
+
+    /** Writes the pin, omitting it at 1 so a record that never saw encryption stays byte-identical. */
+    private fun writeEncryption(record: JSONObject, encryption: Int) {
+        if (encryption > PcLinkEnvelope.PLAINTEXT) {
+            record.put(FIELD_ENCRYPTION, encryption)
+        } else {
+            record.remove(FIELD_ENCRYPTION)
+        }
     }
 
     /** ISO-8601 UTC to the second, the same shape the server writes into `pairings.json`. */
@@ -351,5 +422,6 @@ class PcLinkPairingStore internal constructor(
         internal const val FIELD_CREATED_AT = "createdAt"
         internal const val FIELD_LAST_SEEN_AT = "lastSeenAt"
         internal const val FIELD_LAST_HOST = "lastHost"
+        internal const val FIELD_ENCRYPTION = "encryption"
     }
 }

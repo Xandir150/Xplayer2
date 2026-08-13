@@ -25,23 +25,56 @@ sealed interface PairingEffect {
     data class ShowSas(val sas: String, val serverName: String, val serverId: String) : PairingEffect
 
     /**
-     * Write this pairing to [PcLinkPairingStore] now. Emitted the moment the server's confirmation
-     * tag verifies — the server persisted before sending it, so from here on both sides are paired
-     * whatever happens to the connection.
+     * Write this pairing to [PcLinkPairingStore] now. Emitted from two places, told apart by
+     * [fresh]:
      *
-     * [serverId] is authoritative — the fingerprint of the key just revealed, never a discovery or
-     * invite hint. Store it under exactly this value; see [PairingOutcome.Success] for what goes
-     * wrong when a hint is substituted.
+     * * **The ceremony** ([fresh] true), the moment the server's confirmation tag verifies — the
+     *   server persisted before sending it, so from here on both sides are paired whatever happens
+     *   to the connection. The consumer calls
+     *   [PcLinkPairingStore.addOrUpdate], which resets the §2.18.7 pin: a re-pair is a human act and
+     *   starts a fresh first contact.
+     * * **`auth_ok` on a reconnect** ([fresh] false), when the session selected a higher encryption
+     *   version than the stored pairing has ever seen. Only the pin moves — the consumer calls
+     *   [PcLinkPairingStore.noteEncryption], never rewriting the key. This is the client's *only*
+     *   chance to record the pin for a pairing made against a version-1 PC, whose ceremony selected
+     *   1 and whose reconnects are the only sessions that can ever select 2.
+     *
+     * [serverId] is authoritative — the fingerprint of the key just revealed (or of the pairing whose
+     * key just verified), never a discovery or invite hint. Store it under exactly this value; see
+     * [PairingOutcome.Success] for what goes wrong when a hint is substituted.
      */
-    data class Persist(val serverId: String, val serverName: String, val ltk: ByteArray) : PairingEffect {
+    data class Persist(
+        val serverId: String,
+        val serverName: String,
+        val ltk: ByteArray,
+        /** The §2.18.7 pin this session earned: the encryption version it actually negotiated. */
+        val encryption: Int = PcLinkEnvelope.PLAINTEXT,
+        /** True for a completed ceremony, false for a pin raised out of `auth_ok`. */
+        val fresh: Boolean = true
+    ) : PairingEffect {
         override fun equals(other: Any?): Boolean = other is Persist && serverId == other.serverId &&
-            serverName == other.serverName && ltk.contentEquals(other.ltk)
+            serverName == other.serverName && ltk.contentEquals(other.ltk) &&
+            encryption == other.encryption && fresh == other.fresh
 
-        override fun hashCode(): Int = (serverId.hashCode() * 31 + serverName.hashCode()) * 31 +
-            ltk.contentHashCode()
+        override fun hashCode(): Int = (((serverId.hashCode() * 31 + serverName.hashCode()) * 31 +
+            ltk.contentHashCode()) * 31 + encryption) * 31 + fresh.hashCode()
 
-        override fun toString(): String = "Persist(serverId=${serverId.take(8)}…, serverName=$serverName)"
+        override fun toString(): String = "Persist(serverId=${serverId.take(8)}…, " +
+            "serverName=$serverName, encryption=$encryption, fresh=$fresh)"
     }
+
+    /**
+     * Switch the control connection to the §2.18.4 `enc` envelope, **here** — at this exact point in
+     * the effect batch, after our own last plaintext handshake message has been handed to the
+     * transport and before anything else is read.
+     *
+     * The position is the contract, not a hint: on the auth path our `auth_response` is the last
+     * plaintext line we ever send, and the very next thing the PC sends is an enveloped `auth_ok`;
+     * on the ceremony path the `pair_confirm` we just verified was the last plaintext line either
+     * way. Engage a line early and our own proof goes out sealed to a peer that cannot read it;
+     * engage a line late and `auth_ok` is refused as a nested-or-nonsense envelope.
+     */
+    data class EngageEncryption(val keys: PcLinkSessionKeys) : PairingEffect
 
     /** The session reached a terminal state. No further effects will be produced. */
     data class Finished(val outcome: PairingOutcome) : PairingEffect
@@ -81,12 +114,16 @@ sealed interface PairingOutcome {
      * [videoToken] is the one-time token from `auth_ok`, or null when the pairing completed but the
      * token never arrived (the pairing is still valid — the server persisted before its
      * `pair_confirm`).
+     *
+     * [encryption] is the version this session negotiated (§2.18.1): 1 for the plaintext transport,
+     * 2 once the control channel ran inside the `enc` envelope.
      */
     data class Success(
         val serverId: String,
         val serverName: String,
         val videoToken: String?,
-        val paired: Boolean
+        val paired: Boolean,
+        val encryption: Int = PcLinkEnvelope.PLAINTEXT
     ) : PairingOutcome
 
     data class Failure(val reason: PairingFailure) : PairingOutcome
@@ -131,6 +168,18 @@ enum class PairingFailure {
      */
     AUTH_FAILED,
 
+    /**
+     * The §2.18 encrypted transport was required and the session came back plaintext — either the
+     * PC demanded it and we didn't offer (`encryption_required`), or our own §2.18.7 pin says this
+     * PC has completed an encrypted session before and a selection of 1 is therefore a stripped
+     * negotiation or a rolled-back build.
+     *
+     * Treated exactly like a failed server proof: close, and do **not** offer re-pairing. The pin
+     * resets only when the user deliberately forgets or re-pairs the PC, which is what lets a
+     * genuinely downgraded machine recover instead of being silently locked out.
+     */
+    ENCRYPTION_REQUIRED,
+
     /** The connection dropped mid-ceremony. */
     CONNECTION_LOST
 }
@@ -157,6 +206,13 @@ enum class PairingFailure {
  * The caller must have sent `hello` with the same [protocolVersion] before [start] — that number is
  * inside the pairing transcript, so the two must agree or the codes won't match.
  *
+ * Both branches also carry the `protocol.md` §2.18 encryption negotiation, which is deliberately
+ * additive: the offer rides on the opener, the selection on the PC's reply, and a PC that has never
+ * heard of the field simply doesn't echo it — so `absent means 1` and a version-1 PC runs exactly
+ * the session it always did. What the session then owes the transport is one
+ * [PairingEffect.EngageEncryption] at the precise line where the dress code changes; the envelope
+ * itself lives in [PcLinkSessionLink].
+ *
  * Not thread-safe: drive it from one thread (the transport's read loop).
  */
 class PairingSession private constructor(
@@ -164,7 +220,18 @@ class PairingSession private constructor(
     private val identity: PcLinkPairingCrypto.Identity,
     private val protocolVersion: Int,
     private val clock: () -> Long,
-    private val random: (Int) -> ByteArray
+    private val random: (Int) -> ByteArray,
+    /**
+     * The highest control-channel encryption version we offer (§2.18.1). [PcLinkEnvelope.VERSION]
+     * on every current build; injectable so the tests can play the version-1 client the field still
+     * has to interoperate with.
+     */
+    private val encryptionOffer: Int,
+    /**
+     * Refuse a session the PC selects 1 for, whatever the pairing says. Local policy on top of the
+     * §2.18.7 pin, which does the same thing per-PC once one clean encrypted session has run.
+     */
+    private val requireEncryption: Boolean
 ) {
 
     private sealed interface Mode {
@@ -224,6 +291,19 @@ class PairingSession private constructor(
     private var deadlineMs: Long = Long.MAX_VALUE
 
     /**
+     * What the PC selected (§2.18.1), once its `pair_pubkey` or `auth_response` said. Starts at 1
+     * because absent means 1 — every PC built before §2.18 existed is a version-1 PC by
+     * construction, and its silence is an answer, not a gap.
+     */
+    private var encryptionSelected: Int = PcLinkEnvelope.PLAINTEXT
+
+    /** Whether [PairingEffect.EngageEncryption] has already gone out for this session. */
+    private var encryptionEngaged = false
+
+    /** The version this session negotiated: 1 on the plaintext transport, 2 inside the envelope. */
+    val encryption: Int get() = encryptionSelected
+
+    /**
      * When the current wait expires, on the same clock the session was built with. The transport
      * uses it to size its socket read timeout; [onTick] is what actually fires the timeout.
      * [Long.MAX_VALUE] once the session is done.
@@ -245,6 +325,7 @@ class PairingSession private constructor(
                             put("pairingVersion", PcLinkPairingCrypto.PAIRING_VERSION)
                             put("clientName", mode.clientName)
                             put("commitment", Hex.encode(commitment))
+                            putEncryptionOffer()
                         }
                     )
                 )
@@ -261,6 +342,7 @@ class PairingSession private constructor(
                             put("pairingVersion", PcLinkPairingCrypto.PAIRING_VERSION)
                             put("clientId", identity.fingerprint)
                             put("nonce", Hex.encode(clientNonce))
+                            putEncryptionOffer()
                         }
                     )
                 )
@@ -349,6 +431,19 @@ class PairingSession private constructor(
         val nonce = hexField(message, "nonce", PcLinkPairingCrypto.NONCE_LEN) ?: return failProtocol()
         if (name.isEmpty()) return failProtocol()
 
+        // The negotiation outcome first (§2.18.1), before this side reveals anything: a selection
+        // above our offer is a peer talking past us. The ceremony's transcript is deliberately
+        // unchanged across versions — a version-2 phone pairing with a version-1 PC must derive the
+        // very code the PC displays — so the fields are not bound into the SAS, and a stripped offer
+        // during a *first* pairing yields a plaintext session both humans approve. §2.18.7's pin is
+        // what bounds that to the first ceremony.
+        val selected = selectionOf(message) ?: return failProtocol()
+        if (selected > encryptionOffer) return failProtocol()
+        if (selected < PcLinkEnvelope.AEAD && requireEncryption) {
+            return fail(PairingFailure.ENCRYPTION_REQUIRED)
+        }
+        encryptionSelected = selected
+
         // Abort on a low-order/zero-result key rather than deriving from a shared secret an
         // attacker can force (RFC 7748 §6.1).
         val sharedSecret = PcLinkPairingCrypto.sharedSecret(identity.privateKey, pub)
@@ -405,11 +500,20 @@ class PairingSession private constructor(
             return reject(REASON_CONFIRM_MISMATCH, PairingFailure.CONFIRM_MISMATCH)
         }
 
-        val persist = PairingEffect.Persist(serverId, serverName, keys.ltk)
+        val persist = PairingEffect.Persist(
+            serverId = serverId,
+            serverName = serverName,
+            ltk = keys.ltk,
+            encryption = encryptionSelected,
+            fresh = true
+        )
         pairedRecord = persist
         state = State.AWAITING_AUTH_OK
         deadlineMs = clock() + STEP_TIMEOUT_MS
-        return listOf(persist)
+        // §2.18.4: the `pair_confirm` we just verified was the last plaintext message of the
+        // session — the `auth_ok` that follows it is already an envelope, keyed from the ceremony's
+        // own nonces (§2.18.3), so the switch happens now and not after it.
+        return listOf(persist) + engageIfNegotiated(keys.ltk, clientNonce, serverNonce)
     }
 
     private fun onPairReject(message: JSONObject): List<PairingEffect> {
@@ -422,6 +526,7 @@ class PairingSession private constructor(
             "rate_limited" -> PairingFailure.RATE_LIMITED
             "version" -> PairingFailure.VERSION_UNSUPPORTED
             REASON_CONFIRM_MISMATCH, "commitment_mismatch" -> PairingFailure.CONFIRM_MISMATCH
+            REASON_ENCRYPTION_REQUIRED -> PairingFailure.ENCRYPTION_REQUIRED
             else -> PairingFailure.PROTOCOL
         }
         return fail(failure)
@@ -433,14 +538,40 @@ class PairingSession private constructor(
         val proof = hexField(message, "proof", PcLinkPairingCrypto.MAC_LEN) ?: return failProtocol()
         val candidates = (mode as Mode.Authenticate).candidates
 
+        // The negotiation outcome first (§2.18.1), before any verifying: a selection above our offer
+        // is a peer talking past us, and plaintext where policy or the §2.18.7 pin requires
+        // encryption is refused without spending anything more on the exchange — deliberately not
+        // even a proof check, because a *correct* v1 proof from a pinned PC is precisely what a
+        // stripped negotiation looks like.
+        val selected = selectionOf(message) ?: return failProtocol()
+        if (selected > encryptionOffer) return failProtocol()
+        if (selected < PcLinkEnvelope.AEAD &&
+            (requireEncryption || candidates.all { it.requiresEncryption })
+        ) {
+            return fail(PairingFailure.ENCRYPTION_REQUIRED)
+        }
+        encryptionSelected = selected
+
         // The server proves first. A wrong proof means a spoofed discovery reply, a MITM, or a
-        // corrupted pairing — so we abort here, before revealing a proof of our own.
+        // corrupted pairing — so we abort here, before revealing a proof of our own. A tampered
+        // negotiation dies here too on a v2 session: the offer and the selection are inside the MAC
+        // (§2.18.2), so the wrong ones read as the wrong key.
         val matched = candidates.firstOrNull { pairing ->
             Hkdf.constantTimeEquals(
                 proof,
-                PcLinkPairingCrypto.authProof(pairing.ltk, PeerRole.SERVER, clientNonce, nonce)
+                PcLinkPairingCrypto.negotiatedAuthProof(
+                    pairing.ltk, PeerRole.SERVER, clientNonce, nonce, encryptionOffer, selected
+                )
             )
         } ?: return fail(PairingFailure.AUTH_FAILED)
+
+        // The pin again, now that we know *which* pairing answered. The all-candidates check above
+        // is the short circuit for the ordinary one-candidate case; this is the one that matters
+        // when the phone offered a list because discovery could only guess by address, and only
+        // some of those PCs have completed an encrypted session.
+        if (selected < PcLinkEnvelope.AEAD && matched.requiresEncryption) {
+            return fail(PairingFailure.ENCRYPTION_REQUIRED)
+        }
 
         serverNonce = nonce
         matchedPairing = matched
@@ -454,14 +585,18 @@ class PairingSession private constructor(
                     put(
                         "proof",
                         Hex.encode(
-                            PcLinkPairingCrypto.authProof(
-                                matched.ltk, PeerRole.CLIENT, clientNonce, nonce
+                            PcLinkPairingCrypto.negotiatedAuthProof(
+                                matched.ltk, PeerRole.CLIENT, clientNonce, nonce,
+                                encryptionOffer, selected
                             )
                         )
                     )
                 }
             )
-        )
+            // §2.18.4: that proof was our last plaintext message. The switch has to happen now, in
+            // the middle of the handshake, because the very next thing the PC sends — `auth_ok`,
+            // carrying the video token — is an envelope.
+        ) + engageIfNegotiated(matched.ltk, clientNonce, nonce)
     }
 
     private fun onAuthOk(message: JSONObject): List<PairingEffect> {
@@ -470,14 +605,51 @@ class PairingSession private constructor(
         // A malformed token isn't worth failing an otherwise-good session over: the client can ask
         // for a fresh one with `video_token` on the authenticated channel.
         val videoToken = token.takeIf { Hex.decode(it, PcLinkPairingCrypto.TOKEN_LEN) != null }
-        return succeed(videoToken)
+        return raisePin() + succeed(videoToken)
+    }
+
+    /**
+     * §2.18.7's record, written on the one message that proves the session completed above the
+     * pairing's current pin.
+     *
+     * Only the reconnect path can produce this: a ceremony writes its own pin through
+     * [PairingEffect.Persist] a moment earlier, and a pairing made against a version-1 PC — every
+     * pairing that exists today — selected 1 back then, so `auth_ok` is where its pin is earned or
+     * nowhere. The PC keeps its own copy, but a store restored from a pre-upgrade backup silently
+     * drops it while the long-term key keeps working, and a phone with no pin of its own has
+     * nothing left to refuse the stripped negotiation with.
+     */
+    private fun raisePin(): List<PairingEffect> {
+        val matched = matchedPairing ?: return emptyList()
+        if (encryptionSelected <= matched.encryption) return emptyList()
+        return listOf(
+            PairingEffect.Persist(
+                serverId = matched.serverId,
+                serverName = matched.name,
+                ltk = matched.ltk,
+                encryption = encryptionSelected,
+                fresh = false
+            )
+        )
     }
 
     private fun onAuthFail(message: JSONObject): List<PairingEffect> {
         if (state == State.DONE) return emptyList()
+        // §2.18.4: on an encrypted session a plaintext `auth_fail` is the one message still accepted
+        // after our proof went out — but its *reason* is not. Every reason that should steer us,
+        // `unknown_client` above all, can only genuinely arise before the PC answered our challenge;
+        // after our proof it is either a PC rejecting that proof (which we treat as a protocol
+        // failure anyway) or an attacker fishing for the re-pairing prompt with a forged
+        // `unknown_client`. Collapse it to PROTOCOL, which never offers re-pairing.
+        if (state == State.RESPONSE_SENT && encryptionSelected >= PcLinkEnvelope.AEAD) {
+            return fail(PairingFailure.PROTOCOL)
+        }
         val failure = when (message.optString("reason")) {
             "unknown_client" -> PairingFailure.UNKNOWN_TO_PC
             "rate_limited" -> PairingFailure.RATE_LIMITED
+            // The PC requires the §2.18 transport and we didn't offer it — an old build of this app
+            // against a hardened PC, or a stripped `encryption` field on the way out.
+            REASON_ENCRYPTION_REQUIRED -> PairingFailure.ENCRYPTION_REQUIRED
             // `auth_fail` has no "version" reason — a server that doesn't speak our pairingVersion
             // answers an auth_challenge with "protocol" (only pair_start gets the richer
             // pair_reject{"version", supportedPairingVersions}). So "protocol" here is usually a
@@ -503,10 +675,29 @@ class PairingSession private constructor(
                     serverId = serverId,
                     serverName = serverName,
                     videoToken = videoToken,
-                    paired = pairedRecord != null
+                    paired = pairedRecord != null,
+                    encryption = encryptionSelected
                 )
             )
         )
+    }
+
+    /**
+     * [PairingEffect.EngageEncryption] when the session selected version 2, nothing when it didn't.
+     *
+     * [nonceC] and [nonceS] are whichever pair of handshake nonces this path owns (§2.18.3): the
+     * §2.11/§2.12 auth nonces on a reconnect, the ceremony's two `pair_pubkey` nonces on a fresh
+     * pairing. Both are 16 fresh bytes chosen by opposite sides and already bound into the handshake
+     * that was just verified, which is what makes the derived keys new every session.
+     */
+    private fun engageIfNegotiated(
+        ltk: ByteArray,
+        nonceC: ByteArray,
+        nonceS: ByteArray
+    ): List<PairingEffect> {
+        if (encryptionSelected < PcLinkEnvelope.AEAD || encryptionEngaged) return emptyList()
+        encryptionEngaged = true
+        return listOf(PairingEffect.EngageEncryption(PcLinkSessionKeys.derive(ltk, nonceC, nonceS)))
     }
 
     private fun fail(reason: PairingFailure): List<PairingEffect> {
@@ -515,9 +706,14 @@ class PairingSession private constructor(
         return listOf(PairingEffect.Finished(PairingOutcome.Failure(reason)), PairingEffect.Close)
     }
 
-    /** Tells the peer why we're going, then fails. Only meaningful during the pairing ceremony. */
+    /**
+     * Tells the peer why we're going, then fails. Only meaningful during the pairing ceremony — and
+     * only while the connection is still plaintext: §2.18.6 says no `pair_reject` accompanies a
+     * failure once the envelope is engaged. The handshake is long over by then, and an attacker able
+     * to cause the failure learns nothing from a silent close it couldn't learn from a reasoned one.
+     */
     private fun reject(reason: String, failure: PairingFailure): List<PairingEffect> {
-        val announce = if (mode is Mode.Pair && state != State.DONE) {
+        val announce = if (mode is Mode.Pair && state != State.DONE && !encryptionEngaged) {
             listOf(PairingEffect.Send(json("pair_reject") { put("reason", reason) }))
         } else {
             emptyList()
@@ -534,6 +730,23 @@ class PairingSession private constructor(
         val text = message.optString(field)
         if (text.isEmpty()) return null
         return Hex.decode(text, length)
+    }
+
+    /**
+     * The PC's `encryption` selection (§2.18.1). Absent means 1 — a PC built before §2.18 ignores
+     * our offer and answers exactly as it always did, which is the whole of the version-1
+     * compatibility story. Null means the field was present and not a version number at all, which
+     * is a broken peer rather than a silent 1.
+     */
+    private fun selectionOf(message: JSONObject): Int? {
+        val value = message.opt(FIELD_ENCRYPTION) ?: return PcLinkEnvelope.PLAINTEXT
+        val selected = (value as? Number)?.toInt()?.takeIf { it.toDouble() == value.toDouble() }
+        return selected?.takeIf { it >= PcLinkEnvelope.PLAINTEXT }
+    }
+
+    /** Adds our §2.18.1 offer to an opener, omitting it at 1 as a version-1 client would. */
+    private fun JSONObject.putEncryptionOffer() {
+        if (encryptionOffer >= PcLinkEnvelope.AEAD) put(FIELD_ENCRYPTION, encryptionOffer)
     }
 
     private inline fun json(type: String, build: JSONObject.() -> Unit): String =
@@ -553,6 +766,10 @@ class PairingSession private constructor(
         private const val REASON_TIMEOUT = "timeout"
         private const val REASON_PROTOCOL = "protocol"
         private const val REASON_CONFIRM_MISMATCH = "confirm_mismatch"
+        private const val REASON_ENCRYPTION_REQUIRED = "encryption_required"
+
+        /** The one additive field the §2.18.1 negotiation rides on, in both directions. */
+        internal const val FIELD_ENCRYPTION = "encryption"
 
         /**
          * A first-time pairing ceremony. [clientName] is shown on the PC and bound into the code —
@@ -563,22 +780,34 @@ class PairingSession private constructor(
             clientName: String,
             protocolVersion: Int = PcLinkDiscovery.PROTOCOL_VERSION,
             clock: () -> Long = { System.nanoTime() / 1_000_000 },
-            random: (Int) -> ByteArray = Hkdf::randomBytes
-        ): PairingSession =
-            PairingSession(Mode.Pair(clientName), identity, protocolVersion, clock, random)
+            random: (Int) -> ByteArray = Hkdf::randomBytes,
+            encryptionOffer: Int = PcLinkEnvelope.VERSION,
+            requireEncryption: Boolean = false
+        ): PairingSession = PairingSession(
+            Mode.Pair(clientName), identity, protocolVersion, clock, random,
+            encryptionOffer, requireEncryption
+        )
 
         /**
          * Silent re-authentication against stored pairings. [candidates] should lead with the most
          * likely PC (see [PcLinkPairingStore.findByHost]); the rest are tried only against the
          * server's own proof, so ordering is a performance detail, not a security one.
+         *
+         * The §2.18.7 pin, on the other hand, is *not* just a performance detail: a plaintext
+         * selection is refused up front only when every candidate is pinned, and otherwise once the
+         * proof has said which pairing actually answered.
          */
         fun authenticate(
             identity: PcLinkPairingCrypto.Identity,
             candidates: List<PcLinkPairing>,
             protocolVersion: Int = PcLinkDiscovery.PROTOCOL_VERSION,
             clock: () -> Long = { System.nanoTime() / 1_000_000 },
-            random: (Int) -> ByteArray = Hkdf::randomBytes
-        ): PairingSession =
-            PairingSession(Mode.Authenticate(candidates), identity, protocolVersion, clock, random)
+            random: (Int) -> ByteArray = Hkdf::randomBytes,
+            encryptionOffer: Int = PcLinkEnvelope.VERSION,
+            requireEncryption: Boolean = false
+        ): PairingSession = PairingSession(
+            Mode.Authenticate(candidates), identity, protocolVersion, clock, random,
+            encryptionOffer, requireEncryption
+        )
     }
 }

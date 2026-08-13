@@ -55,8 +55,14 @@ class PcLinkPairingClient(
          */
         fun onSasReady(sas: String, serverName: String, serverId: String)
 
-        /** Persist this pairing now; the PC already has. */
-        fun onPaired(serverId: String, serverName: String, ltk: ByteArray)
+        /**
+         * Write to the pairing store now, synchronously.
+         *
+         * Two shapes, told apart by [PairingEffect.Persist.fresh]: a completed ceremony (the PC has
+         * already persisted, so from here on both sides are paired) or, on a reconnect, nothing but
+         * the §2.18.7 encryption pin the session just earned.
+         */
+        fun onPersist(persist: PairingEffect.Persist)
 
         /** Terminal. Exactly one call per [start]. */
         fun onFinished(outcome: PairingOutcome)
@@ -65,6 +71,13 @@ class PcLinkPairingClient(
     private enum class UserEvent { ACCEPT, DECLINE }
 
     private val pendingUserEvents = ConcurrentLinkedQueue<UserEvent>()
+
+    /**
+     * The control connection's §2.18 dress code. Plaintext until the session says otherwise with a
+     * [PairingEffect.EngageEncryption]; from then on it seals everything this client sends and
+     * refuses anything that arrives out of its envelope.
+     */
+    private val link = PcLinkSessionLink(PeerRole.CLIENT)
 
     /** Held so [cancel] can break a blocked read instead of waiting out its timeout. */
     @Volatile private var socket: Socket? = null
@@ -129,9 +142,9 @@ class PcLinkPairingClient(
         var finished: PairingOutcome? = null
 
         // `hello` must precede everything, and its protocolVersion is inside the pairing transcript
-        // — so it has to be the same number the session was built with.
-        output.write(PcLinkProtocol.helloLine(clientName, codecs).toByteArray(Charsets.UTF_8))
-        output.flush()
+        // — so it has to be the same number the session was built with. It is also always plaintext
+        // (§2.18.4), which is what `link` answers with until the ceremony engages the envelope.
+        writeLine(output, PcLinkProtocol.helloLine(clientName, codecs))
 
         finished = apply(session.start(), output) ?: finished
 
@@ -156,8 +169,20 @@ class PcLinkPairingClient(
             splitter.feed(buffer, 0, read)
             while (true) {
                 val line = splitter.nextLine() ?: break
-                if (line.isBlank()) continue
-                finished = apply(session.onLine(line), output)
+                // A stray newline is not a message. Dropped while the channel is plaintext, exactly
+                // as v1 dropped it; once the envelope is engaged §2.18.6 has no such tolerance and
+                // `accept` refuses it like any other line in the wrong dress.
+                if (!link.isEncrypted && line.isBlank()) continue
+                val inner = try {
+                    link.accept(line)
+                } catch (e: PcLinkLinkException) {
+                    // §2.18.6: after a failed envelope there is no next line. Not a dropped
+                    // connection and not something to resynchronize past — the session is over.
+                    Log.w(TAG, "Ending the pairing session: ${e.failure}")
+                    finished = PairingOutcome.Failure(PairingFailure.PROTOCOL)
+                    break
+                }
+                finished = apply(session.onLine(inner), output)
                 if (finished != null) break
             }
         }
@@ -180,18 +205,20 @@ class PcLinkPairingClient(
         var outcome: PairingOutcome? = null
         for (effect in effects) {
             when (effect) {
-                is PairingEffect.Send -> {
-                    output.write((effect.line + "\n").toByteArray(Charsets.UTF_8))
-                    output.flush()
-                }
+                is PairingEffect.Send -> writeLine(output, effect.line)
 
                 is PairingEffect.ShowSas -> withContext(Dispatchers.Main) {
                     listener.onSasReady(effect.sas, effect.serverName, effect.serverId)
                 }
 
                 is PairingEffect.Persist -> withContext(Dispatchers.Main) {
-                    listener.onPaired(effect.serverId, effect.serverName, effect.ltk)
+                    listener.onPersist(effect)
                 }
+
+                // Ordering is the contract, and it is why this is applied in sequence rather than
+                // sorted: everything before this effect in the batch went out plaintext, everything
+                // after it is sealed (§2.18.4).
+                is PairingEffect.EngageEncryption -> link.engage(effect.keys)
 
                 is PairingEffect.Finished -> outcome = effect.outcome
 
@@ -201,6 +228,15 @@ class PcLinkPairingClient(
             }
         }
         return outcome
+    }
+
+    /**
+     * Writes one line, sealed if the session has engaged the §2.18.4 envelope and plain if it has
+     * not. Newline framing belongs here either way.
+     */
+    private fun writeLine(output: OutputStream, line: String) {
+        output.write(link.seal(line).toByteArray(Charsets.UTF_8))
+        output.flush()
     }
 
     private fun openControlSocket(): Socket? {

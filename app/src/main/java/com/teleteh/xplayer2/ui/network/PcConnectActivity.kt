@@ -21,6 +21,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.teleteh.xplayer2.R
 import com.teleteh.xplayer2.data.glasses.GlassesPresence
+import com.teleteh.xplayer2.data.network.PairingEffect
 import com.teleteh.xplayer2.data.network.PairingFailure
 import com.teleteh.xplayer2.data.network.PairingOutcome
 import com.teleteh.xplayer2.data.network.PairingSession
@@ -530,10 +531,27 @@ class PcConnectActivity : AppCompatActivity() {
                 override fun onSasReady(sas: String, serverName: String, serverId: String) =
                     showSasDialog(sas, serverName)
 
-                override fun onPaired(serverId: String, serverName: String, ltk: ByteArray) {
+                override fun onPersist(persist: PairingEffect.Persist) {
+                    val store = store ?: return
                     // Stored synchronously: the hand-off below starts a PlayerActivity that reads
                     // this very record, so it must be on disk before the outcome is reported.
-                    store?.addOrUpdate(serverId, serverName, ltk, target.host)
+                    if (persist.fresh) {
+                        // A ceremony *resets* the §2.18.7 pin rather than raising it: re-pairing is
+                        // a deliberate human act and starts a fresh first contact, which is what
+                        // lets a PC that genuinely went back to a version-1 build recover.
+                        store.addOrUpdate(
+                            serverId = persist.serverId,
+                            name = persist.serverName,
+                            ltk = persist.ltk,
+                            host = target.host,
+                            encryption = persist.encryption,
+                            reset = true
+                        )
+                    } else {
+                        // A reconnect that negotiated higher than this pairing has ever run: only
+                        // the pin moves, never the key.
+                        store.noteEncryption(persist.serverId, persist.encryption)
+                    }
                 }
 
                 override fun onFinished(outcome: PairingOutcome) = onSessionFinished(target, outcome)
@@ -609,6 +627,12 @@ class PcConnectActivity : AppCompatActivity() {
             // An impostor or a corrupted pairing. No re-pair button: "Forget this PC" is a
             // long-press away for someone who has decided it really is corruption.
             PairingFailure.AUTH_FAILED -> showMessage(R.string.pclink_auth_failed)
+
+            // §2.18.7: this PC has completed an encrypted session before, and this one came back
+            // plaintext. Same treatment as a failed proof and for the same reason — it is either
+            // someone stripping the negotiation or a PC rolled back to an older build. No re-pair
+            // button; "Forget this PC" is the deliberate way out, and it resets the pin.
+            PairingFailure.ENCRYPTION_REQUIRED -> showMessage(R.string.pclink_encryption_required)
 
             PairingFailure.DECLINED_BY_PC -> toast(R.string.pclink_pair_cancelled)
             PairingFailure.PC_BUSY -> toast(R.string.pclink_pair_busy)

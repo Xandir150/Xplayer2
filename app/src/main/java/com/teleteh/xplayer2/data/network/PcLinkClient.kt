@@ -147,7 +147,17 @@ data class PcLinkStreamConfig(
  */
 class PcLinkAuth(
     val identity: PcLinkPairingCrypto.Identity,
-    val candidates: List<PcLinkPairing>
+    val candidates: List<PcLinkPairing>,
+    /**
+     * Where a [PairingEffect.Persist] out of `auth_ok` goes — the §2.18.7 encryption pin, and the
+     * only thing this path ever writes. Called on [Dispatchers.IO] before the session proceeds.
+     *
+     * It exists because this is the client's *only* chance to record the pin for a pairing whose
+     * ceremony ran against a version-1 PC: that ceremony selected 1, so nothing but a later
+     * reconnect can ever raise it. A phone that skipped this would re-open the downgrade window on
+     * every single connection, which is exactly the hole §2.18.7 layer 3 exists to close.
+     */
+    val persist: (PairingEffect.Persist) -> Unit = {}
 )
 
 /** One desktop window on the canvas, from the server's `windows` message. */
@@ -875,6 +885,13 @@ class PcLinkClient(
     @Volatile private var controlSocket: Socket? = null
     @Volatile private var videoSocket: Socket? = null
 
+    /**
+     * The control channel's §2.18 dress code for the session in flight. Replaced — never reused —
+     * at the top of every [runSession]: the envelope keys are derived from that connection's own
+     * handshake nonces, and its counters and its terminal failure die with it.
+     */
+    @Volatile private var link = PcLinkSessionLink(PeerRole.CLIENT)
+
     // Set by requestIdr(); the control writer drains it on its next tick. A flag rather than a
     // queue: five "please resync" requests in a row still mean one IDR.
     @Volatile private var idrRequested = false
@@ -1113,6 +1130,7 @@ class PcLinkClient(
         audioReofferPending = false
         unansweredPings = 0
         lastRxMs = nowMs()
+        link = PcLinkSessionLink(PeerRole.CLIENT)
 
         // Resolved BEFORE the socket, not after `hello`: this reads the pairing store, and on the
         // first call of a session that can mean unsealing a Keystore key. A server running with
@@ -1200,14 +1218,14 @@ class PcLinkClient(
             clock = nowMs
         )
         val buf = ByteArray(READ_BUFFER)
-        var outcome = applyAuthEffects(session.start(), output)
+        var outcome = applyAuthEffects(session.start(), output, auth)
 
         while (outcome == null && currentCoroutineContext().isActive) {
             // Lines the previous read left buffered first — the server may well have packed
             // `auth_response` and everything after it into one TCP segment.
-            outcome = drainAuthLines(session, splitter, output)
+            outcome = drainAuthLines(session, splitter, output, auth)
             if (outcome != null) break
-            outcome = applyAuthEffects(session.onTick(), output)
+            outcome = applyAuthEffects(session.onTick(), output, auth)
             if (outcome != null) break
 
             val n = try {
@@ -1217,7 +1235,7 @@ class PcLinkClient(
                 continue
             }
             if (n < 0) {
-                outcome = applyAuthEffects(session.onDisconnected(), output)
+                outcome = applyAuthEffects(session.onDisconnected(), output, auth)
                     ?: PairingOutcome.Failure(PairingFailure.CONNECTION_LOST)
                 break
             }
@@ -1235,25 +1253,41 @@ class PcLinkClient(
     private fun drainAuthLines(
         session: PairingSession,
         splitter: PcLinkLineSplitter,
-        output: OutputStream
+        output: OutputStream,
+        auth: PcLinkAuth
     ): PairingOutcome? {
         while (true) {
             val line = splitter.nextLine() ?: return null
-            if (line.isBlank()) continue
-            applyAuthEffects(session.onLine(line), output)?.let { return it }
+            // A stray newline is dropped while the channel is plaintext, exactly as v1 dropped it;
+            // once the envelope is engaged §2.18.6 has no such tolerance and `accept` refuses it.
+            if (!link.isEncrypted && line.isBlank()) continue
+            // Throws PcLinkLinkException on any §2.18.6 failure, which unwinds the whole session:
+            // there is no next line after a failed envelope, and certainly no next `auth_*`.
+            applyAuthEffects(session.onLine(link.accept(line)), output, auth)?.let { return it }
         }
     }
 
     /** Performs one batch of effects in order; returns the outcome once the session is done. */
-    private fun applyAuthEffects(effects: List<PairingEffect>, output: OutputStream): PairingOutcome? {
+    private fun applyAuthEffects(
+        effects: List<PairingEffect>,
+        output: OutputStream,
+        auth: PcLinkAuth
+    ): PairingOutcome? {
         var outcome: PairingOutcome? = null
         for (effect in effects) {
             when (effect) {
                 is PairingEffect.Send -> writeLine(output, effect.line + "\n")
+                // In sequence, not sorted: the send above it was our last plaintext line and
+                // everything after it is sealed (§2.18.4).
+                is PairingEffect.EngageEncryption -> link.engage(effect.keys)
+                // The §2.18.7 pin out of `auth_ok`, written before the session proceeds. Never a
+                // new pairing: this path only ever raises the encryption version of one that is
+                // already stored.
+                is PairingEffect.Persist -> auth.persist(effect)
                 is PairingEffect.Finished -> outcome = effect.outcome
                 // The caller's `finally` closes both sockets on the way out; closing here as well
-                // would only race it. ShowSas/Persist belong to the pairing ceremony, which this
-                // client never runs.
+                // would only race it. ShowSas belongs to the pairing ceremony, which this client
+                // never runs.
                 else -> Unit
             }
         }
@@ -1285,7 +1319,7 @@ class PcLinkClient(
             // to share a TCP segment, so it is often already sitting in the splitter by now.
             while (true) {
                 val line = splitter.nextLine() ?: break
-                when (val msg = PcLinkProtocol.parseControlLine(line)) {
+                when (val msg = PcLinkProtocol.parseControlLine(link.accept(line))) {
                     is PcControlMessage.Config -> return msg.config
                     // Malformed JSON is a protocol error (§2) — the server is not speaking v1.
                     null -> throw IOException("malformed control JSON")
@@ -1319,7 +1353,12 @@ class PcLinkClient(
             splitter.feed(buf, 0, n)
             while (true) {
                 val line = splitter.nextLine() ?: break
-                when (val msg = PcLinkProtocol.parseControlLine(line)) {
+                // §2.18.6, and the reason this is not a `runCatching`: an envelope that cannot be
+                // accepted — a refused counter, a failed tag, a nested envelope, a plaintext line
+                // spliced into an engaged session — ends the session. The exception unwinds this
+                // coroutine, its siblings and the sockets with it, and the link stays dead even if
+                // something downstream tries to send.
+                when (val msg = PcLinkProtocol.parseControlLine(link.accept(line))) {
                     null -> throw IOException("malformed control JSON")
                     is PcControlMessage.Ping -> pendingPong = msg.tUs
                     is PcControlMessage.Pong -> {
@@ -1483,8 +1522,16 @@ class PcLinkClient(
         withContext(Dispatchers.Main) { listener.onState(state) }
     }
 
+    /**
+     * Writes one control line, dressed for whatever this session negotiated: sealed into a §2.18.4
+     * envelope once encryption engaged, plain before that.
+     *
+     * Throws [PcLinkLinkException] once the link is dead — including on a *send*, which is the
+     * point: §2.18.6 says a session with a failed envelope has nothing more to say, so a caller that
+     * swallowed the read failure still cannot get another message out.
+     */
     private fun writeLine(output: OutputStream, line: String) {
-        output.write(line.toByteArray(Charsets.UTF_8))
+        output.write(link.seal(line).toByteArray(Charsets.UTF_8))
         output.flush()
     }
 

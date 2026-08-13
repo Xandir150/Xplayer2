@@ -26,6 +26,8 @@ import java.nio.ByteOrder
  * confirmClient = HMAC-SHA256(kconf, "client" || th)
  * confirmServer = HMAC-SHA256(kconf, "server" || th)
  * proof(role)   = HMAC-SHA256(ltk, "XPL2-AUTH-v1 <role>" || nonceC || nonceS)
+ * proofV2(role) = HMAC-SHA256(ltk, "XPL2-AUTH-v2 <role>" || nonceC || nonceS
+ *                                  || u32be(offered) || u32be(selected))
  * ```
  *
  * Everything is a pure function of its arguments: no sockets, no Android, no state — so the whole
@@ -47,6 +49,7 @@ object PcLinkPairingCrypto {
     private const val TRANSCRIPT_PREFIX = "XPL2-PAIR-v1"
     private const val COMMIT_PREFIX = "XPL2-COMMIT-v1"
     private const val AUTH_LABEL_PREFIX = "XPL2-AUTH-v1 "
+    private const val AUTH_LABEL_V2_PREFIX = "XPL2-AUTH-v2 "
     private const val UNPAIR_LABEL_PREFIX = "XPL2-UNPAIR-v1 "
     private const val ROLE_CLIENT = "client"
     private const val ROLE_SERVER = "server"
@@ -211,6 +214,54 @@ object PcLinkPairingCrypto {
      */
     fun authProof(ltk: ByteArray, role: PeerRole, clientNonce: ByteArray, serverNonce: ByteArray): ByteArray =
         Hkdf.hmacSha256(ltk, ascii(AUTH_LABEL_PREFIX + role.wire) + clientNonce + serverNonce)
+
+    /**
+     * `HMAC-SHA256(ltk, "XPL2-AUTH-v2 <role>" || nonceC || nonceS || u32be(offered) ||
+     * u32be(selected))` — [authProof] for a session whose encryption selection is 2 (§2.18.2).
+     *
+     * The negotiation rides inside the MAC, which is what makes it tamper-proof between two
+     * version-2 endpoints: [offered] is the client's `encryption` field as each side knows it — as
+     * sent by us, as received by the PC — and [selected] the server's the same way. Rewrite either
+     * in flight and the two sides MAC different bytes, so the exchange dies on a proof rather than
+     * quietly running plaintext. The label spells the *selected* version.
+     */
+    fun authProofV2(
+        ltk: ByteArray,
+        role: PeerRole,
+        clientNonce: ByteArray,
+        serverNonce: ByteArray,
+        offered: Int,
+        selected: Int
+    ): ByteArray {
+        val label = ascii(AUTH_LABEL_V2_PREFIX + role.wire)
+        val input = ByteBuffer.allocate(label.size + clientNonce.size + serverNonce.size + 8)
+            .order(ByteOrder.BIG_ENDIAN)
+            .put(label)
+            .put(clientNonce)
+            .put(serverNonce)
+            .putInt(offered)
+            .putInt(selected)
+            .array()
+        return Hkdf.hmacSha256(ltk, input)
+    }
+
+    /**
+     * The proof for whatever was negotiated: [authProof] at a selection of 1, [authProofV2] above
+     * it. The one entry point [PairingSession] uses, so "which formula" is decided by the selection
+     * in one place rather than at each of the four call sites.
+     */
+    fun negotiatedAuthProof(
+        ltk: ByteArray,
+        role: PeerRole,
+        clientNonce: ByteArray,
+        serverNonce: ByteArray,
+        offered: Int,
+        selected: Int
+    ): ByteArray = if (selected >= PcLinkEnvelope.AEAD) {
+        authProofV2(ltk, role, clientNonce, serverNonce, offered, selected)
+    } else {
+        authProof(ltk, role, clientNonce, serverNonce)
+    }
 
     /**
      * `HMAC-SHA256(ltk, "XPL2-UNPAIR-v1 <role>" || nonceC || nonceS)` — bound to the current

@@ -65,7 +65,9 @@ class PcLinkPairingClientTest {
         val finished = CountDownLatch(1)
         @Volatile var sas: String? = null
         @Volatile var serverName: String? = null
-        @Volatile var persisted: Triple<String, String, ByteArray>? = null
+        @Volatile var persist: PairingEffect.Persist? = null
+        val persisted: Triple<String, String, ByteArray>?
+            get() = persist?.let { Triple(it.serverId, it.serverName, it.ltk) }
         @Volatile var outcome: PairingOutcome? = null
         @Volatile var finishedCount = 0
         var onSas: (() -> Unit)? = null
@@ -76,8 +78,8 @@ class PcLinkPairingClientTest {
             onSas?.invoke()
         }
 
-        override fun onPaired(serverId: String, serverName: String, ltk: ByteArray) {
-            persisted = Triple(serverId, serverName, ltk)
+        override fun onPersist(persist: PairingEffect.Persist) {
+            this.persist = persist
         }
 
         override fun onFinished(outcome: PairingOutcome) {

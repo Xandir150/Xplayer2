@@ -3437,7 +3437,15 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         // Exactly this PC: PcConnectActivity has already resolved which pairing belongs to the
         // address, so there is nothing here for the FSM's other candidates to rescue.
         val pairing = store.get(serverId) ?: return null
-        return PcLinkAuth(store.identity(), listOf(pairing))
+        return PcLinkAuth(
+            identity = store.identity(),
+            candidates = listOf(pairing),
+            // §2.18.7's record, and the reason the player writes to the store at all: a pairing made
+            // against a version-1 PC selected 1 at its ceremony, so a reconnect that negotiates 2 is
+            // the only moment its pin can ever be raised. Without this the phone would offer the
+            // downgrade window back on every connection.
+            persist = { store.noteEncryption(it.serverId, it.encryption) }
+        )
     }
 
     /**
@@ -3945,10 +3953,11 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             }
             return
         }
-        val message = if (reason == PairingFailure.AUTH_FAILED) {
-            R.string.pclink_stream_auth_failed
-        } else {
-            R.string.pclink_stream_auth_error
+        val message = when (reason) {
+            PairingFailure.AUTH_FAILED -> R.string.pclink_stream_auth_failed
+            // §2.18.7: the pin says this PC has run encrypted before and this session did not.
+            PairingFailure.ENCRYPTION_REQUIRED -> R.string.pclink_stream_encryption_required
+            else -> R.string.pclink_stream_auth_error
         }
         setPcLinkStatus("$pcLinkServerName — ${getString(message)}", dim = false)
     }
