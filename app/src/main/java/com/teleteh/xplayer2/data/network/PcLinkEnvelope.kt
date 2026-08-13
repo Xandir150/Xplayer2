@@ -381,6 +381,16 @@ class PcLinkSessionLink(private val role: PeerRole = PeerRole.CLIENT) {
         return n.takeIf { it in 0..PcLinkEnvelope.MAX_COUNTER }
     }
 
+    /**
+     * Test seam for the §2.18.5 bound: no test is going to seal 2⁵³ envelopes to reach it, and the
+     * rule that a spent counter *ends the session* deserves a test more than it deserves to be
+     * unreachable.
+     */
+    @Synchronized
+    internal fun fastForwardCounter(counter: Long) {
+        crypto?.sealer?.fastForwardTo(counter)
+    }
+
     private fun die(failure: PcLinkLinkFailure): PcLinkLinkException {
         if (this.failure == null) this.failure = failure
         return PcLinkLinkException(this.failure!!)

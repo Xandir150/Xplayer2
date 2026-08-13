@@ -283,6 +283,134 @@ class PcLinkPairingStoreTest {
         assertNull(store().forget("c".repeat(64)))
     }
 
+    // ---- §2.18.7: the encryption pin ---------------------------------------------------------------
+
+    /**
+     * Absent means 1. Every pairing on every phone in the field right now has no such field, and
+     * reading one as "has completed an encrypted session" would lock all of them out.
+     */
+    @Test
+    fun aRecordWithNoEncryptionFieldIsVersionOne() {
+        val s = store()
+        val serverId = "f".repeat(64)
+        s.addOrUpdate(serverId, "Living Room PC", ltk(0x11))
+        assertFalse(pairingBacking.get(serverId)!!.contains("encryption"))
+
+        val loaded = s.get(serverId)!!
+        assertEquals(PcLinkEnvelope.PLAINTEXT, loaded.encryption)
+        assertFalse(loaded.requiresEncryption)
+    }
+
+    @Test
+    fun noteEncryptionRaisesThePinAndPersistsIt() {
+        val s = store()
+        val serverId = "f".repeat(64)
+        s.addOrUpdate(serverId, "Living Room PC", ltk(0x11), host = "192.168.1.10")
+
+        assertTrue("the pin moved", s.noteEncryption(serverId, PcLinkEnvelope.AEAD))
+        val loaded = s.get(serverId)!!
+        assertEquals(PcLinkEnvelope.AEAD, loaded.encryption)
+        assertTrue(loaded.requiresEncryption)
+        // And it survives the next app launch, which is the entire point of writing it down.
+        assertEquals(PcLinkEnvelope.AEAD, store().get(serverId)!!.encryption)
+        // Nothing else moved: not the key, not the timestamps, not the address.
+        assertArrayEquals(ltk(0x11), loaded.ltk)
+        assertEquals("2026-08-11T14:03:00Z", loaded.createdAt)
+        assertEquals("2026-08-11T14:03:00Z", loaded.lastSeenAt)
+        assertEquals("192.168.1.10", loaded.lastHost)
+    }
+
+    /** Monotonic: a later plaintext session is the thing being refused, not a new fact to record. */
+    @Test
+    fun thePinNeverGoesDown() {
+        val s = store()
+        val serverId = "f".repeat(64)
+        s.addOrUpdate(serverId, "Living Room PC", ltk(0x11))
+        s.noteEncryption(serverId, PcLinkEnvelope.AEAD)
+
+        assertFalse(s.noteEncryption(serverId, PcLinkEnvelope.PLAINTEXT))
+        assertFalse("nothing to do at the same level", s.noteEncryption(serverId, PcLinkEnvelope.AEAD))
+        assertEquals(PcLinkEnvelope.AEAD, s.get(serverId)!!.encryption)
+
+        // Nor does an ordinary re-authentication touch: the pin is not part of "seen just now".
+        s.touch(serverId, host = "192.168.1.99", name = "Renamed PC")
+        assertEquals(PcLinkEnvelope.AEAD, s.get(serverId)!!.encryption)
+    }
+
+    /** A PC we are not paired with has nothing to pin, and must not gain a record by being seen. */
+    @Test
+    fun noteEncryptionCreatesNothing() {
+        val s = store()
+        assertFalse(s.noteEncryption("c".repeat(64), PcLinkEnvelope.AEAD))
+        assertTrue(pairingBacking.map.isEmpty())
+    }
+
+    /**
+     * A re-pair is a human act and starts a fresh first contact — which is what lets a PC that was
+     * genuinely rolled back to an older build recover instead of being locked out for good.
+     */
+    @Test
+    fun aFreshCeremonyResetsThePinAndAPinRaiseDoesNot() {
+        val s = store()
+        val serverId = "f".repeat(64)
+        s.addOrUpdate(serverId, "Living Room PC", ltk(0x11))
+        s.noteEncryption(serverId, PcLinkEnvelope.AEAD)
+
+        // Re-paired against a downgraded PC: the ceremony selected 1, so the pin is 1 again.
+        s.addOrUpdate(serverId, "Living Room PC", ltk(0x22), encryption = PcLinkEnvelope.PLAINTEXT, reset = true)
+        assertEquals(PcLinkEnvelope.PLAINTEXT, s.get(serverId)!!.encryption)
+        assertArrayEquals("a re-pair does bring a fresh key", ltk(0x22), s.get(serverId)!!.ltk)
+
+        // Without `reset` the pin only ever climbs, which is what any non-ceremony writer wants.
+        s.noteEncryption(serverId, PcLinkEnvelope.AEAD)
+        s.addOrUpdate(serverId, "Living Room PC", ltk(0x22))
+        assertEquals(PcLinkEnvelope.AEAD, s.get(serverId)!!.encryption)
+    }
+
+    /** A ceremony that negotiated 2 writes the pin straight away — no reconnect needed. */
+    @Test
+    fun anEncryptedCeremonyPinsImmediately() {
+        val s = store()
+        val serverId = "f".repeat(64)
+        val stored = s.addOrUpdate(
+            serverId, "Living Room PC", ltk(0x11),
+            encryption = PcLinkEnvelope.AEAD, reset = true
+        )
+        assertEquals(PcLinkEnvelope.AEAD, stored.encryption)
+        assertEquals(PcLinkEnvelope.AEAD, s.get(serverId)!!.encryption)
+    }
+
+    /** The store's preserve-unknown-fields rule has to cover the pin's neighbours too. */
+    @Test
+    fun raisingThePinKeepsFieldsWrittenByAFutureVersion() {
+        val s = store()
+        val serverId = "f".repeat(64)
+        s.addOrUpdate(serverId, "Living Room PC", ltk(0x11))
+        pairingBacking.put(
+            serverId,
+            JSONObject(pairingBacking.get(serverId)!!).put("futureField", "keep me").toString()
+        )
+        s.noteEncryption(serverId, PcLinkEnvelope.AEAD)
+        val raw = JSONObject(pairingBacking.get(serverId)!!)
+        assertEquals("keep me", raw.getString("futureField"))
+        assertEquals(PcLinkEnvelope.AEAD, raw.getInt("encryption"))
+    }
+
+    /** A pin we cannot read is a 1, never something that silently lowers a real one. */
+    @Test
+    fun anUnreadablePinReadsAsVersionOne() {
+        val s = store()
+        val serverId = "f".repeat(64)
+        s.addOrUpdate(serverId, "Living Room PC", ltk(0x11))
+        pairingBacking.put(
+            serverId,
+            JSONObject(pairingBacking.get(serverId)!!).put("encryption", "banana").toString()
+        )
+        assertEquals(PcLinkEnvelope.PLAINTEXT, s.get(serverId)!!.encryption)
+        assertTrue(s.noteEncryption(serverId, PcLinkEnvelope.AEAD))
+        assertEquals(PcLinkEnvelope.AEAD, s.get(serverId)!!.encryption)
+    }
+
     @Test
     fun plainCipherRoundTripsAndRejectsJunk() {
         val sealed = PcLinkPairingStore.PlainSecretCipher.seal(ltk(0x5a))

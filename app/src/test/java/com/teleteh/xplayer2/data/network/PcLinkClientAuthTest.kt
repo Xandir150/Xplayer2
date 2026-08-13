@@ -14,6 +14,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -229,6 +230,116 @@ class PcLinkClientAuthTest {
         assertEquals(1, listener.configs.size)
     }
 
+    // ---- §2.18 encrypted sessions --------------------------------------------------------------------
+
+    /**
+     * A whole version-2 session over real sockets: the offer goes out on `auth_challenge`, the v2
+     * proofs verify on both sides, and `auth_ok` and `config` arrive inside `enc` envelopes — which
+     * the client opens well enough to reach the video preamble with the right token.
+     *
+     * The token assertion is the point of the section: the only place it exists in the clear is
+     * inside the envelope and in the preamble on the *video* connection (§2.18.8).
+     */
+    @Test
+    fun `runs a whole session inside the enc envelope`() {
+        val pc = start(ScriptedPc(AuthReply.PROVE_V2))
+        val listener = RecordingListener()
+        val pinned = ArrayList<PairingEffect.Persist>()
+
+        val client = client(
+            pc, listener,
+            auth = PcLinkAuth(clientIdentity, listOf(storedPairing)) { pinned += it }
+        )
+        client.connect(scope)
+        assertTrue("no video preamble arrived", pc.preamble.await(15, TimeUnit.SECONDS))
+        assertTrue("never reported Streaming", listener.streaming.await(15, TimeUnit.SECONDS))
+        client.close()
+
+        assertEquals(PcLinkEnvelope.AEAD, pc.challengeEncryption)
+        assertTrue("the client's v2 proof must verify", pc.clientProofValid)
+        assertEquals(
+            listOf("hello", "auth_challenge", "auth_response"),
+            pc.clientMessageTypes()
+        )
+        // The `config` inside the envelope is the one that reached the listener, token and all.
+        assertArrayEquals(PcLinkProtocol.videoPreamble(authToken), pc.preambleBytes)
+        assertEquals(1, listener.configs.size)
+        assertEquals(3840, listener.configs.single().width)
+    }
+
+    /**
+     * §2.18.7's record, written by the streaming client because nobody else can: this pairing was
+     * made against a version-1 PC (its stored `encryption` is 1), so `auth_ok` on this reconnect is
+     * the only moment its pin will ever be raised.
+     */
+    @Test
+    fun `records the encryption pin out of auth_ok`() {
+        val pc = start(ScriptedPc(AuthReply.PROVE_V2))
+        val listener = RecordingListener()
+        val pinned = ArrayList<PairingEffect.Persist>()
+
+        val client = client(
+            pc, listener,
+            auth = PcLinkAuth(clientIdentity, listOf(storedPairing)) { pinned += it }
+        )
+        client.connect(scope)
+        assertTrue(listener.streaming.await(15, TimeUnit.SECONDS))
+        client.close()
+
+        val persist = pinned.single()
+        assertEquals(PcLinkEnvelope.AEAD, persist.encryption)
+        assertEquals(storedPairing.serverId, persist.serverId)
+        assertFalse("only the pin moves; this is no ceremony", persist.fresh)
+        assertArrayEquals("and never the key", ltk, persist.ltk)
+    }
+
+    /** A version-1 PC gets the version-1 session, unchanged, and nothing is pinned. */
+    @Test
+    fun `a v1 PC still runs plaintext and pins nothing`() {
+        val pc = start(ScriptedPc(AuthReply.PROVE))
+        val listener = RecordingListener()
+        val pinned = ArrayList<PairingEffect.Persist>()
+
+        val client = client(
+            pc, listener,
+            auth = PcLinkAuth(clientIdentity, listOf(storedPairing)) { pinned += it }
+        )
+        client.connect(scope)
+        assertTrue(listener.streaming.await(15, TimeUnit.SECONDS))
+        client.close()
+
+        assertEquals("the offer still goes out — it is additive", PcLinkEnvelope.AEAD, pc.challengeEncryption)
+        assertTrue(pc.clientProofValid)
+        assertTrue("a plaintext session has no pin to record", pinned.isEmpty())
+    }
+
+    /**
+     * §2.18.6, end to end: a plaintext `config` spliced into an engaged session ends it. The client
+     * must not act on the injected message — which a version-1 client would have done without
+     * noticing — and must not resynchronize past it either.
+     */
+    @Test
+    fun `a plaintext message spliced into an engaged session ends it`() {
+        val pc = start(ScriptedPc(AuthReply.SPLICE_PLAINTEXT))
+        val listener = RecordingListener()
+
+        val client = client(pc, listener, auth = PcLinkAuth(clientIdentity, listOf(storedPairing)))
+        client.connect(scope)
+        // The session dies and the client comes back for a new one, which is the honest outcome:
+        // the *session* is over, not the client, and a fresh connection means fresh nonces.
+        assertTrue("never gave up on the spliced session", listener.reconnecting.await(15, TimeUnit.SECONDS))
+        client.close()
+
+        assertTrue(
+            "the injected config must never reach the listener",
+            listener.configs.isEmpty()
+        )
+        assertEquals(
+            "and no video connection may be opened on it",
+            0, listener.states.count { it is PcLinkState.Streaming }
+        )
+    }
+
     // ---- harness -----------------------------------------------------------------------------------
 
     private fun start(pc: ScriptedPc): ScriptedPc {
@@ -257,11 +368,13 @@ class PcLinkClientAuthTest {
         val configs: MutableList<PcLinkStreamConfig> = Collections.synchronizedList(ArrayList())
         val authFailed = CountDownLatch(1)
         val streaming = CountDownLatch(1)
+        val reconnecting = CountDownLatch(1)
 
         override fun onState(state: PcLinkState) {
             states += state
             if (state is PcLinkState.AuthFailed) authFailed.countDown()
             if (state is PcLinkState.Streaming) streaming.countDown()
+            if (state is PcLinkState.Reconnecting) reconnecting.countDown()
         }
 
         override fun onConfig(config: PcLinkStreamConfig) {
@@ -277,6 +390,18 @@ class PcLinkClientAuthTest {
     private enum class AuthReply {
         /** Prove possession honestly, verify the client's proof, then `auth_ok` + `config`. */
         PROVE,
+
+        /**
+         * The same, but selecting encryption 2 (§2.18): v2 proofs, and `auth_ok` and `config` sealed
+         * into `enc` envelopes. This is the whole of a version-2 session over a real socket.
+         */
+        PROVE_V2,
+
+        /**
+         * Selects 2, engages — and then splices one **plaintext** `config` into the stream, which is
+         * what an on-path attacker's injection looks like once the envelope is up (§2.18.6).
+         */
+        SPLICE_PLAINTEXT,
 
         /** `auth_fail {"reason":"unknown_client"}` — this PC has forgotten the phone. */
         UNKNOWN_CLIENT,
@@ -317,6 +442,18 @@ class PcLinkClientAuthTest {
         @Volatile var challengeNonce: String? = null
         @Volatile var clientResponseNonce: String? = null
         @Volatile var clientProofValid = false
+        @Volatile var challengeEncryption: Int = -1
+
+        /** Set once this PC has engaged the §2.18.4 envelope; seals everything it sends after that. */
+        @Volatile private var sealer: PcLinkSealer? = null
+
+        /** What this PC selects: [PcLinkEnvelope.AEAD] on the v2 replies, 1 (i.e. absent) otherwise. */
+        private val selects: Int
+            get() = if (reply == AuthReply.PROVE_V2 || reply == AuthReply.SPLICE_PLAINTEXT) {
+                PcLinkEnvelope.AEAD
+            } else {
+                PcLinkEnvelope.PLAINTEXT
+            }
 
         private val messageTypes = Collections.synchronizedList(ArrayList<String>())
         private val threads = ArrayList<Thread>()
@@ -397,6 +534,7 @@ class PcLinkClientAuthTest {
                     challengeClientId = message.optString("clientId")
                     challengePairingVersion = message.optInt("pairingVersion", -1)
                     challengeNonce = message.optString("nonce")
+                    challengeEncryption = message.optInt("encryption", PcLinkEnvelope.PLAINTEXT)
                     val clientNonce = Hex.decode(challengeNonce!!)!!
                     when (reply) {
                         AuthReply.UNKNOWN_CLIENT -> {
@@ -416,8 +554,9 @@ class PcLinkClientAuthTest {
                         else -> writer.send(
                             authResponse(
                                 Hex.encode(
-                                    PcLinkPairingCrypto.authProof(
-                                        ltk, PeerRole.SERVER, clientNonce, serverNonce
+                                    PcLinkPairingCrypto.negotiatedAuthProof(
+                                        ltk, PeerRole.SERVER, clientNonce, serverNonce,
+                                        challengeEncryption, selects
                                     )
                                 )
                             )
@@ -431,22 +570,40 @@ class PcLinkClientAuthTest {
                     val clientNonce = Hex.decode(challengeNonce!!)!!
                     clientProofValid = Hkdf.constantTimeEquals(
                         Hex.decode(message.getString("proof"))!!,
-                        PcLinkPairingCrypto.authProof(ltk, PeerRole.CLIENT, clientNonce, serverNonce)
+                        PcLinkPairingCrypto.negotiatedAuthProof(
+                            ltk, PeerRole.CLIENT, clientNonce, serverNonce,
+                            challengeEncryption, selects
+                        )
                     )
                     check(clientProofValid) { "client proof mismatch" }
+                    if (selects >= PcLinkEnvelope.AEAD) {
+                        // §2.18.4: the server's last plaintext message was its `auth_response`, and
+                        // `auth_ok` is the first envelope — which is what takes the token off the
+                        // wire in the first place.
+                        sealer = PcLinkSessionKeys.derive(ltk, clientNonce, serverNonce).serverLink().sealer
+                    }
                     // One write, two lines: a real server packs these together, which is exactly the
                     // case where a `config` can already be buffered by the time the client looks.
                     writer.write(
-                        JSONObject().put("type", "auth_ok").put("videoToken", issuedToken).toString()
+                        dress(JSONObject().put("type", "auth_ok").put("videoToken", issuedToken).toString())
                     )
                     writer.write("\n")
-                    writer.write(configLine())
+                    if (reply == AuthReply.SPLICE_PLAINTEXT) {
+                        // The injection: a perfectly well-formed `config` that simply isn't wearing
+                        // the envelope. A v1 client would act on it.
+                        writer.write(configLine())
+                    } else {
+                        writer.write(dress(configLine()))
+                    }
                     writer.write("\n")
                     writer.flush()
                 }
             }
             return true
         }
+
+        /** Seals a line once this PC has engaged; passes it through unchanged before that. */
+        private fun dress(line: String): String = sealer?.seal(line) ?: line
 
         private fun authFail(reason: String): String =
             JSONObject().put("type", "auth_fail").put("reason", reason).toString()
@@ -455,6 +612,7 @@ class PcLinkClientAuthTest {
             .put("type", "auth_response")
             .put("nonce", Hex.encode(serverNonce))
             .put("proof", proof)
+            .apply { if (selects >= PcLinkEnvelope.AEAD) put("encryption", selects) }
             .toString()
 
         private fun configLine(): String = JSONObject()

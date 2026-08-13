@@ -136,6 +136,52 @@ class PcLinkPairingClientTest {
         assertEquals("exactly one terminal callback", 1, listener.finishedCount)
     }
 
+    /**
+     * The same ceremony against a version-2 PC: the offer rides on `pair_start`, the code the two
+     * humans compare is unchanged (the transcript is deliberately untouched across versions), and
+     * the `auth_ok` that follows the confirmation tag arrives **inside an envelope** keyed from the
+     * ceremony's own nonces — so a fresh pairing flows straight into an encrypted session without
+     * waiting for its first reconnect.
+     */
+    @Test
+    fun runsAnEncryptedCeremonyOverARealSocket() {
+        val serverSocket = ServerSocket(0, 1, InetAddress.getLoopbackAddress())
+        val server = ScriptedPc(serverSocket, speaks = PcLinkEnvelope.AEAD)
+        val serverThread = thread(name = "scripted-pc-v2") { server.run() }
+
+        val listener = RecordingListener()
+        val client = PcLinkPairingClient(
+            context = null, host = "127.0.0.1", controlPort = serverSocket.localPort,
+            session = PairingSession.pair(clientIdentity, "Pixel 9 Pro"),
+            listener = listener, clientName = "Pixel 9 Pro", codecs = codecs
+        )
+        listener.onSas = { client.accept() }
+
+        runBlocking {
+            client.start(scope)
+            assertTrue("ceremony didn't finish", listener.finished.await(15, TimeUnit.SECONDS))
+        }
+        serverThread.join(5_000)
+        serverSocket.close()
+
+        assertEquals(PcLinkEnvelope.AEAD, server.offered)
+        assertEquals(PcLinkEnvelope.AEAD, server.selected)
+        assertEquals("the six digits must not move", server.sas, listener.sas)
+        assertTrue(server.clientConfirmValid)
+
+        // The pairing is stored with its pin already at 2 — no reconnect needed to earn it.
+        val persist = listener.persist!!
+        assertEquals(PcLinkEnvelope.AEAD, persist.encryption)
+        assertTrue("a ceremony writes the pairing itself", persist.fresh)
+        assertArrayEquals(server.ltk, persist.ltk)
+
+        // And the token only existed inside the envelope, yet came out intact.
+        val outcome = listener.outcome as PairingOutcome.Success
+        assertEquals(server.videoToken, outcome.videoToken)
+        assertEquals(PcLinkEnvelope.AEAD, outcome.encryption)
+        assertTrue(outcome.paired)
+    }
+
     @Test
     fun decliningTellsThePcAndStoresNothing() {
         val serverSocket = ServerSocket(0, 1, InetAddress.getLoopbackAddress())
@@ -199,12 +245,24 @@ class PcLinkPairingClientTest {
      * The PC end of the ceremony: one connection, newline-delimited JSON, the real derivations.
      * Records what it saw so the test can assert on ordering as well as outcome.
      */
-    private inner class ScriptedPc(private val serverSocket: ServerSocket) {
+    private inner class ScriptedPc(
+        private val serverSocket: ServerSocket,
+        /**
+         * The highest encryption version this PC speaks (§2.18.1). 1 by default, so every test that
+         * doesn't say otherwise plays the version-1 PC the field is full of today.
+         */
+        private val speaks: Int = PcLinkEnvelope.PLAINTEXT
+    ) {
         val identity = PcLinkPairingCrypto.identityFromPrivateKey(
             Hex.decode("5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb")!!
         )!!
         private val nonce = ByteArray(16) { (0x10 + it).toByte() }
         val videoToken = Hex.encode(ByteArray(32) { (0x40 + it).toByte() })
+
+        @Volatile var offered: Int = PcLinkEnvelope.PLAINTEXT
+        @Volatile var selected: Int = PcLinkEnvelope.PLAINTEXT
+        private var clientNonce: ByteArray? = null
+        private var sealer: PcLinkSealer? = null
 
         @Volatile var firstMessageType: String? = null
         @Volatile var helloClientName: String? = null
@@ -254,18 +312,25 @@ class PcLinkPairingClientTest {
                 "pair_start" -> {
                     commitment = Hex.decode(message.getString("commitment"))
                     clientName = message.optString("clientName")
+                    offered = message.optInt("encryption", PcLinkEnvelope.PLAINTEXT)
+                    selected = minOf(offered, speaks)
                     writer.send(
                         JSONObject()
                             .put("type", "pair_pubkey").put("role", "server")
                             .put("name", "Living Room PC")
                             .put("pubkey", Hex.encode(identity.publicKey))
                             .put("nonce", Hex.encode(nonce))
+                            .apply {
+                                // A version-1 PC omits the field entirely; that silence is the answer.
+                                if (selected >= PcLinkEnvelope.AEAD) put("encryption", selected)
+                            }
                     )
                 }
 
                 "pair_pubkey" -> {
                     val clientPub = Hex.decode(message.getString("pubkey"))!!
                     val clientNonce = Hex.decode(message.getString("nonce"))!!
+                    this.clientNonce = clientNonce
                     check(
                         Hkdf.constantTimeEquals(
                             commitment!!, PcLinkPairingCrypto.commitment(clientPub, clientNonce)
@@ -291,6 +356,13 @@ class PcLinkPairingClientTest {
                         JSONObject().put("type", "pair_confirm").put("role", "server")
                             .put("confirm", Hex.encode(keys!!.confirmServer))
                     )
+                    if (selected >= PcLinkEnvelope.AEAD) {
+                        // §2.18.4: the pair_confirm just sent was this side's last plaintext line,
+                        // and the ceremony's own nonces key the envelope (§2.18.3).
+                        sealer = PcLinkSessionKeys
+                            .derive(keys!!.ltk, clientNonce!!, nonce)
+                            .serverLink().sealer
+                    }
                     writer.send(JSONObject().put("type", "auth_ok").put("videoToken", videoToken))
                 }
 
@@ -303,7 +375,8 @@ class PcLinkPairingClientTest {
         }
 
         private fun BufferedWriter.send(message: JSONObject) {
-            write(message.toString())
+            val sealing = sealer
+            write(sealing?.seal(message.toString()) ?: message.toString())
             write("\n")
             flush()
         }

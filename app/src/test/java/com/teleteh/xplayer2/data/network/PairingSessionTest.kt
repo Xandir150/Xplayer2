@@ -614,6 +614,353 @@ class PairingSessionTest {
         assertEquals(emptyList<PairingEffect>(), session.onTick())
     }
 
+    // ---- §2.18 encryption negotiation ------------------------------------------------------------
+
+    /**
+     * The offer is one additive field on the opener, and it is on **both** openers — the ceremony's
+     * and the reconnect's — because §2.18.3 keys the envelope off whichever handshake ran.
+     */
+    @Test
+    fun bothOpenersCarryTheEncryptionOffer() {
+        val pairStart = JSONObject(pairingSession().start().sends().single())
+        assertEquals("pair_start", pairStart.getString("type"))
+        assertEquals(PcLinkEnvelope.AEAD, pairStart.getInt("encryption"))
+
+        val challenge = JSONObject(
+            authSession(listOf(ScriptedServer().asStoredPairing())).start().sends().single()
+        )
+        assertEquals("auth_challenge", challenge.getString("type"))
+        assertEquals(PcLinkEnvelope.AEAD, challenge.getInt("encryption"))
+        // Additive means additive: everything a version-1 PC reads is exactly where it was.
+        assertEquals(PcLinkPairingCrypto.PAIRING_VERSION, challenge.getInt("pairingVersion"))
+        assertEquals(clientIdentity.fingerprint, challenge.getString("clientId"))
+    }
+
+    /** A client that cannot do the cipher must say so rather than promise an envelope it can't open. */
+    @Test
+    fun aClientThatOffersOneLooksExactlyLikeAVersionOneClient() {
+        val session = PairingSession.authenticate(
+            clientIdentity, listOf(ScriptedServer().asStoredPairing()),
+            clock = clock, random = fixedRandom, encryptionOffer = PcLinkEnvelope.PLAINTEXT
+        )
+        val challenge = JSONObject(session.start().sends().single())
+        assertFalse("a 1 is omitted, not sent", challenge.has("encryption"))
+    }
+
+    /**
+     * The compatibility claim, stated once and directly: a PC that ignores the new field answers
+     * exactly as it always did, and the session that results is byte-for-byte the version-1 one —
+     * v1 proofs, no envelope, and a happy client.
+     */
+    @Test
+    fun aVersionOnePcStillAuthenticatesInPlaintext() {
+        val server = ScriptedServer() // speaks = 1
+        val session = authSession(listOf(server.asStoredPairing()))
+        val challenge = JSONObject(session.start().sends().single())
+
+        val response = session.onLine(server.authResponse(challenge))
+        val proof = JSONObject(response.sends().single())
+        assertTrue("the v1 proof is what a v1 PC verifies", server.verifyClientProof(proof))
+        assertEquals(
+            Hex.encode(
+                PcLinkPairingCrypto.authProof(
+                    server.ltk, PeerRole.CLIENT,
+                    Hex.decode(challenge.getString("nonce"))!!, server.authNonceS()
+                )
+            ),
+            proof.getString("proof")
+        )
+        assertTrue("nothing to engage", response.none { it is PairingEffect.EngageEncryption })
+
+        val success = session.onLine(server.authOk()).finishedSuccess()
+        assertEquals(PcLinkEnvelope.PLAINTEXT, success.encryption)
+        assertEquals(server.videoToken, success.videoToken)
+        assertNoPersist(session.onLine(server.authOk()))
+    }
+
+    @Test
+    fun aVersionTwoPcAuthenticatesWithTheV2ProofsAndEngagesAfterOurs() {
+        val server = ScriptedServer(speaks = PcLinkEnvelope.AEAD)
+        val session = authSession(listOf(server.asStoredPairing()))
+        val challenge = JSONObject(session.start().sends().single())
+
+        val effects = session.onLine(server.authResponse(challenge))
+        assertEquals(2, server.selected)
+        assertTrue(server.verifyClientProof(JSONObject(effects.sends().single())))
+
+        // §2.18.4's ordering is the contract: our proof leaves plaintext, and only then do we
+        // switch. A batch that engaged first would seal the very proof the PC is waiting to read.
+        assertEquals(2, effects.size)
+        assertTrue(effects[0] is PairingEffect.Send)
+        val engage = effects[1] as PairingEffect.EngageEncryption
+        assertEquals(
+            "keyed from this connection's own auth nonces",
+            server.authSessionKeys(), engage.keys
+        )
+        assertEquals(PcLinkEnvelope.AEAD, session.encryption)
+    }
+
+    @Test
+    fun aVersionTwoCeremonyEngagesAfterTheServersConfirmTag() {
+        val server = ScriptedServer(speaks = PcLinkEnvelope.AEAD)
+        val session = pairingSession()
+        revealBoth(session, server)
+        server.verifyClientConfirm(JSONObject(session.onUserAccept().sends().single()))
+
+        val effects = session.onLine(server.pairConfirm())
+        val persist = effects.filterIsInstance<PairingEffect.Persist>().single()
+        assertEquals(PcLinkEnvelope.AEAD, persist.encryption)
+        assertTrue("a ceremony writes the pairing itself", persist.fresh)
+
+        // Persist first, then engage: the record must be on disk before anything that follows it.
+        assertEquals(2, effects.size)
+        val engage = effects[1] as PairingEffect.EngageEncryption
+        assertEquals(
+            "the ceremony's own nonces fill the same slots (§2.18.3)",
+            server.pairingSessionKeys(fixedRandom(16)), engage.keys
+        )
+        // And `auth_ok` — which arrives enveloped, unwrapped by the transport — still completes it.
+        val success = session.onLine(server.authOk()).finishedSuccess()
+        assertEquals(PcLinkEnvelope.AEAD, success.encryption)
+        assertTrue(success.paired)
+    }
+
+    /** The transcript is deliberately unchanged across versions, or the two codes wouldn't match. */
+    @Test
+    fun theNegotiationDoesNotDisturbTheSixDigits() {
+        val v1 = ScriptedServer()
+        val v2 = ScriptedServer(speaks = PcLinkEnvelope.AEAD)
+        val fromV1 = pairingSession().let { revealBoth(it, v1); v1.sas }
+        val fromV2 = pairingSession().let { revealBoth(it, v2); v2.sas }
+        assertEquals("a v2 phone must derive the code a v1 PC displays", fromV1, fromV2)
+    }
+
+    /** §2.18.1: a selection above our offer is a peer talking past us, and the session is over. */
+    @Test
+    fun aSelectionAboveOurOfferIsRefused() {
+        val server = ScriptedServer(speaks = PcLinkEnvelope.AEAD, selectionOverride = 3)
+        val session = authSession(listOf(server.asStoredPairing()))
+        val effects = session.onLine(server.authResponse(JSONObject(session.start().sends().single())))
+        assertEquals(PairingFailure.PROTOCOL, effects.finishedFailure())
+        assertTrue("no proof of ours goes out", effects.sends().isEmpty())
+
+        val ceremony = pairingSession()
+        val reveal = ScriptedServer(speaks = PcLinkEnvelope.AEAD, selectionOverride = 3)
+            .onPairStart(JSONObject(ceremony.start().sends().single()))
+        val ceremonyEffects = ceremony.onLine(reveal)
+        assertEquals(PairingFailure.PROTOCOL, ceremonyEffects.finishedFailure())
+        assertTrue(
+            "nothing of ours is revealed",
+            ceremonyEffects.sends().none { JSONObject(it).getString("type") == "pair_pubkey" }
+        )
+    }
+
+    @Test
+    fun anUnreadableSelectionIsABrokenPeerRatherThanASilentOne() {
+        val server = ScriptedServer(speaks = PcLinkEnvelope.AEAD)
+        val session = authSession(listOf(server.asStoredPairing()))
+        val challenge = JSONObject(session.start().sends().single())
+        val mangled = JSONObject(server.authResponse(challenge)).put("encryption", "two").toString()
+        assertEquals(PairingFailure.PROTOCOL, session.onLine(mangled).finishedFailure())
+    }
+
+    // ---- §2.18.7: the pin ---------------------------------------------------------------------------
+
+    /**
+     * The downgrade layer that survives a store restored from a pre-upgrade backup: a pairing that
+     * has completed an encrypted session refuses a plaintext one **before verifying anything**,
+     * because a correct v1 proof from a pinned PC is precisely what a stripped negotiation looks
+     * like.
+     */
+    @Test
+    fun aPinnedPairingRefusesAPlaintextSelection() {
+        val server = ScriptedServer() // rolled back, or someone stripped the field in flight
+        val session = authSession(listOf(server.asStoredPairing(encryption = PcLinkEnvelope.AEAD)))
+        val effects = session.onLine(server.authResponse(JSONObject(session.start().sends().single())))
+
+        assertEquals(PairingFailure.ENCRYPTION_REQUIRED, effects.finishedFailure())
+        assertTrue("we must not answer a stripped negotiation", effects.sends().isEmpty())
+        assertNoPersist(effects)
+    }
+
+    /**
+     * With a candidate *list* — discovery can still only guess by address — the pin belongs to the
+     * PC that actually answered, not to the guess at the head of the list. An unpinned PC must not
+     * be refused because some other stored PC happens to be pinned.
+     */
+    @Test
+    fun thePinFollowsThePairingThatAnsweredNotTheGuess() {
+        val answering = ScriptedServer(name = "Study PC")
+        val pinnedElsewhere = PcLinkPairing(
+            serverId = "f".repeat(64), name = "Living Room PC", ltk = ByteArray(32) { 0x11 },
+            createdAt = "2026-08-01T00:00:00Z", lastSeenAt = "2026-08-01T00:00:00Z",
+            encryption = PcLinkEnvelope.AEAD
+        )
+        val session = authSession(listOf(pinnedElsewhere, answering.asStoredPairing()))
+        val effects = session.onLine(
+            answering.authResponse(JSONObject(session.start().sends().single()))
+        )
+        assertEquals(
+            "the unpinned PC that proved itself may run plaintext",
+            1, effects.sends().size
+        )
+        assertEquals(
+            PcLinkEnvelope.PLAINTEXT,
+            session.onLine(answering.authOk()).finishedSuccess().encryption
+        )
+    }
+
+    @Test
+    fun aPinnedPairingIsRefusedEvenWhenItIsNotTheOnlyCandidate() {
+        val answering = ScriptedServer(name = "Study PC")
+        val unpinnedOther = PcLinkPairing(
+            serverId = "f".repeat(64), name = "Other PC", ltk = ByteArray(32) { 0x11 },
+            createdAt = "2026-08-01T00:00:00Z", lastSeenAt = "2026-08-01T00:00:00Z"
+        )
+        val session = authSession(
+            listOf(unpinnedOther, answering.asStoredPairing(encryption = PcLinkEnvelope.AEAD))
+        )
+        val effects = session.onLine(
+            answering.authResponse(JSONObject(session.start().sends().single()))
+        )
+        assertEquals(PairingFailure.ENCRYPTION_REQUIRED, effects.finishedFailure())
+        assertTrue(effects.sends().isEmpty())
+    }
+
+    /**
+     * The half the reference forgot. A pairing made against a version-1 PC selected 1 at its
+     * ceremony, so `auth_ok` on a later reconnect is the only place its pin can ever be raised —
+     * and it raises the pin *only*, never the key.
+     */
+    @Test
+    fun authOkRaisesThePinForAPairingMadeBeforeEncryptionExisted() {
+        val server = ScriptedServer(speaks = PcLinkEnvelope.AEAD)
+        val stored = server.asStoredPairing() // encryption = 1, as every pairing today is
+        val session = authSession(listOf(stored))
+        session.onLine(server.authResponse(JSONObject(session.start().sends().single())))
+
+        val effects = session.onLine(server.authOk())
+        val persist = effects.filterIsInstance<PairingEffect.Persist>().single()
+        assertEquals(PcLinkEnvelope.AEAD, persist.encryption)
+        assertFalse("this must not look like a fresh ceremony", persist.fresh)
+        assertEquals(stored.serverId, persist.serverId)
+        assertArrayEquals("the key is not rewritten", stored.ltk, persist.ltk)
+        // And the pin is written before the session is reported done.
+        assertTrue(effects.indexOfFirst { it is PairingEffect.Persist } <
+            effects.indexOfFirst { it is PairingEffect.Finished })
+    }
+
+    @Test
+    fun authOkDoesNotRewriteAPinThatAlreadySaysTwo() {
+        val server = ScriptedServer(speaks = PcLinkEnvelope.AEAD)
+        val session = authSession(listOf(server.asStoredPairing(encryption = PcLinkEnvelope.AEAD)))
+        session.onLine(server.authResponse(JSONObject(session.start().sends().single())))
+        assertNoPersist(session.onLine(server.authOk()))
+    }
+
+    /** A plaintext session never writes a pin: it has nothing to record and would lower one. */
+    @Test
+    fun aPlaintextSessionWritesNoPin() {
+        val server = ScriptedServer()
+        val session = authSession(listOf(server.asStoredPairing()))
+        session.onLine(server.authResponse(JSONObject(session.start().sends().single())))
+        assertNoPersist(session.onLine(server.authOk()))
+    }
+
+    // ---- §2.18 refusals on the wire ------------------------------------------------------------------
+
+    @Test
+    fun encryptionRequiredIsUnderstoodOnBothRefusalMessages() {
+        val server = ScriptedServer()
+        val auth = authSession(listOf(server.asStoredPairing()))
+        auth.start()
+        assertEquals(
+            PairingFailure.ENCRYPTION_REQUIRED,
+            auth.onLine("""{"type":"auth_fail","reason":"encryption_required"}""").finishedFailure()
+        )
+
+        val ceremony = pairingSession()
+        ceremony.start()
+        assertEquals(
+            PairingFailure.ENCRYPTION_REQUIRED,
+            ceremony.onLine("""{"type":"pair_reject","reason":"encryption_required"}""").finishedFailure()
+        )
+    }
+
+    /**
+     * §2.18.4: after our proof has gone out on an encrypted session, a plaintext `auth_fail` is
+     * still *accepted* — but its reason is not trusted. `unknown_client` can only genuinely arise
+     * before the PC answered our challenge, so a forged one here is an attacker fishing for the
+     * re-pairing prompt, and it must not get one.
+     */
+    @Test
+    fun aPlaintextAuthFailAfterOurProofIsNotTrustedForItsReason() {
+        val server = ScriptedServer(speaks = PcLinkEnvelope.AEAD)
+        val session = authSession(listOf(server.asStoredPairing()))
+        session.onLine(server.authResponse(JSONObject(session.start().sends().single())))
+
+        val failure = session
+            .onLine("""{"type":"auth_fail","reason":"unknown_client"}""")
+            .finishedFailure()
+        assertEquals("never UNKNOWN_TO_PC, which is the only reason that offers a re-pair",
+            PairingFailure.PROTOCOL, failure)
+    }
+
+    /** Before our proof — and on any plaintext session — the reason is still worth acting on. */
+    @Test
+    fun anAuthFailBeforeOurProofKeepsItsReason() {
+        val server = ScriptedServer(speaks = PcLinkEnvelope.AEAD)
+        val session = authSession(listOf(server.asStoredPairing()))
+        session.start()
+        assertEquals(
+            PairingFailure.UNKNOWN_TO_PC,
+            session.onLine("""{"type":"auth_fail","reason":"unknown_client"}""").finishedFailure()
+        )
+
+        val v1 = ScriptedServer()
+        val plaintext = authSession(listOf(v1.asStoredPairing()))
+        plaintext.onLine(v1.authResponse(JSONObject(plaintext.start().sends().single())))
+        assertEquals(
+            "a v1 session's auth_fail is the only word we get, and it is honest",
+            PairingFailure.UNKNOWN_TO_PC,
+            plaintext.onLine("""{"type":"auth_fail","reason":"unknown_client"}""").finishedFailure()
+        )
+    }
+
+    /** §2.18.6: no `pair_reject` accompanies a failure once the envelope is engaged. */
+    @Test
+    fun nothingIsAnnouncedAfterTheEnvelopeIsEngaged() {
+        val server = ScriptedServer(speaks = PcLinkEnvelope.AEAD)
+        val session = pairingSession()
+        revealBoth(session, server)
+        session.onUserAccept()
+        session.onLine(server.pairConfirm())
+
+        // An out-of-order message on the now-encrypted connection.
+        val effects = session.onLine("""{"type":"pair_pubkey","role":"server"}""")
+        assertEquals(PairingFailure.PROTOCOL, effects.finishedFailure())
+        assertTrue("the handshake is long over; a reason buys nothing", effects.sends().isEmpty())
+    }
+
+    /** Local policy, independent of the pin: refuse a plaintext selection outright. */
+    @Test
+    fun requireEncryptionRefusesAPlaintextSelectionWithNoPinAtAll() {
+        val server = ScriptedServer()
+        val session = PairingSession.authenticate(
+            clientIdentity, listOf(server.asStoredPairing()),
+            clock = clock, random = fixedRandom, requireEncryption = true
+        )
+        val effects = session.onLine(server.authResponse(JSONObject(session.start().sends().single())))
+        assertEquals(PairingFailure.ENCRYPTION_REQUIRED, effects.finishedFailure())
+
+        val ceremony = PairingSession.pair(
+            clientIdentity, "Pixel 9 Pro",
+            clock = clock, random = fixedRandom, requireEncryption = true
+        )
+        val reveal = ScriptedServer().onPairStart(JSONObject(ceremony.start().sends().single()))
+        assertEquals(PairingFailure.ENCRYPTION_REQUIRED, ceremony.onLine(reveal).finishedFailure())
+    }
+
     // ---- helpers -------------------------------------------------------------------------------
 
     private fun List<PairingEffect>.sends(): List<String> =
@@ -634,7 +981,17 @@ class PairingSessionTest {
      * The PC side of the ceremony, running the same derivations the Rust server does. Fixed key
      * material and nonce so a failure is reproducible.
      */
-    private inner class ScriptedServer(val name: String = "Living Room PC") {
+    private inner class ScriptedServer(
+        val name: String = "Living Room PC",
+        /**
+         * The highest encryption version this PC speaks (§2.18.1). **1 by default**, so every test
+         * that doesn't say otherwise is playing the version-1 PC the field is full of right now —
+         * which is what keeps the compatibility claim honest instead of asserted once and forgotten.
+         */
+        private val speaks: Int = PcLinkEnvelope.PLAINTEXT,
+        /** Overrides the selection with something the negotiation rules should never accept. */
+        private val selectionOverride: Int? = null
+    ) {
         val identity = PcLinkPairingCrypto.identityFromPrivateKey(
             Hex.decode("5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb")!!
         )!!
@@ -645,26 +1002,56 @@ class PairingSessionTest {
         private var clientName: String = ""
         private var authNonces: Pair<ByteArray, ByteArray>? = null
 
+        /** What the client offered, and what this PC answered — both inside the §2.18.2 proofs. */
+        var offered: Int = PcLinkEnvelope.PLAINTEXT
+            private set
+        var selected: Int = PcLinkEnvelope.PLAINTEXT
+            private set
+
         val sas: String get() = keys!!.sas
 
         /** The LTK a previous ceremony would have produced; used as a stored pairing for auth tests. */
         val ltk: ByteArray = ByteArray(32) { (it * 7 + 3).toByte() }
 
-        fun asStoredPairing() = PcLinkPairing(
+        fun asStoredPairing(encryption: Int = PcLinkEnvelope.PLAINTEXT) = PcLinkPairing(
             serverId = identity.fingerprint, name = name, ltk = ltk,
             createdAt = "2026-08-11T14:03:00Z", lastSeenAt = "2026-08-11T14:03:00Z",
-            lastHost = "192.168.1.10"
+            lastHost = "192.168.1.10", encryption = encryption
         )
+
+        /** `min(offer, what we speak)` — and a PC that can select 2 MUST (§2.18.1). */
+        private fun select(opener: JSONObject): Int {
+            offered = opener.optInt(PairingSession.FIELD_ENCRYPTION, PcLinkEnvelope.PLAINTEXT)
+            selected = selectionOverride ?: minOf(offered, speaks)
+            return selected
+        }
+
+        /** A version-1 PC omits the field entirely, which is the whole of "absent means 1". */
+        private fun JSONObject.putSelection(): JSONObject =
+            if (selected >= PcLinkEnvelope.AEAD) put(PairingSession.FIELD_ENCRYPTION, selected) else this
 
         fun onPairStart(pairStart: JSONObject): String {
             commitment = Hex.decode(pairStart.getString("commitment"))!!
             clientName = pairStart.optString("clientName")
+            select(pairStart)
             return JSONObject()
                 .put("type", "pair_pubkey").put("role", "server").put("name", name)
                 .put("pubkey", Hex.encode(identity.publicKey))
                 .put("nonce", Hex.encode(nonce))
+                .putSelection()
                 .toString()
         }
+
+        /** The §2.18.3 keys for the ceremony path: the two `pair_pubkey` nonces. */
+        fun pairingSessionKeys(clientNonce: ByteArray): PcLinkSessionKeys =
+            PcLinkSessionKeys.derive(keys!!.ltk, clientNonce, nonce)
+
+        /** The §2.18.3 keys for the auth path: the two auth nonces. */
+        fun authSessionKeys(): PcLinkSessionKeys =
+            authNonces!!.let { (c, s) -> PcLinkSessionKeys.derive(ltk, c, s) }
+
+        /** This PC's `auth_response` nonce, for tests that recompute a proof by hand. */
+        fun authNonceS(): ByteArray = authNonces!!.second
 
         /** Verifies the commitment (§4.3) and derives the session keys, exactly as the server does. */
         fun onClientReveal(reveal: JSONObject) {
@@ -696,20 +1083,29 @@ class PairingSessionTest {
             val nonceC = Hex.decode(challenge.getString("nonce"))!!
             val nonceS = ByteArray(16) { (0x30 + it).toByte() }
             authNonces = nonceC to nonceS
+            select(challenge)
             return JSONObject()
                 .put("type", "auth_response")
                 .put("nonce", Hex.encode(nonceS))
                 .put(
                     "proof",
-                    Hex.encode(PcLinkPairingCrypto.authProof(ltk, PeerRole.SERVER, nonceC, nonceS))
-                ).toString()
+                    Hex.encode(
+                        PcLinkPairingCrypto.negotiatedAuthProof(
+                            ltk, PeerRole.SERVER, nonceC, nonceS, offered, selected
+                        )
+                    )
+                )
+                .putSelection()
+                .toString()
         }
 
         fun verifyClientProof(response: JSONObject): Boolean {
             val (nonceC, nonceS) = authNonces!!
             return Hkdf.constantTimeEquals(
                 Hex.decode(response.getString("proof"))!!,
-                PcLinkPairingCrypto.authProof(ltk, PeerRole.CLIENT, nonceC, nonceS)
+                PcLinkPairingCrypto.negotiatedAuthProof(
+                    ltk, PeerRole.CLIENT, nonceC, nonceS, offered, selected
+                )
             )
         }
 
