@@ -151,19 +151,38 @@ class PcLinkSessionLinkTest {
 
     // ---- malformed envelopes ----------------------------------------------------------------------
 
+    /**
+     * A line labelled `enc` that has no readable counter, or no ciphertext string, is not an
+     * envelope at all — so it is the *wrong dress* rather than a bad envelope, matching how the
+     * reference's decoder classifies a message it cannot read. `optLong` would have turned every
+     * one of these into a perfectly plausible counter 0.
+     */
     @Test
-    fun anEnvelopeNeedsAnHonestCounter() {
+    fun aLineLabelledEncThatIsNotOneIsTheWrongDress() {
         for (bad in listOf(
             """{"type":"enc","c":"${"00".repeat(32)}"}""",
             """{"type":"enc","n":"0","c":"${"00".repeat(32)}"}""",
             """{"type":"enc","n":0.5,"c":"${"00".repeat(32)}"}""",
             """{"type":"enc","n":-1,"c":"${"00".repeat(32)}"}""",
-            """{"type":"enc","n":9007199254740992,"c":"${"00".repeat(32)}"}"""
+            """{"type":"enc","n":0}""",
+            """{"type":"enc","n":0,"c":42}"""
         )) {
             val link = server()
             link.engage(keys)
-            assertEquals("bad n in $bad", "malformed", failureOf { link.accept(bad) }.code)
+            assertEquals("not an envelope: $bad", "plaintext", failureOf { link.accept(bad) }.code)
         }
+    }
+
+    /**
+     * A counter past anything a sender may legally use is still just a counter that isn't the
+     * expected one — the §2.18.5 bound governs senders, and a receiver has a simpler answer.
+     */
+    @Test
+    fun anAbsurdlyLargeCounterIsACounterFailure() {
+        val link = server()
+        link.engage(keys)
+        val line = """{"type":"enc","n":9007199254740992,"c":"${"00".repeat(32)}"}"""
+        assertEquals("counter", failureOf { link.accept(line) }.code)
     }
 
     @Test

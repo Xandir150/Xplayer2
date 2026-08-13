@@ -353,8 +353,13 @@ class PcLinkSessionLink(private val role: PeerRole = PeerRole.CLIENT) {
             if (role == PeerRole.CLIENT && message?.optString("type") == "auth_fail") return line
             throw die(PcLinkLinkFailure.Plaintext)
         }
-        val n = counterOf(message) ?: throw die(PcLinkLinkFailure.Malformed)
-        val cHex = message.optString("c")
+        // A line that says `enc` but has no counter, or no ciphertext string, is not an envelope at
+        // all — so it is the wrong dress rather than a bad envelope, which is how the reference
+        // classifies it (its decoder simply fails to read the message). Both end the session; the
+        // codes are named so three implementations can be held to the same one.
+        val n = counterOf(message)
+        val cHex = message.opt("c") as? String
+        if (n == null || cHex == null) throw die(PcLinkLinkFailure.Plaintext)
         return when (val opened = link.opener.open(n, cHex)) {
             is PcLinkOpener.OpenResult.Failed -> throw die(opened.failure)
             is PcLinkOpener.OpenResult.Opened -> {
@@ -367,18 +372,18 @@ class PcLinkSessionLink(private val role: PeerRole = PeerRole.CLIENT) {
     }
 
     /**
-     * `n` as the wire spells it: a non-negative integer no larger than [PcLinkEnvelope.MAX_COUNTER].
-     * `optLong` would quietly turn a fractional or absent `n` into 0 and hand a *valid* counter to
-     * the opener, so the field is read strictly.
+     * `n` as the wire spells it: a non-negative whole number. `optLong` would quietly turn a
+     * fractional, absent or quoted `n` into 0 and hand a *valid* counter to the opener, so the field
+     * is read strictly and anything else refuses the line.
+     *
+     * No upper bound here on purpose. [PcLinkEnvelope.MAX_COUNTER] binds what a *sender* may use; a
+     * receiver simply finds that a counter past its own expectation does not match, which is the
+     * `counter` tripwire and the same answer the reference gives.
      */
-    private fun counterOf(message: JSONObject): Long? {
-        val value = message.opt("n")
-        val n = when (value) {
-            is Int -> value.toLong()
-            is Long -> value
-            else -> return null
-        }
-        return n.takeIf { it in 0..PcLinkEnvelope.MAX_COUNTER }
+    private fun counterOf(message: JSONObject): Long? = when (val value = message.opt("n")) {
+        is Int -> value.toLong().takeIf { it >= 0 }
+        is Long -> value.takeIf { it >= 0 }
+        else -> null
     }
 
     /**

@@ -1150,7 +1150,14 @@ class PcLinkClient(
                 PcLinkProtocol.helloLine(clientName, effectiveCodecs(), audio = audioCapability)
             )
 
-            val splitter = PcLinkLineSplitter()
+            // §2.18.4's sizing rule: an envelope doubles its message and adds up to 96 bytes, so the
+            // *outer* cap has to be `2·L + 96` for the inner cap L we still want to honour. Sized
+            // for the envelope on every session, encrypted or not — an over-long line here is
+            // dropped whole, and on an engaged session a dropped line is a counter gap one message
+            // later, which is a correct death but a baffling one to read in a log.
+            val splitter = PcLinkLineSplitter(
+                PcLinkEnvelope.envelopeLineCapacity(PcLinkProtocol.MAX_LINE_LEN)
+            )
 
             // Paired PC: authenticate before anything else. A server implementing §2.6 sends no
             // `config` at all until it has, and §2.2 forbids opening the video connection first.

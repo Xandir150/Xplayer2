@@ -137,7 +137,12 @@ class PcLinkPairingClient(
     private suspend fun runSession(socket: Socket): PairingOutcome {
         val output = socket.getOutputStream()
         val input = socket.getInputStream()
-        val splitter = PcLinkLineSplitter()
+        // §2.18.4's sizing rule: the envelope doubles a message and adds up to 96 bytes, so the
+        // outer cap is twice the inner one plus slack. Nothing in a ceremony comes close, but the
+        // `auth_ok` at the end of an encrypted one is already an envelope.
+        val splitter = PcLinkLineSplitter(
+            PcLinkEnvelope.envelopeLineCapacity(PcLinkProtocol.MAX_LINE_LEN)
+        )
         val buffer = ByteArray(READ_BUFFER)
         var finished: PairingOutcome? = null
 
