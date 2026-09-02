@@ -32,6 +32,13 @@ ordinary media keys, so they reach whatever is playing there and do nothing in a
 With the desktop app's half-width stereo layout the picture in the glasses was square-ish. Each eye
 is now fitted at the desktop's real shape, whichever layout the PC sends.
 
+## Swap the eyes
+
+If a 3D film comes out with the eyes crossed, tap the new glasses button in the header — it sits
+just left of the glasses-mode button, appears only while the glasses are in 3D, and stays as you
+set it. One lens is red and one blue; when pressed they trade places, which is what it does to the
+picture. Files and Lazy 3D only; a PC Link cast is never swapped.
+
 ## Also
 
 - The connect screen says where the desktop app is (xplayer2.app/#pclink), for a phone that has
