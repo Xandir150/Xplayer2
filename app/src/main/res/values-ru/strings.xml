@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="press_back_again_to_exit">Нажмите «Назад» ещё раз для выхода</string>
+
     <!-- Tabs -->
     <string name="tab_recent">Недавние</string>
     <string name="tab_files">Файлы</string>
@@ -12,6 +14,8 @@
     <string name="menu_audio">Аудиодорожка</string>
     <string name="menu_subtitle">Субтитры</string>
     <string name="menu_stereo">Стерео: переключить</string>
+    <string name="menu_stereo_short">SBS</string>
+    <string name="menu_back">Назад</string>
     <string name="select_audio_track">Выбрать аудиодорожку</string>
     <string name="select_subtitle">Выбрать субтитры</string>
     <string name="quality">Качество</string>
@@ -30,6 +34,8 @@
 
     <!-- Player controls overlay -->
     <string name="player_back">Назад</string>
+    <string name="player_ou_to_sbs">OU➤SBS</string>
+    <string name="player_auto">Авто</string>
     <string name="player_shift">Сдвиг</string>
     <string name="player_rewind">Назад 10с</string>
     <string name="player_play_pause">Пауза/Воспроизведение</string>
@@ -39,6 +45,8 @@
     <!-- Remote control -->
     <string name="remote_now_playing">Воспроизводится</string>
     <string name="remote_3d_mode">3D режим</string>
+    <string name="remote_ou_to_sbs">OU→SBS</string>
+    <string name="remote_auto">Авто</string>
     <string name="remote_shift">Сдвиг</string>
     <string name="remote_lazy3d">2D→3D</string>
     <string name="remote_lazy3d_starting">2D→3D — запуск…</string>
@@ -49,6 +57,11 @@
     <string name="glasses_mode">Режим очков</string>
     <string name="glasses_mode_title">Режим отображения очков</string>
     <string name="glasses_mode_current">Сейчас: %1$s — нажмите для смены</string>
+    <string name="glasses_mode_2d">2D %1$d Гц</string>
+    <string name="glasses_mode_3d_sbs">3D SBS %1$d Гц</string>
+    <!-- VITURE: обычные 2D/3D без вариантов по герцовке -->
+    <string name="glasses_mode_2d_plain">2D</string>
+    <string name="glasses_mode_3d_plain">3D (SBS)</string>
     <string name="glasses_disabled_while_playing">Поставьте на паузу для смены режима очков</string>
     <string name="glasses_needs_permission">Требуется разрешение USB для очков</string>
     <string name="glasses_not_3d_warning">Кажется, очки не в 3D-режиме — ничего не получится. Переключите очки в 3D-режим.</string>
@@ -56,14 +69,27 @@
     <string name="glasses_brand_unsupported">Смена режима очков требует проприетарного SDK %1$s, который не включён в поставку. Используйте физическое меню очков.</string>
     <string name="glasses_rayneo_manual">RayNeo Air переключает 2D/3D на самих очках: одновременно нажмите кнопку громкости (левая дужка) и кнопку яркости (правая дужка). При отключении 3D выключается автоматически.</string>
     <string name="glasses_not_connected">Поддерживаемые XR-очки не обнаружены. Подключите очки (XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S) и разрешите доступ USB.</string>
+    <!-- Заголовок диалога, когда подключённые очки не сообщают марку/модель (MainActivity) -->
+    <string name="glasses_fallback_name">Очки</string>
 
     <!-- Lazy 3D -->
     <string name="lazy3d_downloading">Загрузка модели 2D→3D (~65 МБ)…</string>
     <string name="lazy3d_downloaded">Модель 2D→3D готова</string>
     <string name="lazy3d_download_failed">Не удалось загрузить модель 2D→3D</string>
     <string name="lazy3d_download_failed_host">Не удалось скачать модель 3D с %1$s — проверьте соединение</string>
+    <!-- Lazy 3D: причины, по которым не удалось запуститься -->
+    <string name="lazy3d_slow_cpu">На этом устройстве нет поддержки GPU для 2D→3D — может работать медленно.</string>
+    <string name="lazy3d_unsupported">2D→3D не удалось загрузить на этом устройстве.</string>
+    <string name="lazy3d_failed">2D→3D не удалось запустить на этом устройстве.</string>
+    <string name="lazy3d_low_memory">Недостаточно памяти для 2D→3D на этом устройстве.</string>
     <string name="lazy3d_thermal_reduced">Качество 2D→3D снижено — устройство нагрелось</string>
     <string name="lazy3d_thermal_paused">Обновление глубины 2D→3D приостановлено, чтобы устройство остыло</string>
+
+    <!-- Depth model picker: TEMPORARY бета A/B-диалог выбора модели глубины Lazy 3D -->
+    <string name="depth_model_picker_title">2D→3D — модель глубины</string>
+    <string name="depth_model_picker_subtitle">Бета-тест — выберите один вариант, чтобы сравнить</string>
+    <string name="depth_model_label_midas">MiDaS small — быстрая (по умолчанию)</string>
+    <string name="depth_model_label_v_model">V-Model — наша дистилляция DA-V2 (бета)</string>
 
     <!-- Network -->
     <string name="network_enter_url">Вставьте ссылку (http, https, msf, content)</string>
@@ -213,6 +239,8 @@
     <string name="pclink_stream_auth_error">не удалось пройти проверку на этом компьютере. Попробуйте подключиться заново.</string>
     <string name="pclink_stream_encryption_required">соединение оказалось незашифрованным, хотя раньше этот компьютер шифровал. Возможно вмешательство в сеть.</string>
     <string name="pclink_stream_unknown_client">компьютер больше не узнаёт это устройство.</string>
+    <string name="pclink_stream_reconnecting">переподключение (%1$d)</string>
+    <string name="pclink_stream_disconnected">отключено: %1$s</string>
 
     <!-- Компьютер нас забыл: повторное сопряжение только по явному выбору -->
     <string name="pclink_repair_title">Сопрячь заново?</string>
@@ -261,12 +289,20 @@
     <!-- DLNA list items -->
     <string name="dlna_up_subtitle">Вверх</string>
     <string name="dlna_folder_subtitle">Папка</string>
+    <string name="dlna_device_fallback">DLNA-устройство</string>
 
     <!-- Recent subtitle -->
     <string name="recent_position_prefix">Позиция: </string>
     <string name="recent_deleted">Удалено</string>
     <string name="recent_delete_confirm">Убрать из недавних?</string>
     <string name="undo">Отменить</string>
+
+    <!-- Ярлык клуба 3D-фильмов Hughey во ВКонтакте (вкладка «Сеть») -->
+    <string name="network_hughey">Hughey</string>
+    <string name="network_hughey_added">Источник Hughey добавлен</string>
+    <string name="vk_club_empty">Видео не найдено</string>
+    <string name="vk_club_boosty">Hughey на Boosty</string>
+    <string name="vk_club_search_hint">Поиск по названию</string>
 
     <!-- Remote redesign section captions -->
     <string name="remote_now_playing_label">Сейчас играет</string>
