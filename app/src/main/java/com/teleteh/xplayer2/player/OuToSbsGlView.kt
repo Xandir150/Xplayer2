@@ -167,7 +167,10 @@ class OuToSbsGlView @JvmOverloads constructor(
         requestRender()
     }
 
-    /** 0 = Auto, 1 = 16:9, 2 = 4:3, 3 = 21:9, 4 = 32:9, 5 = 1:1, 6 = 2.39:1 */
+    /**
+     * 0 = Auto, 1 = 16:9, 2 = 4:3, 3 = 21:9, 4 = 32:9, 5 = 1:1, 6 = 2.39:1 — and, outside the
+     * button's cycle, [RESIZE_MODE_SOURCE_ASPECT] = a PC Link cast's own geometry.
+     */
     fun updateResizeMode(mode: Int) {
         renderer.updateResizeMode(mode)
         requestRender()
@@ -313,6 +316,10 @@ class OuToSbsGlView @JvmOverloads constructor(
         @Volatile var perEyePadFrac: Float = 0f
         @Volatile private var resizeMode: Int = 0
         @Volatile private var videoAspectRatio: Float = 16f / 9f
+        // The same size in pixels, for [RESIZE_MODE_SOURCE_ASPECT]'s exact-integer fit
+        // ([PcLinkFrameLayout]); 16:9 until told, like the ratio above, so the two never disagree.
+        @Volatile private var videoWidth: Int = 16
+        @Volatile private var videoHeight: Int = 9
         private val texMatrix = FloatArray(16)
         // Current on-screen surface size, so each frame can re-assert the full viewport before
         // the visible draw (the depth readback FBO render leaves the viewport at 256×256).
@@ -747,8 +754,13 @@ class OuToSbsGlView @JvmOverloads constructor(
                 drawTexture(1f, 1f, 0f, 0f)
                 return
             }
-            val targetAspect = getTargetAspectRatio(resizeMode, videoAspectRatio)
-            val fit = calculateFitRect(viewport[0], viewport[1], viewport[2], viewport[3], targetAspect)
+            val fit = if (resizeMode == RESIZE_MODE_SOURCE_ASPECT) {
+                // A cast: the frame is the desktop, fitted at its own shape.
+                castRect(viewport, sbs = false, eye = 0)
+            } else {
+                val targetAspect = getTargetAspectRatio(resizeMode, videoAspectRatio)
+                calculateFitRect(viewport[0], viewport[1], viewport[2], viewport[3], targetAspect)
+            }
             GLES20.glViewport(fit.x, fit.y, fit.width, fit.height)
             drawTexture(1f, 1f, 0f, 0f)
             GLES20.glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
@@ -824,12 +836,19 @@ class OuToSbsGlView @JvmOverloads constructor(
             val eyeWidth = viewport[2] / 2
             val eyeX = if (left) viewport[0] else viewport[0] + eyeWidth
 
-            val rect = if (resizeMode == 0) {
-                FitRect(eyeX, viewport[1], eyeWidth, viewport[3])
-            } else {
-                // SBS source per-eye native aspect is sourceAspect / 2.
-                val targetAspect = getTargetAspectRatio(resizeMode, perEyeAspectFromSbs(videoAspectRatio))
-                calculateFitRect(eyeX, viewport[1], eyeWidth, viewport[3], targetAspect)
+            val rect = when (resizeMode) {
+                0 -> FitRect(eyeX, viewport[1], eyeWidth, viewport[3])
+                // A cast: each half of the pair is one eye, fitted into its half of the panel at
+                // the desktop's shape — which is not sourceAspect / 2 when the server has
+                // squeezed both eyes into the desktop's own width, as it does as readily as
+                // doubling it, saying "sbs" for both. Fitting a half to its pixel aspect is what
+                // put a square-ish desktop in each eye (issue #13); see [PcLinkFrameLayout].
+                RESIZE_MODE_SOURCE_ASPECT -> castRect(viewport, sbs = true, eye = if (left) 0 else 1)
+                else -> {
+                    // SBS source per-eye native aspect is sourceAspect / 2.
+                    val targetAspect = getTargetAspectRatio(resizeMode, perEyeAspectFromSbs(videoAspectRatio))
+                    calculateFitRect(eyeX, viewport[1], eyeWidth, viewport[3], targetAspect)
+                }
             }
 
             GLES20.glViewport(rect.x, rect.y, rect.width, rect.height)
@@ -869,6 +888,16 @@ class OuToSbsGlView @JvmOverloads constructor(
             }
         }
 
+        /**
+         * [RESIZE_MODE_SOURCE_ASPECT]: where a cast lands, from [PcLinkFrameLayout], placed in
+         * [viewport] — [eye] 0 is the only draw of a mono frame or the left half of a pair, 1 the
+         * right half.
+         */
+        private fun castRect(viewport: IntArray, sbs: Boolean, eye: Int): FitRect {
+            val r = PcLinkFrameLayout.eyeRects(videoWidth, videoHeight, sbs, viewport[2], viewport[3])[eye]
+            return FitRect(viewport[0] + r.x, viewport[1] + r.y, r.width, r.height)
+        }
+
         // For OU sources, per-eye image is full_width × half_height so its native aspect is 2× source aspect.
         private fun perEyeAspectFromOu(sourceAspect: Float): Float = sourceAspect * 2f
 
@@ -892,6 +921,8 @@ class OuToSbsGlView @JvmOverloads constructor(
         fun updateVideoAspectRatio(width: Int, height: Int) {
             if (width > 0 && height > 0) {
                 videoAspectRatio = width.toFloat() / height.toFloat()
+                videoWidth = width
+                videoHeight = height
             }
         }
 
@@ -1122,7 +1153,9 @@ private const val READBACK_SIZE = 256
 private const val READBACK_INTERVAL_NANOS = 33_000_000L
 
 /**
- * Fit the picture to the source's own shape, letterboxing rather than stretching it.
+ * A PC Link cast's own geometry — [PcLinkFrameLayout]: a mono frame is fitted to its own shape,
+ * letterboxed rather than stretched; a side-by-side pair has each half fitted into its eye the
+ * same way, at the desktop's shape.
  *
  * Deliberately outside the 0..6 the player's aspect button cycles through: those are a viewer's
  * overrides for a film whose container lies about its shape, and 0 — what that button calls
@@ -1131,5 +1164,11 @@ private const val READBACK_INTERVAL_NANOS = 33_000_000L
  * A cast is not a film. A desktop has one true shape and it is known exactly, so stretching it is
  * never right: a 16:10 Mac desktop on a 16:9 pair of glasses arrives visibly squashed, which is
  * what this exists to stop. iOS never had the fault because it never stretched.
+ *
+ * A *pair* is the one place the frame's shape is not the desktop's: the server packs the two eyes
+ * at full width (32:9) or squeezed into the source's own width (16:9, two 8:9 halves) and calls
+ * both `"sbs"`, so fitting a half to its own pixel aspect made a square-ish eye (issue #13). The
+ * desktop's shape is read back off the frame's width first — [PcLinkFrameLayout.eyeShape] — and
+ * it is that which each eye is fitted to.
  */
 const val RESIZE_MODE_SOURCE_ASPECT = 7
