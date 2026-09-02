@@ -81,10 +81,6 @@
     <string name="lazy3d_download_failed">Error al descargar el modelo 2D→3D</string>
     <string name="lazy3d_download_failed_host">No se pudo descargar el modelo 3D desde %1$s — compruebe su conexión</string>
     <!-- Lazy 3D: motivos por los que no pudo iniciarse -->
-    <string name="lazy3d_slow_cpu">Este dispositivo no tiene soporte de GPU para 2D→3D — puede ir lento.</string>
-    <string name="lazy3d_unsupported">No se pudo cargar 2D→3D en este dispositivo.</string>
-    <string name="lazy3d_failed">No se pudo iniciar 2D→3D en este dispositivo.</string>
-    <string name="lazy3d_low_memory">No hay memoria suficiente para 2D→3D en este dispositivo.</string>
     <!-- Lazy 3D: limitación térmica (DepthThermalGovernor) -->
     <string name="lazy3d_thermal_reduced">Calidad de 2D→3D reducida — el dispositivo se está calentando</string>
     <string name="lazy3d_thermal_paused">Actualización de profundidad 2D→3D en pausa para que el dispositivo se enfríe</string>
@@ -313,4 +309,5 @@
     <string name="pclink_media_volume_down">Bajar el volumen del PC</string>
     <string name="pclink_media_volume_up">Subir el volumen del PC</string>
     <string name="pclink_media_mute">Silenciar el PC</string>
+    <string name="pclink_get_desktop_app">¿Necesitas la aplicación de escritorio? Descárgala en xplayer2.app/#pclink</string>
 </resources>

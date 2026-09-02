@@ -1,6 +1,7 @@
 package com.teleteh.xplayer2.ui.network
 
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.text.InputType
@@ -121,6 +122,9 @@ class PcConnectActivity : AppCompatActivity() {
         toolbar.setNavigationOnClickListener { finish() }
 
         tvEmpty = findViewById(R.id.tvEmpty)
+        findViewById<TextView>(R.id.tvGetDesktopApp).setOnClickListener {
+            runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(DESKTOP_APP_URL))) }
+        }
         connectingOverlay = findViewById(R.id.connectingOverlay)
         tvConnecting = findViewById(R.id.tvConnecting)
 
@@ -834,6 +838,8 @@ class PcConnectActivity : AppCompatActivity() {
     }
 
     companion object {
+        /** The landing page section that links both desktop builds. */
+        private const val DESKTOP_APP_URL = "https://xplayer2.app/#pclink"
         /**
          * Extras on the intent toward [PlayerActivity].
          *

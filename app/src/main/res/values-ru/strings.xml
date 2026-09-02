@@ -78,10 +78,6 @@
     <string name="lazy3d_download_failed">Не удалось загрузить модель 2D→3D</string>
     <string name="lazy3d_download_failed_host">Не удалось скачать модель 3D с %1$s — проверьте соединение</string>
     <!-- Lazy 3D: причины, по которым не удалось запуститься -->
-    <string name="lazy3d_slow_cpu">На этом устройстве нет поддержки GPU для 2D→3D — может работать медленно.</string>
-    <string name="lazy3d_unsupported">2D→3D не удалось загрузить на этом устройстве.</string>
-    <string name="lazy3d_failed">2D→3D не удалось запустить на этом устройстве.</string>
-    <string name="lazy3d_low_memory">Недостаточно памяти для 2D→3D на этом устройстве.</string>
     <string name="lazy3d_thermal_reduced">Качество 2D→3D снижено — устройство нагрелось</string>
     <string name="lazy3d_thermal_paused">Обновление глубины 2D→3D приостановлено, чтобы устройство остыло</string>
 
@@ -322,4 +318,5 @@
     <string name="mailru_title">Облако Mail.ru</string>
     <string name="mailru_empty">Здесь нет видео</string>
     <string name="mailru_error">Не удалось открыть ссылку Облака Mail.ru</string>
+    <string name="pclink_get_desktop_app">Нужна программа для компьютера? Скачайте на xplayer2.app/#pclink</string>
 </resources>

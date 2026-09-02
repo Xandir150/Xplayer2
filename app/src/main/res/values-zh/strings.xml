@@ -81,10 +81,6 @@
     <string name="lazy3d_download_failed">下载2D→3D深度模型失败</string>
     <string name="lazy3d_download_failed_host">无法从 %1$s 下载 3D 模型 — 请检查网络连接</string>
     <!-- Lazy 3D：启动失败的几种情况 -->
-    <string name="lazy3d_slow_cpu">此设备不支持 2D→3D 的 GPU 加速，可能运行缓慢。</string>
-    <string name="lazy3d_unsupported">2D→3D 无法在此设备上加载。</string>
-    <string name="lazy3d_failed">2D→3D 无法在此设备上启动。</string>
-    <string name="lazy3d_low_memory">此设备内存不足，无法运行 2D→3D。</string>
     <!-- Lazy 3D：温控降频（DepthThermalGovernor） -->
     <string name="lazy3d_thermal_reduced">2D→3D 画质已降低 — 设备温度过高</string>
     <string name="lazy3d_thermal_paused">已暂停 2D→3D 深度更新，让设备降温</string>
@@ -312,4 +308,5 @@
     <string name="pclink_media_volume_down">调低 PC 音量</string>
     <string name="pclink_media_volume_up">调高 PC 音量</string>
     <string name="pclink_media_mute">PC 静音</string>
+    <string name="pclink_get_desktop_app">需要电脑端程序？请前往 xplayer2.app/#pclink 下载</string>
 </resources>
