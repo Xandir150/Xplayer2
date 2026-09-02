@@ -127,7 +127,7 @@ class NetworkAdapter(
                 }
 
                 is NetworkItem.DlnaDevice -> {
-                    title.text = item.friendlyName.ifBlank { "DLNA Device" }
+                    title.text = item.friendlyName.ifBlank { title.context.getString(R.string.dlna_device_fallback) }
                     sub.text = formatHttpSubtitle(item.location)
                     iconBg.setImageResource(R.drawable.bg_circle_dlna)
                     deleteButton?.visibility = View.GONE

@@ -2,6 +2,7 @@ package com.teleteh.xplayer2.data.depth
 
 import android.content.Context
 import android.util.Log
+import com.teleteh.xplayer2.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -48,7 +49,7 @@ class DepthModelManager(
         val gpuSafe: Boolean,
         val divergenceScale: Float,
         val convergencePct: Float,
-        val uiLabel: String,
+        val uiLabelRes: Int,
         val selectable: Boolean = true,
     ) {
         // As of 1.0.11: the file served at this slot's URL is no longer stock MiDaS — it's
@@ -59,7 +60,7 @@ class DepthModelManager(
         // a second copy under a new name for no benefit).
         MIDAS(
             "midas_v21_small.tflite", "$REL/midas_v21_small.tflite",
-            256, true, 1.0f, 0.90f, "MiDaS small — fast (current default)"
+            256, true, 1.0f, 0.90f, R.string.depth_model_label_midas
         ),
         // DORMANT (selectable=false, asset no longer bundled): the ORIGINAL "V-Model" — our
         // first DA-V2 distillation attempt — lost its beta A/B to tuned MiDaS and was pulled in
@@ -69,7 +70,7 @@ class DepthModelManager(
         // DA-V2 ViT remnant, TF #93476).
         V_MODEL(
             "v_model_fp16.tflite", "$REL/v_model_fp16.tflite",
-            448, false, 1.5f, 0.85f, "V-Model — our DA-V2 distillation (beta)",
+            448, false, 1.5f, 0.85f, R.string.depth_model_label_v_model,
             selectable = false,
         );
 

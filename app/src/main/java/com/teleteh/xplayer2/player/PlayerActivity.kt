@@ -2595,7 +2595,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         for (m in DepthModelManager.DepthModel.values().filter { it.selectable }) {
             val btn = layoutInflater.inflate(R.layout.item_depth_model_button, container, false)
                     as com.google.android.material.button.MaterialButton
-            btn.text = m.uiLabel
+            btn.text = getString(m.uiLabelRes)
             btn.isChecked = (m == active)   // filled accent marks the current model (remote style)
             btn.setOnClickListener {
                 dialog.dismiss()
@@ -3917,11 +3917,17 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                 }
                 is PcLinkState.Reconnecting -> {
                     pcLinkLink = PcLinkSession.Link.RECONNECTING
-                    setPcLinkStatus("$pcLinkServerName — reconnecting (${state.attempt})", dim = false)
+                    setPcLinkStatus(
+                        "$pcLinkServerName — ${getString(R.string.pclink_stream_reconnecting, state.attempt)}",
+                        dim = false
+                    )
                 }
                 is PcLinkState.Failed -> {
                     pcLinkLink = PcLinkSession.Link.FAILED
-                    setPcLinkStatus("$pcLinkServerName — disconnected: ${state.reason}", dim = false)
+                    setPcLinkStatus(
+                        "$pcLinkServerName — ${getString(R.string.pclink_stream_disconnected, state.reason)}",
+                        dim = false
+                    )
                 }
                 is PcLinkState.AuthFailed -> onPcLinkAuthFailed(state.reason)
             }

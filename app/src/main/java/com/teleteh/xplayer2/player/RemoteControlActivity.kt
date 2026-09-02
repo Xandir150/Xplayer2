@@ -806,7 +806,7 @@ class RemoteControlActivity : AppCompatActivity() {
         for (m in com.teleteh.xplayer2.data.depth.DepthModelManager.DepthModel.values().filter { it.selectable }) {
             val btn = layoutInflater.inflate(R.layout.item_depth_model_button, container, false)
                     as MaterialButton
-            btn.text = m.uiLabel
+            btn.text = getString(m.uiLabelRes)
             btn.isChecked = (m == active)
             btn.setOnClickListener {
                 hapticClick()

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">XPlayer2</string>
+    <string name="app_name" translatable="false">XPlayer2</string>
     <string name="press_back_again_to_exit">Press Back again to exit</string>
 
     <!-- Tabs -->
@@ -71,13 +71,15 @@
     <string name="glasses_brand_unsupported">Switching glasses display mode requires the closed-source %1$s SDK, which is not bundled. Please use the glasses\' physical menu to change mode for now.</string>
     <string name="glasses_rayneo_manual">RayNeo Air switches 2D/3D on the glasses themselves: press the Volume button (left temple) and the Brightness button (right temple) at the same time. 3D turns off automatically when you disconnect.</string>
     <string name="glasses_not_connected">No supported XR glasses detected on USB. Plug the goggles in (XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S) and grant USB permission when prompted.</string>
+    <!-- Fallback dialog title when the connected glasses report no brand/model name (MainActivity) -->
+    <string name="glasses_fallback_name">Glasses</string>
 
     <!-- Lazy 3D -->
     <string name="lazy3d_downloading">Downloading 2D→3D depth model (~65 MB)…</string>
     <string name="lazy3d_downloaded">2D→3D depth model ready</string>
     <string name="lazy3d_download_failed">Failed to download 2D→3D depth model</string>
     <string name="lazy3d_download_failed_host">Couldn\'t download the 3D model from %1$s — check your connection</string>
-    <!-- Lazy 3D startup outcomes (English-only is fine per request) -->
+    <!-- Lazy 3D startup outcomes -->
     <string name="lazy3d_slow_cpu">2D→3D has no GPU support on this device — it may run slowly.</string>
     <string name="lazy3d_unsupported">2D→3D couldn\'t load on this device.</string>
     <string name="lazy3d_failed">2D→3D couldn\'t start on this device.</string>
@@ -85,6 +87,13 @@
     <!-- Lazy 3D thermal throttling (DepthThermalGovernor) -->
     <string name="lazy3d_thermal_reduced">2D→3D quality reduced — the device is running hot</string>
     <string name="lazy3d_thermal_paused">2D→3D depth updates paused to cool the device down</string>
+
+    <!-- Depth model picker: TEMPORARY beta A/B dialog (PlayerActivity/RemoteControlActivity) for
+         choosing which Lazy-3D depth model to use; see dialog_depth_model.xml and DepthModelManager. -->
+    <string name="depth_model_picker_title">2D→3D — depth model</string>
+    <string name="depth_model_picker_subtitle">Beta test — pick one to compare</string>
+    <string name="depth_model_label_midas">MiDaS small — fast (current default)</string>
+    <string name="depth_model_label_v_model">V-Model — our DA-V2 distillation (beta)</string>
 
     <!-- Network -->
     <string name="network_enter_url">Paste URL (http, https, msf, content)</string>
@@ -237,6 +246,10 @@
     <string name="pclink_stream_auth_error">couldn\'t sign in to this PC. Try connecting again.</string>
     <string name="pclink_stream_encryption_required">this connection wasn\'t encrypted, and this PC has used encryption before. Someone may be interfering with your network.</string>
     <string name="pclink_stream_unknown_client">this PC no longer recognizes your device.</string>
+    <!-- Link dropped/retrying, appended the same way; %1$d is the retry attempt number and %1$s
+         the raw disconnect reason (not user-facing prose — a protocol code or exception message). -->
+    <string name="pclink_stream_reconnecting">reconnecting (%1$d)</string>
+    <string name="pclink_stream_disconnected">disconnected: %1$s</string>
 
     <!-- The PC forgot us: re-pairing must always be an explicit choice, never automatic -->
     <string name="pclink_repair_title">Pair again?</string>
@@ -288,6 +301,8 @@
     <!-- DLNA list items -->
     <string name="dlna_up_subtitle">Up</string>
     <string name="dlna_folder_subtitle">Folder</string>
+    <!-- Fallback row title when a DLNA device advertises no friendly name (NetworkAdapter) -->
+    <string name="dlna_device_fallback">DLNA Device</string>
 
     <!-- Recent subtitle -->
     <string name="recent_position_prefix">Position: </string>

@@ -734,7 +734,7 @@ class MainActivity : AppCompatActivity() {
         // Detected glasses we don't drive: RayNeo self-manages 2D/3D via the temple buttons (tell the
         // user how); other brands would need a closed-source SDK we don't bundle.
         if (!glasses.supportsRemoteSwitch()) {
-            val brand = glasses.currentBrand()?.name ?: "Glasses"
+            val brand = glasses.currentBrand()?.name ?: getString(R.string.glasses_fallback_name)
             val model = glasses.currentModel().orEmpty()
             val message = if (glasses.currentBrand() == GlassesController.Brand.RAYNEO)
                 getString(R.string.glasses_rayneo_manual)
