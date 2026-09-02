@@ -48,6 +48,8 @@
     <string name="remote_ou_to_sbs">OU→SBS</string>
     <string name="remote_auto">自动</string>
     <string name="remote_shift">偏移</string>
+    <string name="swap_eyes_off">交换左右眼画面（关）</string>
+    <string name="swap_eyes_on">左右眼画面已交换（开）</string>
     <string name="remote_lazy3d">2D→3D（头部跟踪）</string>
     <string name="remote_lazy3d_starting">2D→3D — 启动中…</string>
     <string name="remote_audio_track">音轨</string>

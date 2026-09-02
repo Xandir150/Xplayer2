@@ -23,4 +23,9 @@
     <color name="rc_secondary">#9AA0AE</color>   <!-- secondary text -->
     <color name="rc_danger">#FF6B72</color>      <!-- stop -->
     <color name="rc_outline">#2A2E38</color>     <!-- card stroke -->
+
+    <!-- The swap-eyes glyph's lenses (see StereoEyeSwap): which image each eye is given, left red
+         and right blue until swapped. Bright enough for the dark remote, and neither is the accent. -->
+    <color name="swap_eyes_red">#FF5252</color>
+    <color name="swap_eyes_blue">#448AFF</color>
 </resources>

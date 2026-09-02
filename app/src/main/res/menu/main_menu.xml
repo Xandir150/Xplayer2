@@ -2,6 +2,19 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <!-- Swap eyes — for glasses (or a film) that put the left eye's image on the right. Sits just
+         left of the glasses-mode action and is shown only while that one reads "3D …": the swap
+         means nothing on a 2D panel, and nothing with no glasses. Remembered phone-wide; the
+         player applies it to SBS/OU films and Lazy 3D, never to a PC Link cast — see
+         StereoEyeSwap. A custom action view like its neighbour's, so taps arrive through the view. -->
+    <item
+        android:id="@+id/menu_swap_eyes"
+        android:title="@string/swap_eyes_off"
+        android:icon="@drawable/ic_swap_eyes_frame_24"
+        android:visible="false"
+        app:actionLayout="@layout/action_swap_eyes"
+        app:showAsAction="always" />
+
     <!-- Toggle for XR glasses display mode (2D/3D SBS, with optional refresh-rate picker).
          Hidden until a supported pair of glasses is detected over USB. -->
     <item

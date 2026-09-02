@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Toolbar action view for the swap-eyes switch (see StereoEyeSwap): the glasses glyph with its
+     lenses showing which image each eye is given — left red, right blue, or the other way round
+     once on — on the same borderless ripple as the glasses-mode action beside it, with a soft disc
+     held behind the icon while the switch is on (the bar's own pressed highlight, kept). The icon
+     and isActivated are set from MainActivity; the src here is only the frame, as a placeholder. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="48dp"
+    android:layout_height="match_parent"
+    android:background="?attr/actionBarItemBackground"
+    android:clickable="true"
+    android:focusable="true"
+    android:contentDescription="@string/swap_eyes_off">
+
+    <ImageView
+        android:id="@+id/ivSwapEyes"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="center"
+        android:padding="8dp"
+        android:scaleType="fitCenter"
+        android:background="@drawable/bg_toolbar_toggle_on"
+        android:importantForAccessibility="no"
+        android:src="@drawable/ic_swap_eyes_frame_24" />
+</FrameLayout>

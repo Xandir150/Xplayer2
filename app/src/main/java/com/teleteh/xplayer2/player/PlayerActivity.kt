@@ -307,6 +307,11 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     private var audioMenuRight: LinearLayout? = null
     // Debug flag: whether vertical SBS shift is enabled (not persisted)
     private var sbsShiftEnabled: Boolean = false
+    // Swapped eyes — the phone-wide preference (see StereoEyeSwap), read on create and on every
+    // resume: the switch lives in the main screen's toolbar and can be flipped while a film plays
+    // on the glasses behind it. The renderer is handed rendererSwapFlag(), never this directly —
+    // a PC Link cast ignores it.
+    private var swapEyes: Boolean = false
     // No need for reentrancy guard when we don't call show/hide inside listener
     private var lastVideoWidth: Int = 0
     private var lastVideoHeight: Int = 0
@@ -550,8 +555,8 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         playerView = findViewById(R.id.playerView)
         glView = findViewById(R.id.glView)
         glView?.setSbsEnabled(getStereoSbs())
-        // Default: do not swap eyes
-        glView?.setSwapEyes(false)
+        swapEyes = StereoEyeSwap.isEnabled(this)
+        glView?.setSwapEyes(rendererSwapFlag())
         // PlayerView's internal SurfaceView is the direct-output target. Initial visibility
         // is decided by applyVideoPipeline() once we know the player + flags.
         playerView.videoSurfaceView?.visibility = View.GONE
@@ -1373,6 +1378,9 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     override fun onResume() {
         super.onResume()
         hideSystemBars()
+        // The swap-eyes switch is on the main screen and may have been flipped while this player
+        // sat behind it; a renderer flag, so this costs one uniform on the next frame.
+        applySwapEyesPreference()
         glView?.onResume()
         // Resume playback if needed
         player?.playWhenReady = true
@@ -2260,6 +2268,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         v.setSbsEnabled(getStereoSbs())
         v.setSourceIsSbs(renderSourceIsSbs)
         v.setDuplicateMonoToSbs(renderDuplicateMono)
+        v.setSwapEyes(rendererSwapFlag())
         v.updateResizeMode(resizeMode)
         if (lastVideoWidth > 0 && lastVideoHeight > 0) {
             v.updateVideoAspectRatio(lastVideoWidth, lastVideoHeight)
@@ -2618,6 +2627,21 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     // "Is any stereo split active" — true for both OU→SBS and SBS modes, false for 2D.
     // Used by the pipeline / shift / save paths that only care whether we're splitting at all.
     private fun getStereoSbs(): Boolean = stereoMode != StereoMode.Off
+
+    /** The swap the renderer is handed right now: the preference for a film, never for a cast. */
+    private fun rendererSwapFlag(): Boolean =
+        StereoEyeSwap.rendererFlag(pcLink = isPcLinkMode, preference = swapEyes)
+
+    /**
+     * Re-read the swap-eyes preference and hand it to every render target. Called on resume, and
+     * by [MainActivity] the moment its toolbar switch is flipped while this player is alive behind
+     * it: a renderer flag, so the next frame is the other way round and nothing is re-prepared.
+     */
+    fun applySwapEyesPreference() {
+        swapEyes = StereoEyeSwap.isEnabled(this)
+        val flag = rendererSwapFlag()
+        for (v in listOfNotNull(glView, presentation?.renderView)) v.setSwapEyes(flag)
+    }
 
     // --- SBS vertical shift to approximate 16:9 without bars ---
     private fun applySbsShiftIfNeeded() {
@@ -3643,7 +3667,8 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         v.setSbsEnabled(pcLinkSourceIsSbs && stereoPanel)
         v.setSourceIsSbs(pcLinkSourceIsSbs)
         v.setDuplicateMonoToSbs(false)
-        v.setSwapEyes(false)
+        // Never for a cast, whatever the film preference says — see StereoEyeSwap.rendererFlag.
+        v.setSwapEyes(rendererSwapFlag())
         // The desktop's shape is known exactly, so stretching it to the panel is never right —
         // mode 0 is precisely "stretch". A 16:10 Mac desktop on 16:9 glasses came out squashed.
         // A side-by-side pair gets the same treatment per eye, once the desktop's shape has been

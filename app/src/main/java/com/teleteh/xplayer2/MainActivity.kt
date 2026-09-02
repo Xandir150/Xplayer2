@@ -27,6 +27,8 @@ import com.teleteh.xplayer2.data.glasses.GlassesController
 import com.teleteh.xplayer2.data.glasses.GlassesProtocol
 import com.teleteh.xplayer2.databinding.ActivityMainBinding
 import com.teleteh.xplayer2.player.PlayerActivity
+import com.teleteh.xplayer2.player.StereoEyeSwap
+import com.teleteh.xplayer2.player.StereoEyeSwapIcon
 import com.teleteh.xplayer2.data.RecentEntry
 import com.teleteh.xplayer2.data.RecentStore
 import com.teleteh.xplayer2.data.SourceType
@@ -53,6 +55,8 @@ class MainActivity : AppCompatActivity() {
         GlassesController(applicationContext).also { glassesControllerForPlayback = it }
     }
     private var glassesMenuItem: MenuItem? = null
+    // The swap-eyes switch just left of it — see updateSwapEyesMenu.
+    private var swapEyesMenuItem: MenuItem? = null
 
     // Glasses menu on the external (glasses) display: while we're in the main section the goggles
     // would otherwise just mirror the phone UI (wrong per-eye on the ultra-wide 3D panel), so on an
@@ -434,6 +438,10 @@ class MainActivity : AppCompatActivity() {
         // The item uses a custom actionView (icon + mode chip), so taps arrive through the view,
         // not onOptionsItemSelected.
         glassesMenuItem?.actionView?.setOnClickListener { showGlassesModePicker() }
+        // The swap-eyes switch to its left is built the same way: its own action view, tapped
+        // directly.
+        swapEyesMenuItem = menu.findItem(R.id.menu_swap_eyes)
+        swapEyesMenuItem?.actionView?.setOnClickListener { toggleSwapEyes() }
         updateGlassesMenu()
         return true
     }
@@ -441,6 +449,10 @@ class MainActivity : AppCompatActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
         R.id.menu_glasses -> {
             showGlassesModePicker()
+            true
+        }
+        R.id.menu_swap_eyes -> {
+            toggleSwapEyes()
             true
         }
         else -> super.onOptionsItemSelected(item)
@@ -694,9 +706,17 @@ class MainActivity : AppCompatActivity() {
         item.isEnabled = true
         // Show the current mode as a chip ("3D 90Hz" / "2D 60Hz") next to the icon, but only for
         // connected XREAL glasses (the brand we actually switch); otherwise just the icon.
-        val tv = item.actionView?.findViewById<android.widget.TextView>(R.id.tvGlassesMode) ?: return
         val connected = glasses.currentState() == GlassesController.ConnectionState.Connected &&
             glasses.supportsRemoteSwitch()
+        // The swap-eyes switch to the left of this item follows the chip: on screen only while the
+        // chip would read "3D …" (see StereoEyeSwap.toggleShown).
+        updateSwapEyesMenu(
+            shown = StereoEyeSwap.toggleShown(
+                glassesSwitchable = connected,
+                in3d = connected && GlassesProtocol.is3DMode(glasses.lastMode())
+            )
+        )
+        val tv = item.actionView?.findViewById<android.widget.TextView>(R.id.tvGlassesMode) ?: return
         if (connected) {
             // VITURE, RayNeo and Rokid are plain 2D/3D toggles here (no Hz variants exposed), so
             // drop the frequency.
@@ -709,6 +729,33 @@ class MainActivity : AppCompatActivity() {
         } else {
             tv.visibility = View.GONE
         }
+    }
+
+    /**
+     * The swap-eyes switch (see [StereoEyeSwap]): shown only while the glasses-mode chip beside it
+     * reads "3D …", lit while on. The icon says which image each eye is being given — left red,
+     * right blue, or the other way round — and both states are named for a screen reader.
+     */
+    private fun updateSwapEyesMenu(shown: Boolean) {
+        val item = swapEyesMenuItem ?: return
+        item.isVisible = shown
+        val on = StereoEyeSwap.isEnabled(this)
+        val description = getString(if (on) R.string.swap_eyes_on else R.string.swap_eyes_off)
+        item.title = description
+        val view = item.actionView ?: return
+        view.isActivated = on
+        view.contentDescription = description
+        // White, like the glasses icon beside it (the bar's own tint would paint the lenses too).
+        view.findViewById<android.widget.ImageView>(R.id.ivSwapEyes)?.setImageDrawable(
+            StereoEyeSwapIcon.build(this, swapped = on, frameColor = android.graphics.Color.WHITE)
+        )
+    }
+
+    private fun toggleSwapEyes() {
+        StereoEyeSwap.setEnabled(this, !StereoEyeSwap.isEnabled(this))
+        // A film already on the glasses behind this screen: its next frame is the other way round.
+        PlayerActivity.currentInstance?.applySwapEyesPreference()
+        updateSwapEyesMenu(shown = swapEyesMenuItem?.isVisible == true)
     }
 
     private fun showGlassesModePicker() {

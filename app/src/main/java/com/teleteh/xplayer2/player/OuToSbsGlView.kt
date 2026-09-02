@@ -118,6 +118,11 @@ class OuToSbsGlView @JvmOverloads constructor(
         requestRender()
     }
 
+    /**
+     * Show each eye the other eye's image — see [StereoEyeSwap]. A flag on the next frame, nothing
+     * re-prepared: the per-eye rects and vertical shifts stay with the physical eye; only the half
+     * each one samples (or, under Lazy 3D, the view it is given) is exchanged.
+     */
     fun setSwapEyes(enabled: Boolean) {
         renderer.swapEyes.set(enabled)
         requestRender()
@@ -146,8 +151,8 @@ class OuToSbsGlView @JvmOverloads constructor(
         val amt = (amountPx / referenceHeightPx).coerceIn(0f, 0.25f)
         queueEvent {
             val swap = renderer.swapEyes.get()
-            val leftFromTop = if (swap) true else false
-            val rightFromTop = !leftFromTop
+            val leftFromTop = StereoEyeSwap.ouFromTopHalf(leftEye = true, swap = swap)
+            val rightFromTop = StereoEyeSwap.ouFromTopHalf(leftEye = false, swap = swap)
             val leftShift = if (leftFromTop) -amt else amt
             val rightShift = if (rightFromTop) -amt else amt
             renderer.setEyeShiftNormalized(leftShift, rightShift)
@@ -657,12 +662,15 @@ class OuToSbsGlView @JvmOverloads constructor(
             GLES20.glVertexAttribPointer(l3dTexLoc, 2, GLES20.GL_FLOAT, false, 16, vertexData)
 
             // Left eye — sign -1 → samples to the right of the pixel (foreground floats left).
+            // Swapped eyes exchange the two signs, so each eye is shown the other's view; the
+            // rects stay with the physical eye (see StereoEyeSwap).
+            val swap = swapEyes.get()
             GLES20.glViewport(leftRect.x, leftRect.y, leftRect.width, leftRect.height)
-            GLES20.glUniform1f(l3dEyeSignLoc, -1f)
+            GLES20.glUniform1f(l3dEyeSignLoc, StereoEyeSwap.lazy3dEyeSign(leftEye = true, swap = swap))
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
             // Right eye — sign +1.
             GLES20.glViewport(rightRect.x, rightRect.y, rightRect.width, rightRect.height)
-            GLES20.glUniform1f(l3dEyeSignLoc, 1f)
+            GLES20.glUniform1f(l3dEyeSignLoc, StereoEyeSwap.lazy3dEyeSign(leftEye = false, swap = swap))
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
             GLES20.glViewport(viewport[0], viewport[1], viewport[2], viewport[3])
 
@@ -731,18 +739,18 @@ class OuToSbsGlView @JvmOverloads constructor(
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, 0)
         }
 
+        // Which half each physical eye samples is the one question [StereoEyeSwap] answers; the
+        // eye's own rect, letterbox and vertical shift are untouched by the swap (see drawEyeFromOu).
         private fun drawOuToSbs() {
             val swap = swapEyes.get()
-            val leftFromTop = if (swap) true else false
-            val rightFromTop = if (swap) false else true
-            drawEyeFromOu(left = true, fromTopHalf = leftFromTop)
-            drawEyeFromOu(left = false, fromTopHalf = rightFromTop)
+            drawEyeFromOu(left = true, fromTopHalf = StereoEyeSwap.ouFromTopHalf(leftEye = true, swap = swap))
+            drawEyeFromOu(left = false, fromTopHalf = StereoEyeSwap.ouFromTopHalf(leftEye = false, swap = swap))
         }
 
         private fun drawSbsSource() {
             val swap = swapEyes.get()
-            drawEyeFromSbs(left = true, useRightHalf = swap)
-            drawEyeFromSbs(left = false, useRightHalf = !swap)
+            drawEyeFromSbs(left = true, useRightHalf = StereoEyeSwap.sbsUseRightHalf(leftEye = true, swap = swap))
+            drawEyeFromSbs(left = false, useRightHalf = StereoEyeSwap.sbsUseRightHalf(leftEye = false, swap = swap))
         }
 
         private fun drawFullScreen() {
