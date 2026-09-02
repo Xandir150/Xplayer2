@@ -1,15 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="press_back_again_to_exit">再按一次返回退出</string>
+
     <!-- Tabs -->
     <string name="tab_recent">最近</string>
     <string name="tab_files">文件</string>
     <string name="tab_network">网络</string>
     <string name="tab_sources">来源</string>
+    <!-- PC Link 自己的标签页：查找电脑，以及正在进行的会话的遥控器 -->
+    <string name="tab_pc_mirror">PC-Mirror</string>
 
     <!-- Player menu -->
     <string name="menu_audio">音轨</string>
     <string name="menu_subtitle">字幕</string>
     <string name="menu_stereo">立体声：切换</string>
+    <string name="menu_stereo_short">SBS</string>
+    <string name="menu_back">返回</string>
     <string name="select_audio_track">选择音轨</string>
     <string name="select_subtitle">选择字幕</string>
     <string name="quality">画质</string>
@@ -28,6 +34,8 @@
 
     <!-- Player controls overlay -->
     <string name="player_back">返回</string>
+    <string name="player_ou_to_sbs">OU➤SBS</string>
+    <string name="player_auto">自动</string>
     <string name="player_shift">偏移</string>
     <string name="player_rewind">后退10秒</string>
     <string name="player_play_pause">播放/暂停</string>
@@ -37,6 +45,8 @@
     <!-- Remote control -->
     <string name="remote_now_playing">正在播放</string>
     <string name="remote_3d_mode">3D模式</string>
+    <string name="remote_ou_to_sbs">OU→SBS</string>
+    <string name="remote_auto">自动</string>
     <string name="remote_shift">偏移</string>
     <string name="remote_lazy3d">2D→3D（头部跟踪）</string>
     <string name="remote_lazy3d_starting">2D→3D — 启动中…</string>
@@ -49,6 +59,12 @@
     <!-- Glasses -->
     <string name="glasses_mode">眼镜模式</string>
     <string name="glasses_mode_title">眼镜显示模式</string>
+    <string name="glasses_mode_current">当前：%1$s — 点按切换</string>
+    <string name="glasses_mode_2d">2D %1$dHz</string>
+    <string name="glasses_mode_3d_sbs">3D SBS %1$dHz</string>
+    <!-- VITURE：仅 2D/3D，没有 Hz 变体 -->
+    <string name="glasses_mode_2d_plain">2D</string>
+    <string name="glasses_mode_3d_plain">3D（SBS）</string>
     <string name="glasses_disabled_while_playing">请暂停播放以更改眼镜模式</string>
     <string name="glasses_needs_permission">眼镜需要USB权限</string>
     <string name="glasses_not_3d_warning">眼镜似乎未处于3D模式——画面将无法正常显示。请将眼镜切换到3D（SBS）模式。</string>
@@ -56,11 +72,29 @@
     <string name="glasses_brand_unsupported">切换眼镜显示模式需要 %1$s 的闭源SDK，该SDK未包含在应用中。请使用眼镜的物理菜单更改模式。</string>
     <string name="glasses_rayneo_manual">RayNeo Air 在眼镜上切换 2D/3D：同时按下音量键（左镜腿）和亮度键（右镜腿）。断开连接后 3D 会自动关闭。</string>
     <string name="glasses_not_connected">未在USB上检测到支持的XR眼镜。请连接眼镜（XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S）并授予USB权限。</string>
+    <!-- 已连接的眼镜未上报品牌/型号时，对话框标题使用的备用名称（MainActivity） -->
+    <string name="glasses_fallback_name">眼镜</string>
 
     <!-- Lazy 3D -->
     <string name="lazy3d_downloading">正在下载2D→3D深度模型（约65 MB）…</string>
     <string name="lazy3d_downloaded">2D→3D深度模型已就绪</string>
     <string name="lazy3d_download_failed">下载2D→3D深度模型失败</string>
+    <string name="lazy3d_download_failed_host">无法从 %1$s 下载 3D 模型 — 请检查网络连接</string>
+    <!-- Lazy 3D：启动失败的几种情况 -->
+    <string name="lazy3d_slow_cpu">此设备不支持 2D→3D 的 GPU 加速，可能运行缓慢。</string>
+    <string name="lazy3d_unsupported">2D→3D 无法在此设备上加载。</string>
+    <string name="lazy3d_failed">2D→3D 无法在此设备上启动。</string>
+    <string name="lazy3d_low_memory">此设备内存不足，无法运行 2D→3D。</string>
+    <!-- Lazy 3D：温控降频（DepthThermalGovernor） -->
+    <string name="lazy3d_thermal_reduced">2D→3D 画质已降低 — 设备温度过高</string>
+    <string name="lazy3d_thermal_paused">已暂停 2D→3D 深度更新，让设备降温</string>
+
+    <!-- Depth model picker：临时的 Beta A/B 测试对话框，用于选择 Lazy 3D 的深度模型；
+         参见 dialog_depth_model.xml 和 DepthModelManager。 -->
+    <string name="depth_model_picker_title">2D→3D — 深度模型</string>
+    <string name="depth_model_picker_subtitle">Beta 测试 — 选择一个进行对比</string>
+    <string name="depth_model_label_midas">MiDaS small — 速度快（当前默认）</string>
+    <string name="depth_model_label_v_model">V-Model — 我们基于 DA-V2 的蒸馏模型（beta）</string>
 
     <!-- Network -->
     <string name="network_enter_url">粘贴链接（http、https、msf、content）</string>
@@ -74,10 +108,139 @@
     <string name="dlna_not_found">DLNA：未找到ContentDirectory</string>
     <string name="dlna_browse_failed">DLNA浏览失败：%1$s</string>
 
+    <!-- PC Link（将电脑投放到眼镜上） -->
+    <string name="pclink_title">PC Link</string>
+    <string name="pclink_row_subtitle">串流您 PC 的屏幕</string>
+    <string name="pclink_manual_ip_hint">PC IP 地址（例如 192.168.1.10）</string>
+    <string name="pclink_connect">连接</string>
+    <string name="pclink_discovered_label">已在您的网络中发现</string>
+    <string name="pclink_refresh">刷新</string>
+    <string name="pclink_empty">在 PC 上启动 XPlayer Link 后，会显示在这里</string>
+    <string name="pclink_connecting">正在连接…</string>
+    <string name="pclink_invalid_host">请输入有效的 IP 地址或主机名</string>
+    <string name="pclink_error_ipv6_unsupported">暂不支持 IPv6 地址 — 请使用 XPlayer Link 中显示的 IPv4 地址</string>
+    <string name="pclink_manual_unreachable">无法连接到该地址上的 XPlayer Link</string>
+    <string name="pclink_recentered">屏幕已重新居中</string>
+    <!-- 悬浮层上的静音按钮：PC 自身的声音，通过眼镜播放 -->
+    <string name="pclink_audio_on">声音：眼镜</string>
+    <string name="pclink_audio_muted">声音：PC</string>
+    <string name="pclink_ended_for_playback">PC Link 已断开</string>
+
+    <!-- PC-Mirror 标签页：没有会话在进行时的入口 -->
+    <string name="pclink_find_pc">查找 PC</string>
+    <string name="pclink_disconnect">断开连接</string>
+    <string name="pclink_state_connecting">正在连接…</string>
+    <string name="pclink_state_streaming">正在串流到眼镜</string>
+    <string name="pclink_state_reconnecting">正在重新连接…</string>
+    <string name="pclink_state_failed">已断开</string>
+
+    <string name="pclink_stat_fps">帧数</string>
+    <string name="pclink_stat_bitrate">码率</string>
+
+    <string name="pclink_stats_details">详情</string>
+    <string name="pclink_details_show">显示详情</string>
+    <string name="pclink_details_hide">隐藏详情</string>
+    <string name="pclink_stat_latency">网络延迟</string>
+    <string name="pclink_stat_format">串流格式</string>
+    <string name="pclink_stat_dropped">丢帧数</string>
+    <string name="pclink_stat_audio_output">音频输出</string>
+    <string name="pclink_stat_audio_buffer">音频缓冲</string>
+    <string name="pclink_stat_skew">音画偏差</string>
+    <string name="pclink_stat_audio_dropouts">音频断续</string>
+
+    <!-- 单位：代码里只格式化数字，文字来自这里 -->
+    <string name="pclink_value_fps">%1$s fps</string>
+    <string name="pclink_value_mbps">%1$s Mbps</string>
+    <string name="pclink_value_ms">%1$s ms</string>
+    <string name="pclink_value_format">%1$s · %2$d×%3$d · %4$s</string>
+    <string name="pclink_value_audio_format">%1$d kHz · %2$d 声道</string>
+    <string name="pclink_value_none">—</string>
+
+    <string name="pclink_section_audio">声音</string>
+    <string name="pclink_audio_to_glasses">声音 — 在眼镜里</string>
+    <string name="pclink_audio_to_computer">声音：在 PC 上</string>
+    <string name="pclink_audio_hint_glasses">您在这里收听时，PC 保持静音</string>
+    <string name="pclink_audio_hint_computer">声音正在 PC 上播放</string>
+    <string name="pclink_audio_none">这台 PC 没有发送任何声音</string>
+
+    <!-- PC-Mirror 标签页：此手机已经配对过的电脑 -->
+    <string name="pclink_paired_label">您的 PC</string>
+    <string name="pclink_paired_no_address">尚未记录地址</string>
+    <string name="pclink_paired_empty">暂无 PC — 点按“查找 PC”即可添加</string>
+    <string name="pclink_paired_unreachable">无法连接到那台 PC。请确认它正在运行 XPlayer Link。</string>
+    <string name="pclink_open_remote">打开遥控器</string>
+
+    <string name="pclink_needs_glasses_title">连接您的眼镜</string>
+    <string name="pclink_needs_glasses_body">PC Link 会把 PC 屏幕投放到 XR 眼镜上。请将眼镜连接到此手机（或连接外接显示器）后重试。</string>
+
+    <string name="pclink_recenter">重新居中屏幕</string>
+    <string name="pclink_remote_surface_hint">上下拖动调节音量\n长按重新居中</string>
+
+    <string name="pclink_section_input">控制 PC</string>
+    <string name="pclink_input_control">鼠标和键盘</string>
+    <string name="pclink_input_absolute">触控板即屏幕</string>
+    <string name="pclink_input_keyboard">在 PC 上打字</string>
+    <string name="pclink_input_hint_ready">拖动以移动，点按以点击，双指滚动</string>
+    <string name="pclink_input_hint_absolute">点按触控板上的位置，光标会移到那里</string>
+    <string name="pclink_input_hint_captured">鼠标已捕获 — 返回键可释放</string>
+    <string name="pclink_input_hint_not_encrypted">此连接未加密，因此控制功能已关闭。请忘记这台 PC 并重新配对。</string>
+    <string name="pclink_input_hint_operator_off">请在 PC 上开启“允许此手机控制我”。</string>
+    <string name="pclink_input_surface_hint">拖动移动 · 点按点击\n双指滚动</string>
+
+    <!-- pclink_section_depth/depth_*、pclink_stat_pc_* 和 pclink_media_* 已经定义在本文件末尾。 -->
+
+    <!-- PC Link 配对：6 位比对码（SAS）及其相关状态 -->
+    <string name="pclink_pair_title">要与“%1$s”配对吗？</string>
+    <string name="pclink_pair_body">请确认您的 PC 显示相同的配对码：</string>
+    <string name="pclink_pair_hint">如果配对码不一致，或 PC 上没有出现配对码，请点按“取消”。</string>
+    <string name="pclink_pair_code_description">配对码</string>
+    <string name="pclink_pair_accept">配对</string>
+    <string name="pclink_pairing_progress">正在配对…</string>
+    <string name="pclink_authenticating">正在验证此 PC…</string>
+    <string name="pclink_paired_badge">已配对</string>
+
+    <!-- 配对结果 -->
+    <string name="pclink_pair_cancelled">配对已取消。</string>
+    <string name="pclink_pair_failed">配对失败，请重试。</string>
+    <string name="pclink_pair_busy">那台 PC 正在与另一台设备配对。</string>
+    <string name="pclink_pair_rate_limited">尝试次数过多，请稍等片刻后重试。</string>
+    <string name="pclink_pair_version">这台 PC 需要更新版本的 XPlayer。</string>
+    <string name="pclink_pair_timeout">没有人及时确认，请重试。</string>
+    <string name="pclink_pair_lost">与那台 PC 的连接已断开。</string>
+    <string name="pclink_auth_failed">无法验证此 PC。可能有人在干扰您的网络，或配对已损坏。</string>
+    <string name="pclink_encryption_required">此连接未加密，而这台 PC 以前使用过加密。可能有人在干扰您的网络，也可能是该 PC 回退到了旧版本的 XPlayer Link — 如果是有意如此，请忘记该 PC 并重新配对。</string>
+
+    <!-- 播放器自身串流连接的身份验证失败；显示在视频悬浮层上 -->
+    <string name="pclink_stream_auth_failed">无法验证此 PC。可能有人在干扰您的网络，或配对已损坏。</string>
+    <string name="pclink_stream_auth_error">无法登录此 PC，请重新连接。</string>
+    <string name="pclink_stream_encryption_required">此连接未加密，而这台 PC 以前使用过加密。可能有人在干扰您的网络。</string>
+    <string name="pclink_stream_unknown_client">此 PC 已不再识别您的设备。</string>
+    <string name="pclink_stream_reconnecting">正在重新连接（%1$d）</string>
+    <string name="pclink_stream_disconnected">已断开：%1$s</string>
+
+    <!-- PC 忘记了我们：重新配对必须始终是明确的选择，绝不自动进行 -->
+    <string name="pclink_repair_title">重新配对？</string>
+    <string name="pclink_repair_body">此 PC 已不再识别您的设备。是否重新配对？</string>
+    <string name="pclink_repair_accept">重新配对</string>
+
+    <!-- 由 PC 发起的配对（反向发现） -->
+    <string name="pclink_invite_title">“%1$s”想要配对</string>
+    <string name="pclink_invite_accept">连接</string>
+    <string name="pclink_invite_ignore">忽略</string>
+
+    <!-- 忘记一个配对（长按列表中的某台 PC） -->
+    <string name="pclink_forget_title">忘记“%1$s”？</string>
+    <string name="pclink_forget_body">下次连接时，这台 PC 需要用新代码重新配对。</string>
+    <string name="pclink_forget">忘记此 PC</string>
+    <string name="pclink_forgotten">已忘记“%1$s”</string>
+
     <!-- Common -->
     <string name="common_add">添加</string>
     <string name="common_cancel">取消</string>
     <string name="delete">删除</string>
+    <string name="recent_deleted">已删除</string>
+    <string name="recent_delete_confirm">从最近记录中移除？</string>
+    <string name="undo">撤销</string>
     <string name="stop">停止</string>
 
     <!-- Errors / status -->
@@ -105,9 +268,33 @@
     <!-- DLNA list items -->
     <string name="dlna_up_subtitle">返回上级</string>
     <string name="dlna_folder_subtitle">文件夹</string>
+    <string name="dlna_device_fallback">DLNA 设备</string>
 
     <!-- Recent subtitle -->
     <string name="recent_position_prefix">位置：</string>
+
+    <!-- VK 上 Hughey 3D 影片俱乐部的快捷方式（“网络”标签页） -->
+    <string name="network_hughey">Hughey</string>
+    <string name="network_hughey_added">已添加 Hughey 来源</string>
+    <string name="vk_club_empty">未找到视频</string>
+    <string name="vk_club_boosty">Hughey 的 Boosty</string>
+    <string name="vk_club_search_hint">按标题搜索</string>
+
+    <!-- Remote redesign section captions -->
+    <string name="remote_now_playing_label">正在播放</string>
+    <string name="remote_section_display">画面</string>
+    <string name="remote_section_audio">音频和字幕</string>
+
+    <!-- Yandex Disk public-link browser -->
+    <string name="yadisk_title">Yandex Disk</string>
+    <string name="yadisk_empty">这里没有视频</string>
+    <string name="yadisk_error">无法打开这个 Yandex Disk 链接</string>
+    <string name="yadisk_folder">文件夹</string>
+
+    <!-- Mail.ru Cloud public-link browser -->
+    <string name="mailru_title">Mail.ru Cloud</string>
+    <string name="mailru_empty">这里没有视频</string>
+    <string name="mailru_error">无法打开这个 Mail.ru Cloud 链接</string>
 
     <!-- PC Link：遥控器上的 3D（protocol.md 2.20）和 PC 自己的数据（2.21）。 -->
     <string name="pclink_section_depth">3D 深度</string>
