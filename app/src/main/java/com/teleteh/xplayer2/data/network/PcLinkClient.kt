@@ -193,6 +193,12 @@ sealed class PcControlMessage {
     data class Ping(val tUs: Long) : PcControlMessage()
     data class Pong(val tUs: Long) : PcControlMessage()
 
+    /** The 3D settings and whether they apply right now (§2.20.2) — the sliders' only truth. */
+    data class Depth(val state: PcDepthState) : PcControlMessage()
+
+    /** The PC's own figures for the stream (§2.21), about once a second while video flows. */
+    data class Stats(val stats: PcStreamStats) : PcControlMessage()
+
     /** A known-syntax line whose `type` we don't implement (or a known type with bad fields). */
     object Unknown : PcControlMessage()
 }
@@ -308,7 +314,16 @@ object PcLinkProtocol {
          * is the PC's UI being able to offer its "let this phone control me" switch at all, which
          * it cannot do for a phone that never said it had anything to drive with.
          */
-        input: PcInputOffer? = PcLinkInputProtocol.CLIENT_OFFER
+        input: PcInputOffer? = PcLinkInputProtocol.CLIENT_OFFER,
+        /**
+         * Whether this client shows 3D controls and acts on `depth` messages (§2.20.1). Optional
+         * and additive: absent — or false, which the server treats the same — means the server
+         * never sends `depth`, byte-for-byte what a client built before the section saw. The
+         * remote's sliders draw only from `depth`, so a `hello` without this has no sliders.
+         */
+        depth: Boolean = true,
+        /** Same shape for `stats` (§2.21): asked for, or never sent. */
+        stats: Boolean = true
     ): String {
         val arr = JSONArray()
         for (c in codecs) {
@@ -336,6 +351,10 @@ object PcLinkProtocol {
             )
         }
         if (input != null) obj.put("input", input.toJson())
+        // Only ever `true`: the `gate` vectors make `false` and absent the same answer, so there is
+        // nothing a `false` could say that leaving the field out does not.
+        if (depth) obj.put("depth", true)
+        if (stats) obj.put("stats", true)
         return obj.toString() + "\n"
     }
 
@@ -402,6 +421,10 @@ object PcLinkProtocol {
                 ?: PcControlMessage.Unknown
             "ping" -> readU64(obj, "t_us")?.let { PcControlMessage.Ping(it) } ?: PcControlMessage.Unknown
             "pong" -> readU64(obj, "t_us")?.let { PcControlMessage.Pong(it) } ?: PcControlMessage.Unknown
+            "depth" -> PcLinkDepthProtocol.parseDepth(obj)?.let { PcControlMessage.Depth(it) }
+                ?: PcControlMessage.Unknown
+            "stats" -> PcLinkDepthProtocol.parseStats(obj)?.let { PcControlMessage.Stats(it) }
+                ?: PcControlMessage.Unknown
             else -> PcControlMessage.Unknown
         }
     }
@@ -874,6 +897,17 @@ class PcLinkClient(
          * no-op so a listener that wants no audio simply doesn't override it.
          */
         fun onAudioChunk(ptsUs: Long, payload: ByteArray) {}
+
+        /**
+         * The server's `depth` (§2.20.2) — once after the first `config`, and again whenever anything
+         * in it changes, including in answer to our own `set_depth`. Main thread. The same state is
+         * readable at any time as [PcLinkClient.depthState]; this is for a screen that wants to
+         * move a slider the moment the answer lands rather than on its next poll. Default no-op.
+         */
+        fun onDepth(state: PcDepthState) {}
+
+        /** The PC's own stream figures (§2.21), at the message rate. Main thread. Default no-op. */
+        fun onPcStats(stats: PcStreamStats) {}
     }
 
     private val appContext: Context? = context?.applicationContext
@@ -999,6 +1033,32 @@ class PcLinkClient(
      * broken button rather than as latency.
      */
     private val writerWake = Channel<Unit>(Channel.CONFLATED)
+
+    /**
+     * The §2.20.3 path: the remote's sliders feed it, the control writer drains it at no more than
+     * ten a second. One per client rather than per session — the sliders hold a reference for the
+     * length of a drag — and emptied at the top of every session, because whatever was waiting was
+     * meant for a server that is gone.
+     *
+     * Usable at any point after `hello` (a `set_depth` is itself the §2.20.1 hint), but the remote
+     * only shows the sliders while [depthState] says the PC is converting, so nothing is sent into
+     * a session that has no use for it.
+     */
+    val depth = PcLinkDepthSender(wake = { writerWake.trySend(Unit) })
+
+    /**
+     * The last `depth` the server sent this session, or null before the first one — which is also
+     * the answer against a server built before §2.20, and means "no sliders". Never assumed from
+     * our own `set_depth`: the server clamps, and the window may have moved the same slider.
+     */
+    @Volatile
+    var depthState: PcDepthState? = null
+        private set
+
+    /** The last `stats` the server sent this session (§2.21), or null before the first one. */
+    @Volatile
+    var pcStats: PcStreamStats? = null
+        private set
 
     /** Starts the session loop in [scope]. Call once. */
     fun connect(scope: CoroutineScope): Job {
@@ -1209,6 +1269,11 @@ class PcLinkClient(
         inputSender?.discard()
         inputSender = null
         inputAvailability = null
+        // A new session says nothing about 3D until its own first `depth`, and the PC's numbers
+        // for the old stream describe a stream that no longer exists.
+        depthState = null
+        pcStats = null
+        depth.discard()
         unansweredPings = 0
         lastRxMs = nowMs()
         link = PcLinkSessionLink(PeerRole.CLIENT)
@@ -1471,6 +1536,16 @@ class PcLinkClient(
                         withContext(Dispatchers.Main) { listener.onConfig(msg.config) }
                         emitState(PcLinkState.Streaming(msg.config))
                     }
+                    is PcControlMessage.Depth -> {
+                        // Stored before it is announced, so a screen that reads the field in
+                        // answer to the callback finds the state the callback is about.
+                        depthState = msg.state
+                        withContext(Dispatchers.Main) { listener.onDepth(msg.state) }
+                    }
+                    is PcControlMessage.Stats -> {
+                        pcStats = msg.stats
+                        withContext(Dispatchers.Main) { listener.onPcStats(msg.stats) }
+                    }
                     // `windows` (per-window depth) is M2 — ignored for now, like any unknown type.
                     // When M2 starts rendering these: `title` is peer-supplied, but it arrives only
                     // after `auth_ok`, so it comes from the PC the user approved against a 6-digit
@@ -1570,6 +1645,12 @@ class PcLinkClient(
                     inputActiveUntil = nowMs() + INPUT_ACTIVE_MS
                 }
             }
+            // §2.20.3: the latest slider value, at most ten times a second. The coalescing and the
+            // throttle both live in the sender; this only asks what is due now, and the sleep at
+            // the bottom asks how long until the next one is.
+            depth.drain(nowMs())?.let { request ->
+                writeLine(output, PcLinkDepthProtocol.setDepthLine(request))
+            }
             if (nowMs() >= nextPingAt) {
                 nextPingAt = nowMs() + PING_INTERVAL_MS
                 unansweredPings++
@@ -1594,7 +1675,11 @@ class PcLinkClient(
             if (nowMs() < inputActiveUntil) {
                 delay(INPUT_TICK_MS)
             } else {
-                withTimeoutOrNull(WRITER_TICK_MS) { writerWake.receive() }
+                // A slider value held back by its throttle is due before the idle tick would
+                // look again; sleep only until then, or the release value of a drag would land
+                // on the PC a fifth of a second after the finger left the glass.
+                val wait = depth.dueInMs(nowMs())?.coerceIn(1L, WRITER_TICK_MS) ?: WRITER_TICK_MS
+                withTimeoutOrNull(wait) { writerWake.receive() }
             }
         }
     }

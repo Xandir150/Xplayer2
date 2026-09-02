@@ -106,4 +106,28 @@ class PcLinkRemoteLayoutTest {
         assertTrue(attributesOf("swInputControl").contains("""android:clickable="false""""))
         assertTrue(attributesOf("swInputAbsolute").contains("""android:clickable="false""""))
     }
+
+    /**
+     * In 2D the remote must not gain a single pixel.
+     *
+     * §2.20 makes the 3D sliders the PC's to offer: they appear only while its `depth` says it is
+     * converting, which a PC in 2D — or one built before the section — never says. A block that
+     * started visible would spend every 2D cast, and every cast against an older server, showing
+     * sliders that move nothing.
+     */
+    @Test
+    fun `the 3D block starts hidden, and so do both of its faces`() {
+        assertTrue(
+            "boxDepth must start GONE — the PC has not said it is converting",
+            attributesOf("boxDepth").contains("""android:visibility="gone"""")
+        )
+        assertTrue(attributesOf("boxDepthSliders").contains("""android:visibility="gone""""))
+        assertTrue(attributesOf("tvDepthOff").contains("""android:visibility="gone""""))
+    }
+
+    /** Reset starts disabled: only a `depth` that differs from its own defaults can enable it. */
+    @Test
+    fun `reset starts disabled`() {
+        assertTrue(attributesOf("btnDepthReset").contains("""android:enabled="false""""))
+    }
 }

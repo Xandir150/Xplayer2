@@ -165,6 +165,19 @@
     <string name="pclink_input_hint_operator_off">Включите на компьютере «разрешить этому телефону управлять».</string>
     <string name="pclink_input_surface_hint">Ведите — курсор · касание — щелчок\nДва пальца — прокрутка</string>
 
+    <!-- 3D с пульта (protocol.md 2.20): две настройки, которые подбирают на глаз, и сброс. -->
+    <string name="pclink_section_depth">3D-глубина</string>
+    <string name="pclink_depth_strength">Сила 3D-эффекта</string>
+    <string name="pclink_depth_convergence">Положение экрана</string>
+    <string name="pclink_depth_reset">Вернуть по умолчанию</string>
+    <string name="pclink_depth_off">3D выключено в XPlayer Link на компьютере</string>
+
+    <!-- Собственные цифры компьютера (2.21) — за дверцей «Подробности», рядом с цифрами телефона. -->
+    <string name="pclink_stat_pc_capture">ПК: захват</string>
+    <string name="pclink_stat_pc_encode">ПК: кодирование</string>
+    <string name="pclink_stat_pc_encode_time">ПК: время кодирования</string>
+    <string name="pclink_stat_pc_sent">ПК: отправлено</string>
+
     <!-- Сопряжение PC Link: код из 6 цифр и всё вокруг него -->
     <string name="pclink_pair_title">Подключить «%1$s»?</string>
     <string name="pclink_pair_body">Убедитесь, что на компьютере показан такой же код:</string>

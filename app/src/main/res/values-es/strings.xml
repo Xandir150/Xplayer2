@@ -108,4 +108,15 @@
 
     <!-- Recent subtitle -->
     <string name="recent_position_prefix">Posición: </string>
+
+    <!-- PC Link: 3D desde el mando (protocol.md 2.20) y las cifras del propio PC (2.21). -->
+    <string name="pclink_section_depth">Profundidad 3D</string>
+    <string name="pclink_depth_strength">Intensidad</string>
+    <string name="pclink_depth_convergence">Convergencia</string>
+    <string name="pclink_depth_reset">Restablecer valores</string>
+    <string name="pclink_depth_off">El 3D está desactivado en XPlayer Link en el PC</string>
+    <string name="pclink_stat_pc_capture">PC: captura</string>
+    <string name="pclink_stat_pc_encode">PC: codificación</string>
+    <string name="pclink_stat_pc_encode_time">PC: tiempo de codificación</string>
+    <string name="pclink_stat_pc_sent">PC: enviado</string>
 </resources>

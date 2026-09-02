@@ -81,7 +81,18 @@ object PcLinkSession {
          * these once a second and the answer changes about that often: the operator's switch on the
          * PC can flip mid-session, and the row that offers control has to follow it.
          */
-        val input: com.teleteh.xplayer2.data.network.PcInputAvailability? = null
+        val input: com.teleteh.xplayer2.data.network.PcInputAvailability? = null,
+        /**
+         * The PC's last `depth` (`protocol.md` §2.20.2) — the only source of truth for the remote's
+         * 3D sliders — or null before it has said anything. Null is also the whole answer against a
+         * server built before that section: no `depth`, no sliders, not a pixel.
+         */
+        val depth: com.teleteh.xplayer2.data.network.PcDepthState? = null,
+        /**
+         * The PC's own figures for the stream it is sending (§2.21), or null before the first
+         * `stats` — a dash on the phone, never a made-up zero.
+         */
+        val pcStats: com.teleteh.xplayer2.data.network.PcStreamStats? = null
     )
 
     /**
@@ -120,6 +131,13 @@ object PcLinkSession {
          * gesture and asks again for the next one — a session that ends in between answers null.
          */
         fun pcLinkInput(): com.teleteh.xplayer2.data.network.PcLinkInputSender? = null
+
+        /**
+         * The 3D-slider path of this host's session (`protocol.md` §2.20.3), or null when it has
+         * none. Handed out like [pcLinkInput] and for the same reason: a drag is a stream of values,
+         * and the coalescing that turns it into ten messages a second lives in the sender.
+         */
+        fun pcLinkDepth(): com.teleteh.xplayer2.data.network.PcLinkDepthSender? = null
     }
 
     private val hosts = ArrayList<Host>()
@@ -166,6 +184,13 @@ object PcLinkSession {
      * asking, and nothing that can be sent once it answers null.
      */
     fun input(): com.teleteh.xplayer2.data.network.PcLinkInputSender? = liveHost()?.first?.pcLinkInput()
+
+    /**
+     * The live session's 3D-slider path (§2.20.3), or null when there is no session. Whether there is
+     * anything to adjust is a different question, answered by [Stats.depth] — a `set_depth` sent
+     * while the PC is not converting still moves its saved slider, so nothing here refuses one.
+     */
+    fun depth(): com.teleteh.xplayer2.data.network.PcLinkDepthSender? = liveHost()?.first?.pcLinkDepth()
 
     private fun liveHost(): Pair<Host, Stats>? {
         for (i in hosts.indices.reversed()) {

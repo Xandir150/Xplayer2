@@ -1,8 +1,11 @@
 package com.teleteh.xplayer2.ui.pclink
 
+import com.teleteh.xplayer2.data.network.PcDepthState
 import com.teleteh.xplayer2.data.network.PcInputAvailability
 import com.teleteh.xplayer2.data.network.PcInputUnavailable
 import com.teleteh.xplayer2.player.PcLinkSession
+import java.util.Locale
+import kotlin.math.abs
 
 /**
  * The decisions [PcLinkRemoteActivity] turns on, taken out of the views so they can be argued with
@@ -155,4 +158,73 @@ object PcLinkRemotePolicy {
      */
     fun controlHolds(userWantsControl: Boolean, availability: PcInputAvailability?): Boolean =
         userWantsControl && availability is PcInputAvailability.Live
+
+    // --- 3D from the remote (protocol.md 2.20) ------------------------------------------------
+
+    /** What the 3D block of the remote shows for the last `depth` the PC sent. */
+    enum class DepthPanel {
+        /**
+         * Nothing — not a pixel. No `depth` yet, a server built before §2.20, or a PC that is not
+         * converting right now (glasses in 2D under an `"auto"` setting is the common case).
+         */
+        HIDDEN,
+
+        /** The two sliders and the reset: the PC is converting, and this is what to adjust by eye. */
+        SLIDERS,
+
+        /**
+         * One quiet line saying 3D is switched off in the window. The one refusal worth the room:
+         * a user who came here for the sliders would otherwise go looking for them on this phone,
+         * and the switch is on the PC.
+         */
+        OFF_LINE
+    }
+
+    /**
+     * `active` is the whole cue (§2.20.2): it says whether the stream being sent is stereo the
+     * server made, and `setting` only explains an absence. An `"off"` that is somehow converting
+     * still gets sliders — the picture is what the person is judging, and it is in 3D.
+     */
+    fun depthPanel(state: PcDepthState?): DepthPanel = when {
+        state == null -> DepthPanel.HIDDEN
+        state.active -> DepthPanel.SLIDERS
+        state.switchedOff -> DepthPanel.OFF_LINE
+        else -> DepthPanel.HIDDEN
+    }
+
+    /**
+     * Whether an incoming `depth` may move a slider right now — the "do not fight the finger" rule.
+     *
+     * `depth` is the only source of truth for the sliders, and the phone renders what the last one
+     * said (§2.20.2). But a drag is a stream of `set_depth`s and each is acknowledged with a `depth`
+     * carrying the value that was sent a moment ago, not the one under the finger now — applied as
+     * they arrive, they would drag the thumb back behind the finger ten times a second. So a slider
+     * being dragged is left alone, and for [holdUntilMs] after the last value it sent (long enough
+     * for the acknowledgement of that value to have landed on any LAN) it still is; then the latest
+     * `depth` is applied, and if the PC clamped or the window moved the same slider, the thumb goes
+     * where the truth is.
+     */
+    fun sliderFollowsServer(dragging: Boolean, nowMs: Long, holdUntilMs: Long): Boolean =
+        !dragging && nowMs >= holdUntilMs
+
+    /**
+     * The strength figure as the desktop window prints it — thousandths as a fraction to three
+     * places, `20` → `0.020` — so a number read off the phone can be repeated back to someone
+     * looking at the window. Locale-independent for the same reason: the window's is.
+     */
+    fun showDivergence(thousandths: Int): String =
+        String.format(Locale.ROOT, "%.3f", thousandths / 1000.0)
+
+    /**
+     * The convergence figure as the window prints it: a real minus sign for "towards you", a plus
+     * for "away", nothing for the zero that leaves the picture in charge — `-120` → `−0.12`.
+     */
+    fun showConvergence(thousandths: Int): String {
+        val sign = when {
+            thousandths > 0 -> "+"
+            thousandths < 0 -> "−"
+            else -> ""
+        }
+        return sign + String.format(Locale.ROOT, "%.2f", abs(thousandths) / 1000.0)
+    }
 }

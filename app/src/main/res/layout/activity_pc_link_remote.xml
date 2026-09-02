@@ -410,6 +410,144 @@
                             android:textSize="12sp" />
                     </LinearLayout>
 
+                    <!-- 3D from the remote (protocol.md 2.20): the two settings a person can only
+                         judge by eye, reachable while the picture is in front of the eyes instead
+                         of in a window on a screen they cannot see. Gone — not a pixel — until the
+                         PC says it is converting: a PC in 2D, or one built before this section,
+                         never shows it. The sliders are drawn from the ranges the PC sends, never
+                         from constants, and the PC's own answer is what moves them. When the
+                         operator switched 3D off in the window, one quiet line says so, because
+                         that is the one refusal a user would otherwise go looking for here. -->
+                    <LinearLayout
+                        android:id="@+id/boxDepth"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <View
+                            android:layout_width="match_parent"
+                            android:layout_height="1dp"
+                            android:layout_marginTop="12dp"
+                            android:layout_marginBottom="10dp"
+                            android:background="@color/rc_outline" />
+
+                        <TextView
+                            android:id="@+id/tvDepthOff"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textColor="@color/rc_secondary"
+                            android:textSize="12sp"
+                            android:visibility="gone"
+                            android:text="@string/pclink_depth_off" />
+
+                        <LinearLayout
+                            android:id="@+id/boxDepthSliders"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:visibility="gone">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginBottom="2dp"
+                                android:text="@string/pclink_section_depth"
+                                android:textAppearance="@style/TextAppearance.XPlayer.Section" />
+
+                            <!-- Each slider: its name on the left, the same figure the desktop
+                                 window shows on the right, and the bar under both — the film
+                                 remote's seekbar, in the same accent. -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:paddingStart="4dp"
+                                android:paddingEnd="4dp"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:maxLines="1"
+                                    android:ellipsize="end"
+                                    android:textColor="@color/rc_on_surface"
+                                    android:textSize="15sp"
+                                    android:text="@string/pclink_depth_strength" />
+
+                                <TextView
+                                    android:id="@+id/tvDepthStrengthValue"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="12dp"
+                                    android:fontFamily="sans-serif-medium"
+                                    android:textColor="@color/rc_secondary"
+                                    android:textSize="14sp"
+                                    android:text="@string/pclink_value_none" />
+                            </LinearLayout>
+
+                            <SeekBar
+                                android:id="@+id/sbDepthStrength"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:contentDescription="@string/pclink_depth_strength"
+                                android:progressTint="?attr/colorPrimary"
+                                android:thumbTint="?attr/colorPrimary" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:paddingStart="4dp"
+                                android:paddingEnd="4dp"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical">
+
+                                <TextView
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:maxLines="1"
+                                    android:ellipsize="end"
+                                    android:textColor="@color/rc_on_surface"
+                                    android:textSize="15sp"
+                                    android:text="@string/pclink_depth_convergence" />
+
+                                <TextView
+                                    android:id="@+id/tvDepthConvergenceValue"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="12dp"
+                                    android:fontFamily="sans-serif-medium"
+                                    android:textColor="@color/rc_secondary"
+                                    android:textSize="14sp"
+                                    android:text="@string/pclink_value_none" />
+                            </LinearLayout>
+
+                            <SeekBar
+                                android:id="@+id/sbDepthConvergence"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:contentDescription="@string/pclink_depth_convergence"
+                                android:progressTint="?attr/colorPrimary"
+                                android:thumbTint="?attr/colorPrimary" />
+
+                            <!-- Enabled only while the PC's values differ from its defaults: the
+                                 PC says which, in every `depth`, and answers the tap with another. -->
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnDepthReset"
+                                style="@style/Widget.XPlayer.RemoteRow"
+                                android:layout_width="match_parent"
+                                android:layout_height="44dp"
+                                android:layout_marginTop="6dp"
+                                android:enabled="false"
+                                android:text="@string/pclink_depth_reset"
+                                app:icon="@drawable/ic_refresh_24" />
+                        </LinearLayout>
+                    </LinearLayout>
+
                     <View
                         android:layout_width="match_parent"
                         android:layout_height="1dp"

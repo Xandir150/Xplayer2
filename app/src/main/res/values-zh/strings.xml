@@ -108,4 +108,15 @@
 
     <!-- Recent subtitle -->
     <string name="recent_position_prefix">位置：</string>
+
+    <!-- PC Link：遥控器上的 3D（protocol.md 2.20）和 PC 自己的数据（2.21）。 -->
+    <string name="pclink_section_depth">3D 深度</string>
+    <string name="pclink_depth_strength">强度</string>
+    <string name="pclink_depth_convergence">会聚</string>
+    <string name="pclink_depth_reset">恢复默认</string>
+    <string name="pclink_depth_off">PC 上的 XPlayer Link 已关闭 3D</string>
+    <string name="pclink_stat_pc_capture">PC 采集</string>
+    <string name="pclink_stat_pc_encode">PC 编码</string>
+    <string name="pclink_stat_pc_encode_time">PC 编码耗时</string>
+    <string name="pclink_stat_pc_sent">PC 发送</string>
 </resources>

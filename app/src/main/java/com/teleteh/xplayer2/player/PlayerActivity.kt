@@ -3825,8 +3825,23 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             // The client's own answer, not a remembered one: `config.input` is a standing statement
             // the PC repeats and can retract mid-session (§2.19.1), so this has to be read fresh
             // like every other field here.
-            input = client?.inputAvailability
+            input = client?.inputAvailability,
+            // Same rule as `input`: `depth` is a standing statement the PC re-sends whenever anything
+            // in it changes (§2.20.2), so it is read fresh rather than remembered.
+            depth = client?.depthState,
+            pcStats = client?.pcStats
         )
+    }
+
+    /**
+     * The 3D-slider path of this session (§2.20.3), or null when there is no session.
+     *
+     * The same bare pass-through as [pcLinkInput]: whether there is anything to adjust is the PC's
+     * answer (`depth.active`), carried in [pcLinkStats], and nothing here may add a gate of its own.
+     */
+    override fun pcLinkDepth(): com.teleteh.xplayer2.data.network.PcLinkDepthSender? {
+        if (!isPcLinkMode) return null
+        return pcLinkClient?.depth
     }
 
     /**
@@ -3926,6 +3941,24 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                 "PC Link config: ${config.mime} ${config.width}x${config.height}@${config.fps} " +
                     "${config.stereo} audio=${config.audio?.let { "${it.codec} ${it.rate}/${it.channels}" } ?: "none"}"
             )
+        }
+
+        /**
+         * The 3D sliders' truth (§2.20.2), handed to the remote the moment it lands rather than on
+         * its next one-second poll. The poll would get there too — [pcLinkStats] carries the same
+         * state — but a Reset that takes a second to show, or a slider that sits where the finger
+         * left it while the PC has already clamped it, reads as a broken control to someone who
+         * cannot see the phone and is judging by the picture.
+         */
+        override fun onDepth(state: com.teleteh.xplayer2.data.network.PcDepthState) {
+            if (!isLive) return
+            PcLinkRemoteActivity.currentInstance?.onDepth(state)
+        }
+
+        /** The PC's own numbers (§2.21), at the message rate — the rate the spec asks for. */
+        override fun onPcStats(stats: com.teleteh.xplayer2.data.network.PcStreamStats) {
+            if (!isLive) return
+            PcLinkRemoteActivity.currentInstance?.onPcStats(stats)
         }
 
         /** Network thread — straight into the decoder, no main-thread hop. */

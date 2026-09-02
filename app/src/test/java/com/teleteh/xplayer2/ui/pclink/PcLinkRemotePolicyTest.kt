@@ -1,5 +1,9 @@
 package com.teleteh.xplayer2.ui.pclink
 
+import com.teleteh.xplayer2.data.network.PcDepthLimits
+import com.teleteh.xplayer2.data.network.PcDepthRange
+import com.teleteh.xplayer2.data.network.PcDepthState
+import com.teleteh.xplayer2.data.network.PcDepthValues
 import com.teleteh.xplayer2.data.network.PcInputAvailability
 import com.teleteh.xplayer2.data.network.PcInputUnavailable
 import com.teleteh.xplayer2.data.network.PcLinkInputProtocol
@@ -239,5 +243,103 @@ class PcLinkRemotePolicyTest {
     fun `permission withdrawn mid-session drops control`() {
         assertFalse(PcLinkRemotePolicy.controlHolds(userWantsControl = true, availability = operatorOff))
         assertFalse(PcLinkRemotePolicy.controlHolds(userWantsControl = true, availability = null))
+    }
+
+    // --- 3D from the remote (protocol.md 2.20) --------------------------------------------------
+
+    private fun depth(setting: String, active: Boolean, divergence: Int = 20, convergence: Int = 0) =
+        PcDepthState(
+            setting = setting,
+            active = active,
+            divergence = divergence,
+            convergence = convergence,
+            defaults = PcDepthValues(20, 0),
+            limits = PcDepthLimits(PcDepthRange(0, 50), PcDepthRange(-500, 500))
+        )
+
+    /**
+     * In 2D the remote must not gain a pixel. That is the common case — an `"auto"` PC whose glasses
+     * are in 2D is not converting — and it is also the whole answer against a server built before
+     * the section, which never sends `depth` at all.
+     */
+    @Test
+    fun `no depth, or a PC that is not converting, shows nothing`() {
+        assertEquals(PcLinkRemotePolicy.DepthPanel.HIDDEN, PcLinkRemotePolicy.depthPanel(null))
+        assertEquals(
+            PcLinkRemotePolicy.DepthPanel.HIDDEN,
+            PcLinkRemotePolicy.depthPanel(depth("auto", active = false))
+        )
+        assertEquals(
+            PcLinkRemotePolicy.DepthPanel.HIDDEN,
+            PcLinkRemotePolicy.depthPanel(depth("on", active = false))
+        )
+    }
+
+    /** `active` is the cue, whatever `setting` says — including a value this build has never heard of. */
+    @Test
+    fun `a converting PC gets the sliders`() {
+        for (setting in listOf("auto", "on", "off", "hdr")) {
+            assertEquals(
+                "setting '$setting' while converting",
+                PcLinkRemotePolicy.DepthPanel.SLIDERS,
+                PcLinkRemotePolicy.depthPanel(depth(setting, active = true))
+            )
+        }
+    }
+
+    /**
+     * The one refusal worth a line: 3D switched off in the window. A user who came here for the
+     * sliders would otherwise look for them on this phone, and the switch is on the PC.
+     */
+    @Test
+    fun `switched off in the window says so, in one line`() {
+        assertEquals(
+            PcLinkRemotePolicy.DepthPanel.OFF_LINE,
+            PcLinkRemotePolicy.depthPanel(depth("off", active = false))
+        )
+    }
+
+    /**
+     * Do not fight the finger. During a drag every incoming `depth` is the acknowledgement of a
+     * value sent a moment ago, and applying it would drag the thumb back behind the finger; so a
+     * slider being dragged is left alone, and so is one whose last send is still within its grace.
+     */
+    @Test
+    fun `a slider being dragged is not moved by the PC`() {
+        assertFalse(PcLinkRemotePolicy.sliderFollowsServer(dragging = true, nowMs = 10_000L, holdUntilMs = 0L))
+    }
+
+    @Test
+    fun `a slider that just sent a value waits for the acknowledgement to land`() {
+        assertFalse(PcLinkRemotePolicy.sliderFollowsServer(dragging = false, nowMs = 1_000L, holdUntilMs = 1_600L))
+        assertTrue(PcLinkRemotePolicy.sliderFollowsServer(dragging = false, nowMs = 1_600L, holdUntilMs = 1_600L))
+    }
+
+    @Test
+    fun `otherwise the PC is the only truth`() {
+        assertTrue(PcLinkRemotePolicy.sliderFollowsServer(dragging = false, nowMs = 5_000L, holdUntilMs = 0L))
+    }
+
+    /** The figures are the desktop window's, character for character, so they can be read across. */
+    @Test
+    fun `the strength figure is the window's`() {
+        assertEquals("0.020", PcLinkRemotePolicy.showDivergence(20))
+        assertEquals("0.000", PcLinkRemotePolicy.showDivergence(0))
+        assertEquals("0.050", PcLinkRemotePolicy.showDivergence(50))
+    }
+
+    @Test
+    fun `the convergence figure is the window's, sign and all`() {
+        assertEquals("−0.12", PcLinkRemotePolicy.showConvergence(-120))
+        assertEquals("0.00", PcLinkRemotePolicy.showConvergence(0))
+        assertEquals("+0.25", PcLinkRemotePolicy.showConvergence(250))
+        assertEquals("−0.50", PcLinkRemotePolicy.showConvergence(-500))
+    }
+
+    @Test
+    fun `reset has something to do only away from the defaults`() {
+        assertTrue(depth("auto", active = true).atDefaults)
+        assertFalse(depth("auto", active = true, divergence = 35).atDefaults)
+        assertFalse(depth("auto", active = true, convergence = -120).atDefaults)
     }
 }

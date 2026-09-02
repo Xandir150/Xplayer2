@@ -187,6 +187,21 @@
     <string name="pclink_input_hint_operator_off">Turn on \"allow this phone to control me\" on the PC.</string>
     <string name="pclink_input_surface_hint">Drag to move · tap to click\nTwo fingers to scroll</string>
 
+    <!-- 3D from the remote (protocol.md 2.20): the two settings a person adjusts by eye, and a
+         reset. Shown only while the PC is converting; the figures are the ones its window shows. -->
+    <string name="pclink_section_depth">3D depth</string>
+    <string name="pclink_depth_strength">Strength</string>
+    <string name="pclink_depth_convergence">Convergence</string>
+    <string name="pclink_depth_reset">Reset to defaults</string>
+    <string name="pclink_depth_off">3D is switched off in XPlayer Link on the PC</string>
+
+    <!-- The PC's own numbers for the stream (2.21), behind the details door next to the phone's.
+         Every label says whose they are: the chip out front counts what the phone received. -->
+    <string name="pclink_stat_pc_capture">PC capture</string>
+    <string name="pclink_stat_pc_encode">PC encode</string>
+    <string name="pclink_stat_pc_encode_time">PC encode time</string>
+    <string name="pclink_stat_pc_sent">PC sent</string>
+
     <!-- PC Link pairing: the 6-digit comparison code (SAS) and the states around it -->
     <string name="pclink_pair_title">Pair with \"%1$s\"?</string>
     <string name="pclink_pair_body">Make sure your PC shows the same code:</string>

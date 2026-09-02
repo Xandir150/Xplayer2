@@ -17,12 +17,16 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.SeekBar
 import android.widget.TextView
 import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
 import com.teleteh.xplayer2.MainActivity
 import com.teleteh.xplayer2.R
+import com.teleteh.xplayer2.data.network.PcDepthRange
+import com.teleteh.xplayer2.data.network.PcDepthState
+import com.teleteh.xplayer2.data.network.PcStreamStats
 import com.teleteh.xplayer2.player.PcLinkSession
 import com.teleteh.xplayer2.player.RemoteHaptics
 import com.teleteh.xplayer2.player.RemoteScreenDim
@@ -96,6 +100,23 @@ class PcLinkRemoteActivity : AppCompatActivity() {
     private lateinit var textInput: PcTextInputView
 
     /**
+     * The 3D block (`protocol.md` §2.20): gone entirely — not a pixel — until the PC says it is
+     * converting. In 2D the remote looks exactly as it did before this block existed.
+     */
+    private lateinit var boxDepth: LinearLayout
+    private lateinit var boxDepthSliders: LinearLayout
+    private lateinit var tvDepthOff: TextView
+    private lateinit var btnDepthReset: MaterialButton
+    private lateinit var strengthSlider: DepthSlider
+    private lateinit var convergenceSlider: DepthSlider
+
+    /** Re-applies the PC's latest values once a drag's grace has run out — see [DepthSlider]. */
+    private val depthSettle = Runnable {
+        strengthSlider.settle()
+        convergenceSlider.settle()
+    }
+
+    /**
      * Whether the user has asked this pad to drive the PC.
      *
      * Deliberately not remembered across sessions. Control is a thing you turn on to do something
@@ -153,6 +174,10 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         btnInputKeyboard = findViewById(R.id.btnInputKeyboard)
         tvInputHint = findViewById(R.id.tvInputHint)
         tvSurfaceHint = findViewById(R.id.tvSurfaceHint)
+        boxDepth = findViewById(R.id.boxDepth)
+        boxDepthSliders = findViewById(R.id.boxDepthSliders)
+        tvDepthOff = findViewById(R.id.tvDepthOff)
+        btnDepthReset = findViewById(R.id.btnDepthReset)
         chevron = findViewById(R.id.ivDetailsChevron)
         detailsBox = findViewById(R.id.boxDetails)
         fpsChip = Chip(findViewById(R.id.chipFps), getString(R.string.pclink_stat_fps), history.fps)
@@ -169,6 +194,7 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         dim.attach()
         setupSurface()
         setupInput()
+        setupDepth()
 
         btnRecenter.setOnClickListener {
             haptics.click()
@@ -523,6 +549,176 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         applySurfaceHint()
     }
 
+    /**
+     * The 3D block (`protocol.md` §2.20): two sliders and a reset, for the two settings a person can
+     * only judge by eye — and until now could only reach in a window on a screen they were not
+     * looking at.
+     *
+     * Everything about it is the PC's: whether it is shown at all (`depth.active`), the ranges the
+     * sliders are drawn from (`limits`, never a constant), where the thumbs sit and whether Reset
+     * has anything to do (`depth` itself, the only source of truth — see [applyDepth]). The phone's
+     * part is to send what the finger did, at no more than ten a second (the coalescing lives in
+     * `PcLinkDepthSender`), and to keep the PC's answers from fighting the finger while it is still
+     * on the glass ([DepthSlider]).
+     */
+    private fun setupDepth() {
+        strengthSlider = DepthSlider(
+            bar = findViewById(R.id.sbDepthStrength),
+            value = findViewById(R.id.tvDepthStrengthValue),
+            show = PcLinkRemotePolicy::showDivergence,
+            send = { v -> PcLinkSession.depth()?.divergence(v) }
+        )
+        convergenceSlider = DepthSlider(
+            bar = findViewById(R.id.sbDepthConvergence),
+            value = findViewById(R.id.tvDepthConvergenceValue),
+            show = PcLinkRemotePolicy::showConvergence,
+            send = { v -> PcLinkSession.depth()?.convergence(v) }
+        )
+        btnDepthReset.setOnClickListener {
+            haptics.click()
+            val sender = PcLinkSession.depth() ?: return@setOnClickListener
+            sender.reset()
+            // Nothing moves here: the PC answers with a `depth` carrying its defaults, and that is
+            // what moves the thumbs (§2.20.2). But no finger is on either slider now, so whatever
+            // grace a drag left behind is lifted — the answer to a deliberate tap should not wait
+            // out a gesture that has already ended.
+            strengthSlider.releaseHold()
+            convergenceSlider.releaseHold()
+        }
+    }
+
+    /**
+     * Renders the PC's last word on 3D — from the poll once a second, and from the push the moment
+     * a new `depth` lands ([onDepth]). Both read the same state, so the two paths cannot disagree;
+     * the push only makes a Reset, or a clamp, show up now instead of within a second.
+     */
+    private fun applyDepth(state: PcDepthState?) {
+        when (PcLinkRemotePolicy.depthPanel(state)) {
+            PcLinkRemotePolicy.DepthPanel.HIDDEN -> boxDepth.visibility = View.GONE
+            PcLinkRemotePolicy.DepthPanel.OFF_LINE -> {
+                boxDepth.visibility = View.VISIBLE
+                boxDepthSliders.visibility = View.GONE
+                tvDepthOff.visibility = View.VISIBLE
+            }
+            PcLinkRemotePolicy.DepthPanel.SLIDERS -> {
+                val s = state ?: return
+                boxDepth.visibility = View.VISIBLE
+                tvDepthOff.visibility = View.GONE
+                boxDepthSliders.visibility = View.VISIBLE
+                strengthSlider.follow(s.limits.divergence, s.divergence)
+                convergenceSlider.follow(s.limits.convergence, s.convergence)
+                // Reset has something to do only while the PC's values differ from its defaults —
+                // the PC's values, not the thumbs': a drag the PC has not acknowledged yet has not
+                // changed anything there.
+                val canReset = !s.atDefaults
+                btnDepthReset.isEnabled = canReset
+                btnDepthReset.alpha = if (canReset) 1f else 0.45f
+            }
+        }
+    }
+
+    /** The PC's `depth` landed (§2.20.2): move the sliders now rather than on the next tick. */
+    fun onDepth(state: PcDepthState) {
+        if (leaving) return
+        applyDepth(state)
+    }
+
+    /** The PC's own numbers (§2.21), at the message rate — they live behind the door only. */
+    fun onPcStats(stats: PcStreamStats) {
+        if (leaving || !detailsOpen) return
+        PcLinkSession.stats()?.let { applyDetails(it.copy(pcStats = stats)) }
+    }
+
+    /**
+     * One of the two 3D sliders: the bar, the figure beside it, and the two rules that keep it
+     * honest.
+     *
+     * It is drawn from the PC's range, never a constant — `limits` arrives in every `depth`, so a
+     * server that widens a range tomorrow gets a wider slider tomorrow. And the PC may not move it
+     * while a finger has it: `depth` is the truth (§2.20.2), but during a drag each `depth` is the
+     * acknowledgement of a value sent a moment ago, and applying those as they land would drag the
+     * thumb back behind the finger ten times a second. So a `depth` that arrives mid-drag, or
+     * within [DEPTH_HOLD_MS] of the last value sent, is kept as [pending] and applied once the
+     * finger has gone and the acknowledgement has had time to land — the rule itself is
+     * [PcLinkRemotePolicy.sliderFollowsServer]. If the PC clamped, or the window moved the same
+     * slider meanwhile, the thumb then goes where the truth is.
+     *
+     * The figure beside the bar is the one the desktop window prints, so a number read off the
+     * phone can be repeated to someone looking at the window.
+     */
+    private inner class DepthSlider(
+        private val bar: SeekBar,
+        private val value: TextView,
+        private val show: (Int) -> String,
+        private val send: (Int) -> Unit
+    ) {
+        private var range = PcDepthRange(0, 0)
+        private var dragging = false
+        private var holdUntilMs = 0L
+        private var pending: Int? = null
+
+        init {
+            bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val v = range.min + progress
+                    value.text = show(v)
+                    if (!fromUser) return
+                    // A D-pad nudge has no start/stop bracket around it, so the hold is what keeps
+                    // the PC's acknowledgement of one press from stepping on the next.
+                    holdUntilMs = SystemClock.elapsedRealtime() + DEPTH_HOLD_MS
+                    handler.removeCallbacks(depthSettle)
+                    handler.postDelayed(depthSettle, DEPTH_HOLD_MS + DEPTH_SETTLE_SLACK_MS)
+                    send(v)
+                }
+
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {
+                    dragging = true
+                    // A slow adjustment under the goggles outlasts the idle timer, and a screen
+                    // that goes black mid-drag swallows the finger's release — the slider would
+                    // then believe it was being dragged for the rest of the session. Same rule as
+                    // control: a finger on the glass and dimming cannot both be on.
+                    dim.cancel()
+                }
+
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    dragging = false
+                    haptics.tick()
+                    dim.schedule()
+                    settle()
+                }
+            })
+        }
+
+        /** The PC spoke: redraw the range if it changed, and move the thumb if the finger allows. */
+        fun follow(range: PcDepthRange, serverValue: Int) {
+            if (this.range != range) {
+                this.range = range
+                bar.max = range.span
+                bar.isEnabled = range.span > 0
+            }
+            pending = serverValue
+            settle()
+        }
+
+        /** A deliberate tap elsewhere (Reset) lifts the grace a drag left behind. */
+        fun releaseHold() {
+            holdUntilMs = 0L
+            settle()
+        }
+
+        /** Applies the PC's latest value now if nothing is in the way, else leaves it pending. */
+        fun settle() {
+            val v = pending ?: return
+            val now = SystemClock.elapsedRealtime()
+            if (!PcLinkRemotePolicy.sliderFollowsServer(dragging, now, holdUntilMs)) return
+            pending = null
+            val progress = range.clamp(v) - range.min
+            // Setting the same progress fires no callback, so the figure is refreshed by hand: it
+            // may still be showing what the finger asked for rather than what the PC settled on.
+            if (bar.progress != progress) bar.progress = progress else value.text = show(range.min + progress)
+        }
+    }
+
     private fun adjustVolume(up: Boolean) {
         val am = audioManager ?: return
         // The phone's media stream is what the user hears only while the PC's sound is being played
@@ -629,6 +825,7 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         // a shortcut. Control itself is switched off too, so coming back is a deliberate act.
         if (controlOn) setControl(false)
         handler.removeCallbacks(tick)
+        handler.removeCallbacks(depthSettle)
         // What was collected describes seconds that were being watched; splicing across the gap
         // would draw a minute that never happened.
         history.reset()
@@ -695,6 +892,7 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         )
         applyAudioState(stats)
         applyInputState(stats)
+        applyDepth(stats.depth)
         if (detailsOpen) applyDetails(stats)
     }
 
@@ -810,7 +1008,10 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         if (detailsOpen) PcLinkSession.stats()?.let { applyDetails(it) }
     }
 
-    /** Everything that answers "why isn't it working" — the seven rows behind the door. */
+    /**
+     * Everything that answers "why isn't it working" — the phone's seven rows behind the door, and
+     * under them the PC's own four (§2.21).
+     */
     private fun applyDetails(stats: PcLinkSession.Stats) {
         val lines = detailLines(stats)
         while (detailRows.size < lines.size) detailRows.add(addDetailRow())
@@ -829,6 +1030,7 @@ class PcLinkRemoteActivity : AppCompatActivity() {
 
     private fun detailLines(stats: PcLinkSession.Stats): List<Pair<String, String>> {
         val none = getString(R.string.pclink_value_none)
+        val pc = stats.pcStats
         val format = if (stats.codec != null && stats.width > 0) {
             getString(
                 R.string.pclink_value_format,
@@ -856,7 +1058,19 @@ class PcLinkRemoteActivity : AppCompatActivity() {
                 getString(R.string.pclink_value_ms, stats.audioBufferedMs.toString()),
             getString(R.string.pclink_stat_skew) to
                 (stats.audioSkewMs?.let { getString(R.string.pclink_value_ms, it.toString()) } ?: none),
-            getString(R.string.pclink_stat_audio_dropouts) to stats.audioDropouts.toString()
+            getString(R.string.pclink_stat_audio_dropouts) to stats.audioDropouts.toString(),
+            // The PC's numbers, each labelled as the PC's: the chip out front counts what this
+            // phone *received*, and the gap between that and "PC encode" is the network's. A dash
+            // until the first `stats` — an older server never sends one, and a zero would claim
+            // its encoder was idle.
+            getString(R.string.pclink_stat_pc_capture) to
+                (pc?.let { getString(R.string.pclink_value_fps, "%.1f".format(it.captureFps)) } ?: none),
+            getString(R.string.pclink_stat_pc_encode) to
+                (pc?.let { getString(R.string.pclink_value_fps, "%.1f".format(it.encodeFps)) } ?: none),
+            getString(R.string.pclink_stat_pc_encode_time) to
+                (pc?.let { getString(R.string.pclink_value_ms, "%.1f".format(it.encodeMs)) } ?: none),
+            getString(R.string.pclink_stat_pc_sent) to
+                (pc?.let { getString(R.string.pclink_value_mbps, "%.1f".format(it.wireMbps)) } ?: none)
         )
     }
 
@@ -916,6 +1130,15 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         var currentInstance: PcLinkRemoteActivity? = null
 
         private const val SAMPLE_INTERVAL_MS = 1_000L
+
+        /**
+         * How long after the last value a slider sent the PC's answers are kept off it — see
+         * [DepthSlider]. Long enough for the acknowledgement of that value to have landed on any
+         * LAN (the sender holds a value back for up to 100 ms, the round trip is a few more), short
+         * enough that a clamp shows up before the user wonders.
+         */
+        private const val DEPTH_HOLD_MS = 600L
+        private const val DEPTH_SETTLE_SLACK_MS = 20L
 
         /**
          * The feedback slot is one big glyph wide (40sp, centred, single-line), so everything that
