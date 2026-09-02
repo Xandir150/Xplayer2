@@ -1,15 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="press_back_again_to_exit">Pulse Atrás de nuevo para salir</string>
+
     <!-- Tabs -->
     <string name="tab_recent">Recientes</string>
     <string name="tab_files">Archivos</string>
     <string name="tab_network">Red</string>
     <string name="tab_sources">Fuentes</string>
+    <!-- Pestaña propia de PC Link: buscar un PC y el mando de una sesión en curso. -->
+    <string name="tab_pc_mirror">PC-Mirror</string>
 
     <!-- Player menu -->
     <string name="menu_audio">Pista de audio</string>
     <string name="menu_subtitle">Subtítulos</string>
     <string name="menu_stereo">Estéreo: alternar</string>
+    <string name="menu_stereo_short">SBS</string>
+    <string name="menu_back">Atrás</string>
     <string name="select_audio_track">Seleccionar pista de audio</string>
     <string name="select_subtitle">Seleccionar subtítulo</string>
     <string name="quality">Calidad</string>
@@ -28,6 +34,8 @@
 
     <!-- Player controls overlay -->
     <string name="player_back">Atrás</string>
+    <string name="player_ou_to_sbs">OU➤SBS</string>
+    <string name="player_auto">Auto</string>
     <string name="player_shift">Ajuste</string>
     <string name="player_rewind">Retroceder 10s</string>
     <string name="player_play_pause">Reproducir/Pausar</string>
@@ -37,6 +45,8 @@
     <!-- Remote control -->
     <string name="remote_now_playing">Reproduciendo</string>
     <string name="remote_3d_mode">Modo 3D</string>
+    <string name="remote_ou_to_sbs">OU→SBS</string>
+    <string name="remote_auto">Auto</string>
     <string name="remote_shift">Ajuste</string>
     <string name="remote_lazy3d">2D→3D (seguimiento de cabeza)</string>
     <string name="remote_lazy3d_starting">2D→3D — iniciando…</string>
@@ -49,6 +59,12 @@
     <!-- Glasses -->
     <string name="glasses_mode">Modo gafas</string>
     <string name="glasses_mode_title">Modo de pantalla de las gafas</string>
+    <string name="glasses_mode_current">Actual: %1$s — toque para cambiar</string>
+    <string name="glasses_mode_2d">2D %1$d Hz</string>
+    <string name="glasses_mode_3d_sbs">3D SBS %1$d Hz</string>
+    <!-- VITURE: 2D/3D simples, sin variantes de Hz -->
+    <string name="glasses_mode_2d_plain">2D</string>
+    <string name="glasses_mode_3d_plain">3D (SBS)</string>
     <string name="glasses_disabled_while_playing">Pausa la reproducción para cambiar el modo de las gafas</string>
     <string name="glasses_needs_permission">Se requiere permiso USB para las gafas</string>
     <string name="glasses_not_3d_warning">Parece que las gafas no están en modo 3D — la imagen no se verá bien. Cambie las gafas al modo 3D (SBS).</string>
@@ -56,11 +72,29 @@
     <string name="glasses_brand_unsupported">El cambio de modo requiere el SDK propietario de %1$s, no incluido. Use el menú físico de las gafas.</string>
     <string name="glasses_rayneo_manual">RayNeo Air cambia 2D/3D en las propias gafas: pulsa a la vez el botón de Volumen (patilla izquierda) y el de Brillo (patilla derecha). El 3D se desactiva al desconectar.</string>
     <string name="glasses_not_connected">No se detectaron gafas XR en USB. Conecte las gafas (XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S) y conceda permiso USB.</string>
+    <!-- Título del diálogo cuando las gafas conectadas no informan marca ni modelo (MainActivity) -->
+    <string name="glasses_fallback_name">Gafas</string>
 
     <!-- Lazy 3D -->
     <string name="lazy3d_downloading">Descargando modelo 2D→3D (~65 MB)…</string>
     <string name="lazy3d_downloaded">Modelo 2D→3D listo</string>
     <string name="lazy3d_download_failed">Error al descargar el modelo 2D→3D</string>
+    <string name="lazy3d_download_failed_host">No se pudo descargar el modelo 3D desde %1$s — compruebe su conexión</string>
+    <!-- Lazy 3D: motivos por los que no pudo iniciarse -->
+    <string name="lazy3d_slow_cpu">Este dispositivo no tiene soporte de GPU para 2D→3D — puede ir lento.</string>
+    <string name="lazy3d_unsupported">No se pudo cargar 2D→3D en este dispositivo.</string>
+    <string name="lazy3d_failed">No se pudo iniciar 2D→3D en este dispositivo.</string>
+    <string name="lazy3d_low_memory">No hay memoria suficiente para 2D→3D en este dispositivo.</string>
+    <!-- Lazy 3D: limitación térmica (DepthThermalGovernor) -->
+    <string name="lazy3d_thermal_reduced">Calidad de 2D→3D reducida — el dispositivo se está calentando</string>
+    <string name="lazy3d_thermal_paused">Actualización de profundidad 2D→3D en pausa para que el dispositivo se enfríe</string>
+
+    <!-- Depth model picker: diálogo TEMPORAL de prueba beta A/B para elegir el modelo de
+         profundidad de Lazy 3D; ver dialog_depth_model.xml y DepthModelManager. -->
+    <string name="depth_model_picker_title">2D→3D — modelo de profundidad</string>
+    <string name="depth_model_picker_subtitle">Prueba beta — elija uno para comparar</string>
+    <string name="depth_model_label_midas">MiDaS small — rápido (predeterminado actual)</string>
+    <string name="depth_model_label_v_model">V-Model — nuestra destilación de DA-V2 (beta)</string>
 
     <!-- Network -->
     <string name="network_enter_url">Pegue la URL (http, https, msf, content)</string>
@@ -74,10 +108,140 @@
     <string name="dlna_not_found">DLNA: ContentDirectory no encontrado</string>
     <string name="dlna_browse_failed">Error DLNA browse: %1$s</string>
 
+    <!-- PC Link (transmisión del escritorio del PC a las gafas) -->
+    <string name="pclink_title">PC Link</string>
+    <string name="pclink_row_subtitle">Transmita la pantalla de su PC</string>
+    <string name="pclink_manual_ip_hint">Dirección IP del PC (p. ej. 192.168.1.10)</string>
+    <string name="pclink_connect">Conectar</string>
+    <string name="pclink_discovered_label">Detectado en su red</string>
+    <string name="pclink_refresh">Actualizar</string>
+    <string name="pclink_empty">Inicie XPlayer Link en su PC para verlo aquí</string>
+    <string name="pclink_connecting">Conectando…</string>
+    <string name="pclink_invalid_host">Introduzca una dirección IP o un nombre de host válido</string>
+    <string name="pclink_error_ipv6_unsupported">Las direcciones IPv6 aún no son compatibles — use la dirección IPv4 que muestra XPlayer Link</string>
+    <string name="pclink_manual_unreachable">No se pudo conectar con XPlayer Link en esa dirección</string>
+    <string name="pclink_recentered">Pantalla recentrada</string>
+    <!-- El botón de silencio del overlay: el sonido del propio PC, reproducido por las gafas -->
+    <string name="pclink_audio_on">Sonido: gafas</string>
+    <string name="pclink_audio_muted">Sonido: PC</string>
+    <string name="pclink_ended_for_playback">PC Link desconectado</string>
+
+    <!-- La pestaña PC-Mirror: la entrada cuando no hay nada transmitiéndose. -->
+    <string name="pclink_find_pc">Buscar su PC</string>
+    <string name="pclink_disconnect">Desconectar</string>
+    <string name="pclink_state_connecting">Conectando…</string>
+    <string name="pclink_state_streaming">Transmitiendo a las gafas</string>
+    <string name="pclink_state_reconnecting">Reconectando…</string>
+    <string name="pclink_state_failed">Desconectado</string>
+
+    <string name="pclink_stat_fps">Fotogramas</string>
+    <string name="pclink_stat_bitrate">Bitrate</string>
+
+    <string name="pclink_stats_details">Detalles</string>
+    <string name="pclink_details_show">Mostrar detalles</string>
+    <string name="pclink_details_hide">Ocultar detalles</string>
+    <string name="pclink_stat_latency">Latencia de red</string>
+    <string name="pclink_stat_format">Formato de transmisión</string>
+    <string name="pclink_stat_dropped">Fotogramas perdidos</string>
+    <string name="pclink_stat_audio_output">Salida de audio</string>
+    <string name="pclink_stat_audio_buffer">Búfer de audio</string>
+    <string name="pclink_stat_skew">Desfase A/V</string>
+    <string name="pclink_stat_audio_dropouts">Cortes de audio</string>
+
+    <!-- Unidades. Solo el número se formatea en el código; las palabras vienen de aquí. -->
+    <string name="pclink_value_fps">%1$s fps</string>
+    <string name="pclink_value_mbps">%1$s Mbps</string>
+    <string name="pclink_value_ms">%1$s ms</string>
+    <string name="pclink_value_format">%1$s · %2$d×%3$d · %4$s</string>
+    <string name="pclink_value_audio_format">%1$d kHz · %2$d can.</string>
+    <string name="pclink_value_none">—</string>
+
+    <string name="pclink_section_audio">Sonido</string>
+    <string name="pclink_audio_to_glasses">Sonido — en las gafas</string>
+    <string name="pclink_audio_to_computer">Sonido: en el PC</string>
+    <string name="pclink_audio_hint_glasses">El PC permanece en silencio mientras escucha aquí</string>
+    <string name="pclink_audio_hint_computer">El sonido se reproduce en el PC</string>
+    <string name="pclink_audio_none">Este PC no está enviando sonido</string>
+
+    <!-- La pestaña PC-Mirror: los equipos con los que este teléfono ya está emparejado. -->
+    <string name="pclink_paired_label">Sus equipos</string>
+    <string name="pclink_paired_no_address">Dirección aún no registrada</string>
+    <string name="pclink_paired_empty">Aún no hay equipos — toque «Buscar su PC» para añadir uno</string>
+    <string name="pclink_paired_unreachable">No se pudo conectar con ese equipo. Compruebe que XPlayer Link esté en ejecución en él.</string>
+    <string name="pclink_open_remote">Abrir el control remoto</string>
+
+    <string name="pclink_needs_glasses_title">Conecte sus gafas</string>
+    <string name="pclink_needs_glasses_body">PC Link muestra la pantalla de su PC en las gafas XR. Conéctelas a este teléfono (o conecte una pantalla externa) e inténtelo de nuevo.</string>
+
+    <string name="pclink_recenter">Recentrar pantalla</string>
+    <string name="pclink_remote_surface_hint">Arrastre arriba o abajo para el volumen\nMantenga pulsado para recentrar</string>
+
+    <string name="pclink_section_input">Control del PC</string>
+    <string name="pclink_input_control">Mouse y teclado</string>
+    <string name="pclink_input_absolute">El panel táctil es la pantalla</string>
+    <string name="pclink_input_keyboard">Escribir en el PC</string>
+    <string name="pclink_input_hint_ready">Arrastre para mover, toque para hacer clic, dos dedos para desplazarse</string>
+    <string name="pclink_input_hint_absolute">Toque un punto del panel táctil para enviar el cursor allí</string>
+    <string name="pclink_input_hint_captured">Mouse capturado — Atrás lo libera</string>
+    <string name="pclink_input_hint_not_encrypted">Esta conexión no está cifrada, así que el control está desactivado. Olvide este PC y vuelva a emparejarlo.</string>
+    <string name="pclink_input_hint_operator_off">Active «permitir que este teléfono me controle» en el PC.</string>
+    <string name="pclink_input_surface_hint">Arrastre para mover · toque para hacer clic\nDos dedos para desplazarse</string>
+
+    <!-- pclink_section_depth/depth_*, pclink_stat_pc_* y pclink_media_* ya están definidos
+         más abajo, al final de este archivo. -->
+
+    <!-- Emparejamiento de PC Link: el código de comparación de 6 dígitos (SAS) y sus estados -->
+    <string name="pclink_pair_title">¿Emparejar con «%1$s»?</string>
+    <string name="pclink_pair_body">Compruebe que su PC muestra el mismo código:</string>
+    <string name="pclink_pair_hint">Si los códigos no coinciden, o no aparece ningún código en el PC, toque Cancelar.</string>
+    <string name="pclink_pair_code_description">Código de emparejamiento</string>
+    <string name="pclink_pair_accept">Emparejar</string>
+    <string name="pclink_pairing_progress">Emparejando…</string>
+    <string name="pclink_authenticating">Comprobando este PC…</string>
+    <string name="pclink_paired_badge">Emparejado</string>
+
+    <!-- Resultados del emparejamiento -->
+    <string name="pclink_pair_cancelled">Se canceló el emparejamiento.</string>
+    <string name="pclink_pair_failed">Error al emparejar. Inténtelo de nuevo.</string>
+    <string name="pclink_pair_busy">Ese PC ya se está emparejando con otro dispositivo.</string>
+    <string name="pclink_pair_rate_limited">Demasiados intentos. Espere un momento e inténtelo de nuevo.</string>
+    <string name="pclink_pair_version">Este PC necesita una versión más reciente de XPlayer.</string>
+    <string name="pclink_pair_timeout">Nadie confirmó a tiempo. Inténtelo de nuevo.</string>
+    <string name="pclink_pair_lost">Se perdió la conexión con ese PC.</string>
+    <string name="pclink_auth_failed">No se pudo verificar este PC. Puede que alguien esté interfiriendo en su red, o que el emparejamiento esté dañado.</string>
+    <string name="pclink_encryption_required">Esta conexión no estaba cifrada, y este PC ha usado cifrado antes. Puede que alguien esté interfiriendo en su red, o que el PC haya vuelto a una versión anterior de XPlayer Link — olvide el PC y vuelva a emparejarlo si fue intencionado.</string>
+
+    <!-- Falló la autenticación de la propia conexión de streaming del reproductor; se muestra sobre el vídeo -->
+    <string name="pclink_stream_auth_failed">no se pudo verificar este PC. Puede que alguien esté interfiriendo en su red, o que el emparejamiento esté dañado.</string>
+    <string name="pclink_stream_auth_error">no se pudo iniciar sesión en este PC. Intente conectarse de nuevo.</string>
+    <string name="pclink_stream_encryption_required">esta conexión no estaba cifrada, y este PC ha usado cifrado antes. Puede que alguien esté interfiriendo en su red.</string>
+    <string name="pclink_stream_unknown_client">este PC ya no reconoce su dispositivo.</string>
+    <string name="pclink_stream_reconnecting">reconectando (%1$d)</string>
+    <string name="pclink_stream_disconnected">desconectado: %1$s</string>
+
+    <!-- El PC nos olvidó: volver a emparejar debe ser siempre una elección explícita, nunca automática -->
+    <string name="pclink_repair_title">¿Emparejar de nuevo?</string>
+    <string name="pclink_repair_body">Este PC ya no reconoce su dispositivo. ¿Emparejar de nuevo?</string>
+    <string name="pclink_repair_accept">Emparejar de nuevo</string>
+
+    <!-- Emparejamiento iniciado por el PC (descubrimiento inverso) -->
+    <string name="pclink_invite_title">«%1$s» quiere emparejarse</string>
+    <string name="pclink_invite_accept">Conectar</string>
+    <string name="pclink_invite_ignore">Ignorar</string>
+
+    <!-- Olvidar un emparejamiento (pulsación larga sobre un PC en la lista) -->
+    <string name="pclink_forget_title">¿Olvidar «%1$s»?</string>
+    <string name="pclink_forget_body">Este PC deberá emparejarse de nuevo, con un código nuevo, la próxima vez que se conecte.</string>
+    <string name="pclink_forget">Olvidar este PC</string>
+    <string name="pclink_forgotten">Se olvidó «%1$s»</string>
+
     <!-- Common -->
     <string name="common_add">Agregar</string>
     <string name="common_cancel">Cancelar</string>
     <string name="delete">Eliminar</string>
+    <string name="recent_deleted">Eliminado</string>
+    <string name="recent_delete_confirm">¿Quitar de recientes?</string>
+    <string name="undo">Deshacer</string>
     <string name="stop">Detener</string>
 
     <!-- Errors / status -->
@@ -105,9 +269,33 @@
     <!-- DLNA list items -->
     <string name="dlna_up_subtitle">Arriba</string>
     <string name="dlna_folder_subtitle">Carpeta</string>
+    <string name="dlna_device_fallback">Dispositivo DLNA</string>
 
     <!-- Recent subtitle -->
     <string name="recent_position_prefix">Posición: </string>
+
+    <!-- Acceso directo al club de películas 3D de Hughey en VK (pestaña Red) -->
+    <string name="network_hughey">Hughey</string>
+    <string name="network_hughey_added">Fuente Hughey añadida</string>
+    <string name="vk_club_empty">No se encontraron videos</string>
+    <string name="vk_club_boosty">Hughey en Boosty</string>
+    <string name="vk_club_search_hint">Buscar por título</string>
+
+    <!-- Remote redesign section captions -->
+    <string name="remote_now_playing_label">Reproduciendo ahora</string>
+    <string name="remote_section_display">Imagen</string>
+    <string name="remote_section_audio">Audio y subtítulos</string>
+
+    <!-- Yandex Disk public-link browser -->
+    <string name="yadisk_title">Yandex Disk</string>
+    <string name="yadisk_empty">No hay videos aquí</string>
+    <string name="yadisk_error">No se pudo abrir este enlace de Yandex Disk</string>
+    <string name="yadisk_folder">Carpeta</string>
+
+    <!-- Mail.ru Cloud public-link browser -->
+    <string name="mailru_title">Mail.ru Cloud</string>
+    <string name="mailru_empty">No hay videos aquí</string>
+    <string name="mailru_error">No se pudo abrir este enlace de Mail.ru Cloud</string>
 
     <!-- PC Link: 3D desde el mando (protocol.md 2.20) y las cifras del propio PC (2.21). -->
     <string name="pclink_section_depth">Profundidad 3D</string>
