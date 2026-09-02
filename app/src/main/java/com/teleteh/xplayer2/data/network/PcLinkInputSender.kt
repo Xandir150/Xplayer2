@@ -27,9 +27,10 @@ package com.teleteh.xplayer2.data.network
  * living on while the *sender* stops sending — the user leaving the remote screen, the app going to
  * background, pointer capture ending — with Ctrl still down. Nothing on the PC ends, so nothing on
  * the PC releases, and every later keystroke on that desktop becomes a shortcut. [releaseAll]
- * enqueues the releases explicitly, buttons first and then keys in ascending usage order, which
- * frees a letter before the modifier that was holding it — the same order the reference server uses
- * on its own teardown.
+ * enqueues the releases explicitly, buttons first, then keys in ascending usage order — which frees a
+ * letter before the modifier that was holding it — and then media keys (§2.19.7) the same way: the
+ * same order the reference server uses on its own teardown. A stuck play/pause is harmless where a
+ * stuck Ctrl is not, but the rule is one rule.
  */
 class PcLinkInputSender(
     /** What the server said it will act on (`config.input`, §2.19.1). Modes it did not offer are dropped here rather than sent and ignored. */
@@ -57,6 +58,7 @@ class PcLinkInputSender(
     private var pending: Pending? = null
     private val heldButtons = HashSet<Int>()
     private val heldKeys = HashSet<Int>()
+    private val heldMedia = HashSet<Int>()
 
     /**
      * How many events may sit unsent before motion starts being discarded.
@@ -167,8 +169,40 @@ class PcLinkInputSender(
     }
 
     /**
+     * A media key by its Consumer-page usage (§2.19.7) — press or release. Sent only on a session
+     * whose offer lists `"media"` (a server built before the section never does, and would skip the
+     * event as an unknown `t` anyway), and a usage outside [PcLinkMediaKeys.INJECTABLE] is refused
+     * here for the same reason a keyboard usage is: the server would drop it, and refusing locally
+     * keeps [heldMedia] honest about what is actually down on the PC.
+     */
+    fun media(usage: Int, down: Boolean) {
+        if (!offer.hasMedia) return
+        if (!PcLinkMediaKeys.isInjectable(usage)) return
+        synchronized(lock) {
+            if (down) heldMedia.add(usage) else heldMedia.remove(usage)
+            enqueueLocked(PcInputEvent.Media(usage, down))
+        }
+        wake()
+    }
+
+    /**
+     * A tap on a media button: press and release in **one batch** — what the fixture pins, and what
+     * a media key is: a moment, not a hold. Nothing is left held, so nothing is owed on teardown, and
+     * the PC sees the two together even if the writer is mid-tick.
+     */
+    fun mediaTap(usage: Int) {
+        if (!offer.hasMedia) return
+        if (!PcLinkMediaKeys.isInjectable(usage)) return
+        synchronized(lock) {
+            enqueueLocked(PcInputEvent.Media(usage, true))
+            queue.add(PcInputEvent.Media(usage, false))
+        }
+        wake()
+    }
+
+    /**
      * Enqueues a release for everything this sender is holding, newest state first: buttons, then
-     * keys in ascending usage order.
+     * keys in ascending usage order, then media keys the same way (§2.19.7).
      *
      * Idempotent — a second call with nothing held enqueues nothing — so it is safe on every exit
      * path, which is how it ends up on all of them.
@@ -176,19 +210,21 @@ class PcLinkInputSender(
     fun releaseAll() {
         var any = false
         synchronized(lock) {
-            if (heldButtons.isEmpty() && heldKeys.isEmpty()) return
+            if (heldButtons.isEmpty() && heldKeys.isEmpty() && heldMedia.isEmpty()) return
             flushPendingLocked()
             for (b in heldButtons.sorted()) queue.add(PcInputEvent.Button(b, false))
             for (u in heldKeys.sorted()) queue.add(PcInputEvent.Key(u, false))
+            for (u in heldMedia.sorted()) queue.add(PcInputEvent.Media(u, false))
             heldButtons.clear()
             heldKeys.clear()
+            heldMedia.clear()
             any = true
         }
         if (any) wake()
     }
 
     /** What is held down right now, for tests and for a status readout. */
-    fun heldCount(): Int = synchronized(lock) { heldButtons.size + heldKeys.size }
+    fun heldCount(): Int = synchronized(lock) { heldButtons.size + heldKeys.size + heldMedia.size }
 
     /** Whether anything is waiting to go out, so the writer knows whether to tick fast. */
     fun hasPending(): Boolean = synchronized(lock) { queue.isNotEmpty() || pending != null }
@@ -225,6 +261,7 @@ class PcLinkInputSender(
             pending = null
             heldButtons.clear()
             heldKeys.clear()
+            heldMedia.clear()
         }
     }
 

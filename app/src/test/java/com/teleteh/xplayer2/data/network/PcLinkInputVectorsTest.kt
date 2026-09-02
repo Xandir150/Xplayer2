@@ -61,6 +61,7 @@ class PcLinkInputVectorsTest {
                 "w" -> PcInputEvent.Wheel(e.getInt("dx"), e.getInt("dy"))
                 "k" -> PcInputEvent.Key(e.getInt("u"), e.getBoolean("d"))
                 "s" -> PcInputEvent.Text(e.getString("s"))
+                "c" -> PcInputEvent.Media(e.getInt("u"), e.getBoolean("d"))
                 else -> throw AssertionError("unknown event tag in the fixture: $t")
             }
         }
@@ -455,6 +456,7 @@ class PcLinkInputVectorsTest {
         is PcInputEvent.Wheel -> sender.wheel(e.dx, e.dy)
         is PcInputEvent.Key -> sender.key(e.u, e.d)
         is PcInputEvent.Text -> sender.text(e.s)
+        is PcInputEvent.Media -> sender.media(e.u, e.d)
     }
 
     private fun config(width: Int, height: Int, stereo: String) = PcLinkStreamConfig(
@@ -479,6 +481,7 @@ class PcLinkInputVectorsTest {
         private var accY = 0L
         private val heldButtons = sortedSetOf<Int>()
         private val heldKeys = sortedSetOf<Int>()
+        private val heldMedia = sortedSetOf<Int>()
         private var pendRel: Pair<Int, Int>? = null
         private var pendAbs: Pair<Int, Int>? = null
 
@@ -526,6 +529,14 @@ class PcLinkInputVectorsTest {
                     if (e.s.isEmpty()) return
                     actions.add(action("text").put("text", e.s))
                 }
+                // §2.19.7, the same shape as a key: the input fixture predates media and carries
+                // none, but the transcription stays complete so a future vector is not silently
+                // skipped.
+                is PcInputEvent.Media -> {
+                    if (!PcLinkMediaKeys.isInjectable(e.u)) return
+                    if (e.d) heldMedia.add(e.u) else heldMedia.remove(e.u)
+                    actions.add(action("media").put("u", e.u).put("d", e.d))
+                }
                 is PcInputEvent.Move, is PcInputEvent.MoveAbs -> Unit // returned above
             }
         }
@@ -553,8 +564,10 @@ class PcLinkInputVectorsTest {
         fun teardown() {
             for (b in heldButtons) actions.add(action("button").put("button", BUTTONS[b]).put("down", false))
             for (u in heldKeys) actions.add(action("key").put("usage", u).put("down", false))
+            for (u in heldMedia) actions.add(action("media").put("u", u).put("d", false))
             heldButtons.clear()
             heldKeys.clear()
+            heldMedia.clear()
         }
 
         private fun action(a: String) = JSONObject().put("a", a)

@@ -26,6 +26,7 @@ import com.teleteh.xplayer2.MainActivity
 import com.teleteh.xplayer2.R
 import com.teleteh.xplayer2.data.network.PcDepthRange
 import com.teleteh.xplayer2.data.network.PcDepthState
+import com.teleteh.xplayer2.data.network.PcLinkMediaKeys
 import com.teleteh.xplayer2.data.network.PcStreamStats
 import com.teleteh.xplayer2.player.PcLinkSession
 import com.teleteh.xplayer2.player.RemoteHaptics
@@ -98,6 +99,12 @@ class PcLinkRemoteActivity : AppCompatActivity() {
 
     private lateinit var inputSurface: PcLinkInputSurface
     private lateinit var textInput: PcTextInputView
+
+    /**
+     * The media strip (`protocol.md` §2.19.7): one row under the pad, gone unless the PC granted
+     * input and said it speaks these keys.
+     */
+    private lateinit var boxMedia: View
 
     /**
      * The 3D block (`protocol.md` §2.20): gone entirely — not a pixel — until the PC says it is
@@ -174,6 +181,7 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         btnInputKeyboard = findViewById(R.id.btnInputKeyboard)
         tvInputHint = findViewById(R.id.tvInputHint)
         tvSurfaceHint = findViewById(R.id.tvSurfaceHint)
+        boxMedia = findViewById(R.id.boxMedia)
         boxDepth = findViewById(R.id.boxDepth)
         boxDepthSliders = findViewById(R.id.boxDepthSliders)
         tvDepthOff = findViewById(R.id.tvDepthOff)
@@ -194,6 +202,7 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         dim.attach()
         setupSurface()
         setupInput()
+        setupMedia()
         setupDepth()
 
         btnRecenter.setOnClickListener {
@@ -526,6 +535,10 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         val row = PcLinkRemotePolicy.inputRow(stats.input)
         boxInput.visibility =
             if (row == PcLinkRemotePolicy.InputRow.HIDDEN) View.GONE else View.VISIBLE
+        // The media strip follows the grant and the PC's own list of what it speaks — not the
+        // user's control switch: pausing a film should not require making the pad a touchpad.
+        boxMedia.visibility =
+            if (PcLinkRemotePolicy.mediaStrip(stats.input)) View.VISIBLE else View.GONE
         val ready = row == PcLinkRemotePolicy.InputRow.READY
         btnInputControl.isEnabled = ready
         swInputControl.isEnabled = ready
@@ -547,6 +560,33 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         // the user thinks to toggle the switch.
         syncPointerCapture()
         applySurfaceHint()
+    }
+
+    /**
+     * The media strip (`protocol.md` §2.19.7): play/pause, the tracks, the volume, sent to the PC.
+     *
+     * Each button is a tap — press and release in one batch — through the same input path the
+     * touchpad uses, so every rule of §2.19 holds without a second copy of it here: the strip is
+     * only on screen while the PC has granted input *and* listed `"media"` (see [applyInputState]),
+     * and `PcLinkSession.input()` answers null the moment either stops being true, which makes a
+     * tap in that gap do nothing rather than something wrong. No feedback text on the pad: the
+     * person is looking at the glasses, and the film pausing is the confirmation.
+     */
+    private fun setupMedia() {
+        val keys = listOf(
+            R.id.btnMediaPrevious to PcLinkMediaKeys.PREVIOUS,
+            R.id.btnMediaPlayPause to PcLinkMediaKeys.PLAY_PAUSE,
+            R.id.btnMediaNext to PcLinkMediaKeys.NEXT,
+            R.id.btnMediaVolumeDown to PcLinkMediaKeys.VOLUME_DOWN,
+            R.id.btnMediaVolumeUp to PcLinkMediaKeys.VOLUME_UP,
+            R.id.btnMediaMute to PcLinkMediaKeys.MUTE
+        )
+        for ((id, usage) in keys) {
+            findViewById<View>(id).setOnClickListener {
+                haptics.click()
+                PcLinkSession.input()?.mediaTap(usage)
+            }
+        }
     }
 
     /**

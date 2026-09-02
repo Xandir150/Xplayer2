@@ -119,4 +119,10 @@
     <string name="pclink_stat_pc_encode">PC 编码</string>
     <string name="pclink_stat_pc_encode_time">PC 编码耗时</string>
     <string name="pclink_stat_pc_sent">PC 发送</string>
+    <string name="pclink_media_previous">上一曲</string>
+    <string name="pclink_media_play_pause">在 PC 上播放或暂停</string>
+    <string name="pclink_media_next">下一曲</string>
+    <string name="pclink_media_volume_down">调低 PC 音量</string>
+    <string name="pclink_media_volume_up">调高 PC 音量</string>
+    <string name="pclink_media_mute">PC 静音</string>
 </resources>

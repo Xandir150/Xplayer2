@@ -119,4 +119,10 @@
     <string name="pclink_stat_pc_encode">PC: codificación</string>
     <string name="pclink_stat_pc_encode_time">PC: tiempo de codificación</string>
     <string name="pclink_stat_pc_sent">PC: enviado</string>
+    <string name="pclink_media_previous">Pista anterior</string>
+    <string name="pclink_media_play_pause">Reproducir o pausar en el PC</string>
+    <string name="pclink_media_next">Pista siguiente</string>
+    <string name="pclink_media_volume_down">Bajar el volumen del PC</string>
+    <string name="pclink_media_volume_up">Subir el volumen del PC</string>
+    <string name="pclink_media_mute">Silenciar el PC</string>
 </resources>

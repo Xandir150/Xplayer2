@@ -146,6 +146,108 @@
         </FrameLayout>
     </com.google.android.material.card.MaterialCardView>
 
+    <!-- The media strip (protocol.md 2.19.7): the keys on a keyboard's top row, sent to the PC,
+         whose operating system routes them to whatever is playing — a film pauses, a game ignores
+         them. One slim card directly under the pad, where a hand reaches for it while watching;
+         gone entirely unless the PC granted input AND said it speaks these keys, so against an
+         older server, or a session without input, the remote is exactly what it was. -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/boxMedia"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="10dp"
+        android:visibility="gone"
+        app:cardBackgroundColor="@color/rc_card"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="0dp"
+        app:strokeColor="@color/rc_outline"
+        app:strokeWidth="1dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp">
+
+            <ImageButton
+                android:id="@+id/btnMediaPrevious"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_media_previous"
+                android:tint="@color/rc_on_surface"
+                android:scaleType="centerInside"
+                android:contentDescription="@string/pclink_media_previous" />
+
+            <ImageButton
+                android:id="@+id/btnMediaPlayPause"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_media_play_pause_24"
+                android:tint="?attr/colorPrimary"
+                android:scaleType="centerInside"
+                android:contentDescription="@string/pclink_media_play_pause" />
+
+            <ImageButton
+                android:id="@+id/btnMediaNext"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_media_next"
+                android:tint="@color/rc_on_surface"
+                android:scaleType="centerInside"
+                android:contentDescription="@string/pclink_media_next" />
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="24dp"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
+                android:background="@color/rc_outline" />
+
+            <ImageButton
+                android:id="@+id/btnMediaVolumeDown"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_volume_down_24"
+                android:tint="@color/rc_on_surface"
+                android:scaleType="centerInside"
+                android:contentDescription="@string/pclink_media_volume_down" />
+
+            <ImageButton
+                android:id="@+id/btnMediaVolumeUp"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_volume_up_24"
+                android:tint="@color/rc_on_surface"
+                android:scaleType="centerInside"
+                android:contentDescription="@string/pclink_media_volume_up" />
+
+            <ImageButton
+                android:id="@+id/btnMediaMute"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_volume_mute_24"
+                android:tint="@color/rc_on_surface"
+                android:scaleType="centerInside"
+                android:contentDescription="@string/pclink_media_mute" />
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"

@@ -52,6 +52,13 @@ object PcLinkInputProtocol {
     const val KEYS_HID = "hid"
     const val KEYS_TEXT = "text"
 
+    /**
+     * The Consumer-page media keys (§2.19.7): offered in `hello.input.keys`, and sent only when the
+     * server's `config.input.keys` lists it back. A server built before the section never does, so
+     * against one the strip never appears and no `"c"` is ever sent.
+     */
+    const val KEYS_MEDIA = "media"
+
     /** Wire discriminants for [PcInputEvent.Button]. */
     const val BUTTON_LEFT = 0
     const val BUTTON_RIGHT = 1
@@ -67,7 +74,7 @@ object PcLinkInputProtocol {
      */
     val CLIENT_OFFER = PcInputOffer(
         pointer = listOf(POINTER_REL, POINTER_ABS),
-        keys = listOf(KEYS_HID, KEYS_TEXT),
+        keys = listOf(KEYS_HID, KEYS_TEXT, KEYS_MEDIA),
         wheel = true
     )
 
@@ -301,6 +308,18 @@ sealed class PcInputEvent {
             sb.append('}')
         }
     }
+
+    /**
+     * A media key by its **USB HID Consumer-page** usage (§2.19.7): play/pause, next, previous, the
+     * volume and mute — [PcLinkMediaKeys] is the injectable six. The PC's operating system routes
+     * these to whatever is playing media, so nothing here guesses what is on screen. Press and
+     * release are separate like a keyboard key's, and a tap is the two in one batch.
+     */
+    data class Media(val u: Int, val d: Boolean) : PcInputEvent() {
+        override fun appendTo(sb: StringBuilder) {
+            sb.append("{\"t\":\"c\",\"u\":").append(u).append(",\"d\":").append(d).append('}')
+        }
+    }
 }
 
 /**
@@ -320,6 +339,9 @@ data class PcInputOffer(
     val hasAbsolute: Boolean get() = pointer.contains(PcLinkInputProtocol.POINTER_ABS)
     val hasHidKeys: Boolean get() = keys.contains(PcLinkInputProtocol.KEYS_HID)
     val hasText: Boolean get() = keys.contains(PcLinkInputProtocol.KEYS_TEXT)
+
+    /** Whether the other side speaks §2.19.7's `"c"` events. Unknown entries alongside it change nothing. */
+    val hasMedia: Boolean get() = keys.contains(PcLinkInputProtocol.KEYS_MEDIA)
 
     /** The JSON object as `hello`/`config` carry it. */
     fun toJson(): JSONObject = JSONObject()

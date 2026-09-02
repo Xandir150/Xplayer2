@@ -159,6 +159,18 @@ object PcLinkRemotePolicy {
     fun controlHolds(userWantsControl: Boolean, availability: PcInputAvailability?): Boolean =
         userWantsControl && availability is PcInputAvailability.Live
 
+    /**
+     * Whether the media strip is on screen (§2.19.7): the PC granted input **and** its offer lists
+     * `"media"`.
+     *
+     * Not tied to the user's control switch: pausing a film is the whole point of the strip, and it
+     * should not require turning the pad into a touchpad first. Not shown on a grant without the
+     * entry either — that is a server built before the section, which would skip every `"c"` as an
+     * unknown event, and a row of buttons that do nothing is worse than no row.
+     */
+    fun mediaStrip(availability: PcInputAvailability?): Boolean =
+        availability is PcInputAvailability.Live && availability.offer.hasMedia
+
     // --- 3D from the remote (protocol.md 2.20) ------------------------------------------------
 
     /** What the 3D block of the remote shows for the last `depth` the PC sent. */

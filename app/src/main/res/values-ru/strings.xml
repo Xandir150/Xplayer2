@@ -178,6 +178,15 @@
     <string name="pclink_stat_pc_encode_time">ПК: время кодирования</string>
     <string name="pclink_stat_pc_sent">ПК: отправлено</string>
 
+    <!-- Медиакнопки (2.19.7): клавиши верхнего ряда клавиатуры, отправленные компьютеру. Названия для
+         экранного диктора; сами кнопки — значки. -->
+    <string name="pclink_media_previous">Предыдущий трек</string>
+    <string name="pclink_media_play_pause">Пауза или воспроизведение на компьютере</string>
+    <string name="pclink_media_next">Следующий трек</string>
+    <string name="pclink_media_volume_down">Тише на компьютере</string>
+    <string name="pclink_media_volume_up">Громче на компьютере</string>
+    <string name="pclink_media_mute">Выключить звук на компьютере</string>
+
     <!-- Сопряжение PC Link: код из 6 цифр и всё вокруг него -->
     <string name="pclink_pair_title">Подключить «%1$s»?</string>
     <string name="pclink_pair_body">Убедитесь, что на компьютере показан такой же код:</string>

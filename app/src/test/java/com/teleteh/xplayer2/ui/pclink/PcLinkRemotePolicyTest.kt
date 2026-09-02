@@ -245,6 +245,38 @@ class PcLinkRemotePolicyTest {
         assertFalse(PcLinkRemotePolicy.controlHolds(userWantsControl = true, availability = null))
     }
 
+    // --- the media strip (protocol.md 2.19.7) ---------------------------------------------------
+
+    /**
+     * The strip needs both halves: a grant, and `"media"` in it. A grant without the entry is a
+     * server from before the section, which would skip every `"c"` as an unknown event — and a row
+     * of buttons that do nothing is worse than no row.
+     */
+    @Test
+    fun `the media strip shows only on a grant that lists media`() {
+        assertTrue(PcLinkRemotePolicy.mediaStrip(inputLive))
+        val before = PcInputAvailability.Live(
+            PcLinkInputProtocol.CLIENT_OFFER.copy(
+                keys = listOf(PcLinkInputProtocol.KEYS_HID, PcLinkInputProtocol.KEYS_TEXT)
+            )
+        )
+        assertFalse(PcLinkRemotePolicy.mediaStrip(before))
+        assertFalse(PcLinkRemotePolicy.mediaStrip(notEncrypted))
+        assertFalse(PcLinkRemotePolicy.mediaStrip(operatorOff))
+        assertFalse(PcLinkRemotePolicy.mediaStrip(null))
+    }
+
+    /** An entry this build has never heard of, next to `"media"`, changes nothing. */
+    @Test
+    fun `an unknown entry beside media is ignored`() {
+        val withPen = PcInputAvailability.Live(
+            PcLinkInputProtocol.CLIENT_OFFER.copy(
+                keys = listOf(PcLinkInputProtocol.KEYS_HID, "pen", PcLinkInputProtocol.KEYS_MEDIA)
+            )
+        )
+        assertTrue(PcLinkRemotePolicy.mediaStrip(withPen))
+    }
+
     // --- 3D from the remote (protocol.md 2.20) --------------------------------------------------
 
     private fun depth(setting: String, active: Boolean, divergence: Int = 20, convergence: Int = 0) =

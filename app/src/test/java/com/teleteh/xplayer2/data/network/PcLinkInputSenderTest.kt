@@ -412,6 +412,7 @@ class PcLinkInputSenderTest {
         assertTrue(input.hasAbsolute)
         assertTrue(input.hasHidKeys)
         assertTrue(input.hasText)
+        assertTrue("the media keys of 2.19.7 are offered too", input.hasMedia)
         assertTrue(input.wheel)
     }
 
@@ -454,12 +455,26 @@ class PcLinkInputSenderTest {
     /** `config.input` parses out of the JSON the server sends, and its absence is not an error. */
     @Test
     fun `the offer parses from config`() {
+        // A server from before 2.19.7: everything but the media keys, and nothing invented.
         val parsed = PcInputOffer.parse(
             org.json.JSONObject(
                 """{"pointer":["rel","abs"],"keys":["hid","text"],"wheel":true}"""
             )
         )
-        assertEquals(everything, parsed)
+        assertEquals(
+            everything.copy(keys = listOf(PcLinkInputProtocol.KEYS_HID, PcLinkInputProtocol.KEYS_TEXT)),
+            parsed
+        )
+        assertFalse(parsed!!.hasMedia)
+        // One that lists the media keys is the whole of what this phone offers.
+        assertEquals(
+            everything,
+            PcInputOffer.parse(
+                org.json.JSONObject(
+                    """{"pointer":["rel","abs"],"keys":["hid","text","media"],"wheel":true}"""
+                )
+            )
+        )
         assertNull(PcInputOffer.parse(null))
         val bare = PcInputOffer.parse(org.json.JSONObject("{}"))!!
         assertFalse(bare.hasRelative)

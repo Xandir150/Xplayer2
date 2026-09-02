@@ -130,4 +130,28 @@ class PcLinkRemoteLayoutTest {
     fun `reset starts disabled`() {
         assertTrue(attributesOf("btnDepthReset").contains("""android:enabled="false""""))
     }
+
+    /**
+     * The media strip starts hidden: it exists only on a session the PC granted input to *and* on
+     * which it listed `"media"` (§2.19.7), and neither is known before the first `config`. Against
+     * an older server it never appears at all.
+     */
+    @Test
+    fun `the media strip starts hidden`() {
+        assertTrue(
+            "boxMedia must start GONE — the PC has not said it speaks these keys",
+            attributesOf("boxMedia").contains("""android:visibility="gone"""")
+        )
+    }
+
+    /** Every media button has a spoken name: they are icons, and the user may not be looking. */
+    @Test
+    fun `every media button is labelled for a screen reader`() {
+        for (id in listOf(
+            "btnMediaPrevious", "btnMediaPlayPause", "btnMediaNext",
+            "btnMediaVolumeDown", "btnMediaVolumeUp", "btnMediaMute"
+        )) {
+            assertTrue("$id needs a contentDescription", attributesOf(id).contains("android:contentDescription="))
+        }
+    }
 }
