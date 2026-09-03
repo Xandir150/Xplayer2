@@ -44,13 +44,20 @@ set or bump FFmpeg/Media3 versions.
 `abiFilters` is `arm64-v8a` + `armeabi-v7a` only — no x86/x86_64, by policy (every real target is ARM;
 emulators need an ARM system image).
 
-### Local Media3 / FFmpeg build graph
+### Media3 / FFmpeg build graph
 
-`external/media3` and `external/ffmpeg` are git submodules. `settings.gradle.kts` wires in a curated
-subset of Media3 library modules directly from `external/media3/libraries/*` (as `:media3-lib-*`
-projects) rather than pulling Maven artifacts, and patches in placeholder `proguard-rules.txt` files for
-any submodule library that's missing one (AGP 9 requires the file to exist). Don't "fix" this by editing
-files inside `external/media3` — it's meant to stay pristine; workarounds belong in `settings.gradle.kts`.
+Media3 is consumed as **published Google Maven artifacts** (`androidx.media3:*`, version pinned as
+`media3` in `gradle/libs.versions.toml`). The one module Google never publishes — the FFmpeg audio
+decoder (`media3-decoder-ffmpeg`) — is checked in as a prebuilt AAR under `external/prebuilt/`, built
+once from the `external/media3` submodule **at the same media3 version** with media3's *own* Gradle
+wrapper/AGP (see `BUILDING.md`). Media3 is NOT built inside this project's Gradle build: its build
+system pins its own AGP/Kotlin/Gradle versions that are incompatible with ours when configured in one
+build (tried both including its modules and its `includeMedia3()` composite — same wall). When bumping
+media3, bump the version in the catalog, check out the matching tag in `external/media3`, rebuild the
+AAR, and verify the Java glue's `native` methods still match the prebuilt `libffmpegJNI.so`.
+
+`external/media3` and `external/ffmpeg` are git submodules and must stay pristine — don't edit files in
+there; the manual FFmpeg/AAR procedures in `BUILDING.md` are the only thing that uses them.
 
 ## Architecture
 

@@ -14,9 +14,10 @@ jobs:
 
     steps:
       - name: Checkout
+        # No submodules: media3 comes from Google Maven and the FFmpeg decoder AAR + libffmpegJNI.so
+        # are committed prebuilt (BUILDING.md), so the release build never touches external/media3
+        # or external/ffmpeg. Cloning them (FFmpeg alone is huge) only slowed CI down.
         uses: actions/checkout@v6
-        with:
-          submodules: recursive
 
       - name: Set up JDK
         uses: actions/setup-java@v5

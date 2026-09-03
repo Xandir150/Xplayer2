@@ -1,6 +1,7 @@
+// Kotlin support is AGP 9's built-in one (no org.jetbrains.kotlin.android plugin here); the KGP
+// version is pinned by the `apply false` declaration in the root build.gradle.kts.
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
 }
 
 android {
@@ -117,16 +118,22 @@ dependencies {
     implementation(libs.org.jetbrains.kotlinx.coroutines.core)
     implementation(libs.org.jetbrains.kotlinx.coroutines.android)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(project(":media3-lib-exoplayer"))
-    implementation(project(":media3-lib-exoplayer-hls"))
-    implementation(project(":media3-lib-ui"))
+    // Media3: published binaries from Google Maven (see settings.gradle.kts for why we no longer
+    // build the external/media3 checkout inside this project).
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.exoplayer.hls)
+    implementation(libs.androidx.media3.ui)
     // MediaSession for foreground playback service
-    implementation(project(":media3-lib-session"))
+    implementation(libs.androidx.media3.session)
     // Image loading for device icons and thumbnails (Coil 3: network loading is a separate artifact)
     implementation(libs.coil)
     implementation(libs.coil.network.okhttp)
-    // Local Media3 FFmpeg decoder module
-    implementation(project(":media3-lib-decoder-ffmpeg"))
+    // Media3 FFmpeg audio decoder: Google never publishes this module, so it's an AAR built once
+    // from the external/media3 checkout at the SAME media3 version (BUILDING.md). It's pure
+    // Java glue — the native libffmpegJNI.so ships separately in src/main/jniLibs. A file
+    // dependency carries no POM, hence media3-decoder (its api dependency) declared explicitly.
+    implementation(files("../external/prebuilt/media3-decoder-ffmpeg-${libs.versions.media3.get()}.aar"))
+    implementation(libs.androidx.media3.decoder)
     // TensorFlow Lite for the Lazy-3D depth estimator (Depth-Anything-V2-Small).
     // NNAPI (NPU) delegate is built into the core runtime; GPU delegate is split out.
     implementation(libs.tensorflow.lite)
