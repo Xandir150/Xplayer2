@@ -1,6 +1,9 @@
 package com.teleteh.xplayer2.data.depth
 
+import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -19,12 +22,23 @@ import kotlin.concurrent.withLock
  *   - call [pollLatestDepth] right before drawing to fetch the freshest depth map
  *
  * Lifecycle:
- *   - [start] spawns the worker thread once the estimator has been [DepthEstimator.init]'d
+ *   - [start] spawns the worker thread and initializes the estimator on that thread
  *   - [stop] signals the thread to exit, releases the estimator
  */
-class DepthFrameWorker(
-    private val estimator: DepthEstimator,
+class DepthFrameWorker internal constructor(
+    private val initialize: () -> Boolean,
+    private val infer: (IntArray, Int, Int) -> FloatArray?,
+    private val release: () -> Unit,
+    private val log: (String, Throwable?) -> Unit,
 ) {
+    constructor(estimator: DepthEstimator, context: Context) : this(
+        { estimator.init(context) },
+        estimator::estimate,
+        estimator::close,
+        { message, error ->
+            if (error == null) Log.i(TAG, message) else Log.e(TAG, message, error)
+        },
+    )
     private val lock = ReentrantLock()
     private val condition = lock.newCondition()
     private val running = AtomicBoolean(false)
@@ -42,32 +56,44 @@ class DepthFrameWorker(
     @Volatile var latestDepthTimestampNanos: Long = 0L
         private set
 
-    fun start() {
-        if (!estimator.isReady()) {
-            Log.w(TAG, "Worker not started: estimator not initialized")
-            return
-        }
-        if (running.compareAndSet(false, true)) {
-            thread = Thread(::loop, "DepthFrameWorker").also { it.start() }
+    /** Creates, runs and closes every delegate on this worker's thread. */
+    suspend fun start(): Boolean = suspendCancellableCoroutine { continuation ->
+        check(running.compareAndSet(false, true)) { "Worker already started" }
+        continuation.invokeOnCancellation { requestStop() }
+        thread = Thread({
+            try {
+                val ready = running.get() && initialize()
+                continuation.resume(ready)
+                if (ready && running.get()) loop()
+            } catch (e: Throwable) {
+                if (continuation.isActive) continuation.resume(false)
+                log("Depth worker failed", e)
+            } finally {
+                running.set(false)
+                release()
+                lock.withLock { pendingPixels = null }
+                latestDepth = null
+                latestDepthTimestampNanos = 0L
+            }
+        }, "DepthFrameWorker").also { it.start() }
+    }
+
+    /** Non-blocking cancellation, including model initialization in progress. */
+    fun requestStop() {
+        running.set(false)
+        lock.withLock {
+            pendingPixels = null
+            condition.signalAll()
         }
     }
 
-    /**
-     * Stop the worker. Returns true when the worker thread actually exited; false when it is
-     * still wedged inside an inference after the join timeout — in that case the caller MUST NOT
-     * close the estimator (closing a TFLite interpreter mid-`run()` is native UB that can take the
-     * GPU delegate down for the whole process); leak it instead.
-     */
+    /** A stalled native call owns its delegate until it returns; never close it elsewhere. */
     fun stop(): Boolean {
-        if (!running.compareAndSet(true, false)) return thread == null
-        lock.withLock { condition.signalAll() }
-        // Generous join: a slow CPU-fallback inference can exceed the old 500 ms on weak devices.
-        try { thread?.join(3000) } catch (_: InterruptedException) { }
-        val exited = thread?.isAlive != true
-        if (exited) thread = null
-        latestDepth = null
-        latestDepthTimestampNanos = 0L
-        return exited
+        requestStop()
+        try { thread?.join(3000) } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+        return thread?.isAlive != true
     }
 
     /**
@@ -79,6 +105,7 @@ class DepthFrameWorker(
     fun submit(pixels: IntArray, width: Int, height: Int, timestampNanos: Long) {
         if (!running.get()) return
         lock.withLock {
+            if (!running.get()) return
             pendingPixels = pixels
             pendingWidth = width
             pendingHeight = height
@@ -91,7 +118,7 @@ class DepthFrameWorker(
     fun pollLatestDepth(): FloatArray? = latestDepth
 
     private fun loop() {
-        Log.i(TAG, "DepthFrameWorker started")
+        log("DepthFrameWorker started", null)
         while (running.get()) {
             val pixels: IntArray
             val w: Int
@@ -109,9 +136,9 @@ class DepthFrameWorker(
                 pendingPixels = null
             }
             val depth = try {
-                estimator.estimate(pixels, w, h)
+                infer(pixels, w, h)
             } catch (e: Throwable) {
-                Log.e(TAG, "Inference threw", e)
+                log("Inference threw", e)
                 null
             }
             if (depth != null) {
@@ -119,7 +146,7 @@ class DepthFrameWorker(
                 latestDepthTimestampNanos = ts
             }
         }
-        Log.i(TAG, "DepthFrameWorker stopped (avg inference ${estimator.avgInferenceMs} ms)")
+        log("DepthFrameWorker stopped", null)
     }
 
     companion object {

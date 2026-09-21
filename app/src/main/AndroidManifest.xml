@@ -78,7 +78,7 @@
             android:exported="true"
             android:grantUriPermissions="true"
             android:launchMode="singleTop"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="fullUser"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|smallestScreenSize|uiMode|density"
             android:resizeableActivity="true"
             android:supportsPictureInPicture="true"
@@ -354,17 +354,17 @@
         <activity
             android:name=".player.RemoteControlActivity"
             android:exported="false"
-            android:screenOrientation="portrait"
+            android:screenOrientation="fullUser"
             android:launchMode="singleTop"
             android:theme="@style/Theme.XPlayer2" />
 
         <!-- PC Link's own remote, brought up where the film player brings up its one. Same
-             portrait-and-singleTop shape: it is a thing you hold, and a second copy of it must
+             adaptive-and-singleTop shape: it is a thing you hold, and a second copy of it must
              not stack up behind the first. -->
         <activity
             android:name=".ui.pclink.PcLinkRemoteActivity"
             android:exported="false"
-            android:screenOrientation="portrait"
+            android:screenOrientation="fullUser"
             android:launchMode="singleTop"
             android:theme="@style/Theme.XPlayer2" />
 

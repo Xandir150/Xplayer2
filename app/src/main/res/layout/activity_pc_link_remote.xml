@@ -10,8 +10,9 @@
        * Stop, kept to half width and centred so it is hard to hit by accident.
 
      There is no transport row and no seekbar: a desktop has no timeline. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.teleteh.xplayer2.ui.fold.FoldRemoteLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/foldRemoteRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -728,4 +729,4 @@
             </LinearLayout>
         </LinearLayout>
     </ScrollView>
-</LinearLayout>
+</com.teleteh.xplayer2.ui.fold.FoldRemoteLayout>

@@ -60,6 +60,8 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -99,10 +101,13 @@ import com.teleteh.xplayer2.ui.pclink.PcLinkRemotePolicy
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import com.teleteh.xplayer2.BuildConfig
 import com.teleteh.xplayer2.util.VideoStreamExtractor
+import com.teleteh.xplayer2.util.SharedMediaUrl
 import com.teleteh.xplayer2.util.WebSourceClassifier
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -268,6 +273,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     private val poseUiHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var depthEstimator: DepthEstimator? = null
     private var depthWorker: DepthFrameWorker? = null
+    private var depthStartingWorker: DepthFrameWorker? = null
     // Effective stereo divergence for the current Lazy-3D session: the base LAZY3D_DIVERGENCE
     // scaled by the active model's divergenceScale (set when the estimator loads).
     private var lazy3dDivergence = LAZY3D_DIVERGENCE
@@ -459,6 +465,13 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     private var extractedTitle: String? = null
     // Flag to prevent premature player initialization during stream extraction
     private var isExtractingStream: Boolean = false
+    private var extractionJob: Job? = null
+    private var sourceGeneration = 0L
+    private var resumePlayWhenReady = true
+    private var pausedForLifecycle = false
+    private var resumePositionMs: Long? = null
+    private var restoredTrackParameters: Bundle? = null
+    private var foldPlayerLayout: com.teleteh.xplayer2.ui.fold.FoldPlayerLayout? = null
 
     // Selectable stream qualities for the current source (VK/OK.ru), highest first. Empty for
     // local files / single-URL streams — the quality picker is hidden unless this has ≥2 entries.
@@ -524,6 +537,15 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (intent?.action == PlaybackService.ACTION_REOPEN) {
+            // A notification left after process death has no media source to restore.
+            startActivity(Intent(this, MainActivity::class.java))
+            finish()
+            return
+        }
+        resumePlayWhenReady = savedInstanceState?.getBoolean("playback.playWhenReady", true) ?: true
+        resumePositionMs = savedInstanceState?.getLong("playback.position")
+        restoredTrackParameters = savedInstanceState?.getBundle("playback.tracks")
         liveInstances.add(this)
         // Scoped to the activity's whole life, not to onStart/onStop: a player whose picture is on
         // the glasses keeps running while this window is stopped (see onStop), and that is exactly
@@ -639,6 +661,9 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             }
         }
         playerView.setControllerVisibilityListener(controllerListener)
+        foldPlayerLayout = com.teleteh.xplayer2.ui.fold.FoldPlayerLayout(
+            this, findViewById(R.id.foldPlayerRoot), playerView, glView,
+        ) { presentation == null && !isOnExternalDisplay() }.also { it.start() }
         hideSystemBars()
         updateSbsUi()
 
@@ -672,11 +697,29 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        val incomingUri = sourceFromIntent(intent)
+        val hasPcHost = !intent.getStringExtra(PcConnectActivity.EXTRA_PCLINK_HOST).isNullOrBlank()
+        if (incomingUri == null && !hasPcHost) {
+            showRemoteControlFront()
+            return
+        }
+        if (incomingUri != null && !hasPcHost) {
+            WebSourceClassifier.openIntent(this, incomingUri.toString(),
+                WebSourceClassifier.classify(incomingUri.toString()))?.let {
+                startActivity(it)
+                return
+            }
+        }
         // launchMode="singleTop": a second ACTION_VIEW (e.g. from Recent, Files, or notification)
         // routes through onNewIntent instead of spinning up a second PlayerActivity. Tear the
         // previous playback down completely before re-using this instance — leaving the prior
         // ExoPlayer + LoudnessEnhancer alive while a new one starts has been observed to lock
         // the USB audio device on XREAL Air goggles (no audio in any app until uninstall).
+        saveProgress()
+        sourceGeneration++
+        extractionJob?.cancel()
+        extractionJob = null
+        isExtractingStream = false
         setIntent(intent)
         releaseLoudnessEnhancer()
         try { player?.clearVideoSurface() } catch (_: Throwable) { }
@@ -684,6 +727,13 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         player = null
         trackSelector = null
         resolvedStreamUri = null
+        resolvedAudioUri = null
+        extractedHeaders = null
+        extractedTitle = null
+        resumePlayWhenReady = true
+        pausedForLifecycle = false
+        resumePositionMs = null
+        restoredTrackParameters = null
         streamVariants = emptyList()
         selectedVariantIndex = 0
         currentResolvedTitle = null
@@ -695,6 +745,23 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         loadFromIntent(intent)
     }
 
+    private fun sourceFromIntent(intent: Intent?): Uri? {
+        return when (intent?.action) {
+            Intent.ACTION_SEND -> {
+                val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
+                val parsed = SharedMediaUrl.fromText(text)?.toUri()
+                val stream = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+                }
+                parsed ?: stream
+            }
+            else -> intent?.data
+        }
+    }
+
     private fun loadFromIntent(intent: Intent?) {
         // PC Link hands us a host instead of a URI. Checked first: such an intent carries no data
         // URI at all, which everything below would read as "nothing to play" and finish().
@@ -703,25 +770,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             startPcLink(intent, pcHost)
             return
         }
-        val action = intent?.action
-        sourceUri = when (action) {
-            Intent.ACTION_SEND -> {
-                val text = intent.getStringExtra(Intent.EXTRA_TEXT)
-                val parsed = try {
-                    if (!text.isNullOrBlank()) text.toUri() else null
-                } catch (_: Throwable) {
-                    null
-                }
-                val stream = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    intent.getParcelableExtra(Intent.EXTRA_STREAM)
-                }
-                parsed ?: stream
-            }
-            else -> intent?.data
-        }
+        sourceUri = sourceFromIntent(intent)
         if (sourceUri == null) {
             finish()
             return
@@ -776,9 +825,11 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             titleCenterView?.text = getString(R.string.loading_stream)
             android.util.Log.i("XPlayer2", "Starting stream extraction for: $uri")
             isExtractingStream = true
-            lifecycleScope.launch {
+            val generation = sourceGeneration
+            extractionJob = lifecycleScope.launch {
                 try {
                     val extracted = VideoStreamExtractor.extract(uri, isYouTubeEnabled())
+                    if (generation != sourceGeneration || isDestroyed) return@launch
                     isExtractingStream = false
                     if (extracted != null) {
                         android.util.Log.i("XPlayer2", "Stream extracted successfully: ${extracted.url}")
@@ -803,7 +854,10 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                         Toast.makeText(this@PlayerActivity, R.string.stream_extraction_failed, Toast.LENGTH_LONG).show()
                         titleCenterView?.text = getString(R.string.stream_extraction_failed)
                     }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
+                    if (generation != sourceGeneration || isDestroyed) return@launch
                     isExtractingStream = false
                     android.util.Log.e("XPlayer2", "Exception during stream extraction", e)
                     Toast.makeText(this@PlayerActivity, R.string.stream_extraction_failed, Toast.LENGTH_LONG).show()
@@ -910,6 +964,16 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         getSharedPreferences("youtube", MODE_PRIVATE)
             .getBoolean("enabled", BuildConfig.YOUTUBE_ENABLED_DEFAULT)
 
+    private fun mediaDataSourceFactory(): DefaultDataSource.Factory {
+        val headers = extractedHeaders.orEmpty()
+        val http = DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setDefaultRequestProperties(headers)
+        headers["User-Agent"]?.let { http.setUserAgent(it) }
+        // DefaultDataSource keeps file/content playback working as well as HTTP streams.
+        return DefaultDataSource.Factory(this, http)
+    }
+
     private fun initializePlayer() {
         val uri = resolvedStreamUri ?: sourceUri ?: return
         android.util.Log.i("XPlayer2", "initializePlayer called with uri=$uri, player=${player != null}")
@@ -953,6 +1017,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             .setEnableDecoderFallback(true)
         val isLocalUri = uri.scheme?.lowercase() in setOf("file", "content")
         val playerBuilder = ExoPlayer.Builder(this, renderersFactory)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(mediaDataSourceFactory()))
             .setTrackSelector(selector)
             // ±10 s so the MediaSession (remote / lock-screen) and the default controller's rewind/
             // fast-forward match our own ±10 s seek.
@@ -1010,8 +1075,9 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                     .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
                     .build()
                 exo.setAudioAttributes(exoAttrs, true)
-                // If a title was provided by caller (e.g., DLNA DIDL), attach it to MediaItem metadata
-                val providedTitle = intent?.getStringExtra(EXTRA_TITLE)
+                // Preserve resolved web titles in MediaSession metadata as well as the player UI.
+                val providedTitle = intent?.getStringExtra(EXTRA_TITLE)?.takeIf { it.isNotBlank() }
+                    ?: extractedTitle
                 val meta = if (!providedTitle.isNullOrBlank()) {
                     currentResolvedTitle = providedTitle
                     MediaMetadata.Builder().setTitle(providedTitle).build()
@@ -1025,10 +1091,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                     // YouTube adaptive: video and audio are SEPARATE streams — play them in parallel
                     // via a MergingMediaSource. The googlevideo CDN wants the YouTube client UA on
                     // every request, so build a DataSource factory carrying it.
-                    val ua = extractedHeaders?.get("User-Agent")
-                    val dsFactory = DefaultHttpDataSource.Factory()
-                        .setAllowCrossProtocolRedirects(true)
-                        .apply { if (!ua.isNullOrBlank()) setUserAgent(ua) }
+                    val dsFactory = mediaDataSourceFactory()
                     val videoSrc = ProgressiveMediaSource.Factory(dsFactory).createMediaSource(mediaItem)
                     val audioSrc = ProgressiveMediaSource.Factory(dsFactory)
                         .createMediaSource(MediaItem.fromUri(audioUri))
@@ -1069,6 +1132,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                 val store = RecentStore(this)
                 val recent = store.find((recentKeyUri ?: sourceUri ?: uri).toString())
                 val resumePos = when {
+                    resumePositionMs != null -> resumePositionMs!!
                     requestedStart >= 0L -> requestedStart
                     (recent?.lastPositionMs ?: 0L) > 0L -> recent!!.lastPositionMs
                     else -> 0L
@@ -1106,7 +1170,10 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                 applyRenderConfig()
                 btnSbsRef?.let { applySbsButtonVisual(it) }
                 applyVideoPipeline()
-                exo.play()
+                restoredTrackParameters?.let {
+                    exo.trackSelectionParameters = androidx.media3.common.TrackSelectionParameters.fromBundle(it)
+                }
+                exo.playWhenReady = resumePlayWhenReady && !pausedForLifecycle
                 // If the foreground service already connected while the player was still null
                 // (e.g. stream extraction outlived the bind), its notification is the placeholder
                 // without a MediaSession — hand it the real player now that one exists.
@@ -1286,11 +1353,8 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     override fun onPause() {
         super.onPause()
         saveProgress()
-        glView?.onPause()
-        // If Presentation is active, keep playing when phone screen is turned off/locked
-        if (presentation == null) {
-            player?.playWhenReady = false
-        }
+        // A visible multi-window player and external playback can keep rendering while unfocused.
+        // Phone-only playback is suspended in onStop, once its window is no longer visible.
         // Foreground service: keep if external playback is active, otherwise stop
         updatePlaybackService()
     }
@@ -1304,6 +1368,13 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         if (isPcLinkMode && !(presentation != null || isOnExternalDisplay())) disconnectPcLink()
         // If external Presentation is active or activity is on external display, keep the player alive to continue playback on the secondary display
         if (!(presentation != null || isOnExternalDisplay())) {
+            player?.let {
+                resumePlayWhenReady = it.playWhenReady
+                resumePositionMs = it.currentPosition
+                restoredTrackParameters = it.trackSelectionParameters.toBundle()
+            }
+            pausedForLifecycle = true
+            glView?.onPause()
             // Release audio-side resources FIRST. LoudnessEnhancer is attached to the player's
             // audio session and the system has been observed to leave the underlying audio
             // effect alive after the session is torn down — which on some devices (notably
@@ -1382,8 +1453,11 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         // sat behind it; a renderer flag, so this costs one uniform on the next frame.
         applySwapEyesPreference()
         glView?.onResume()
-        // Resume playback if needed
-        player?.playWhenReady = true
+        // Restore only a lifecycle suspension. A user pause on the phone or remote stays paused.
+        if (pausedForLifecycle) {
+            pausedForLifecycle = false
+            player?.playWhenReady = resumePlayWhenReady
+        }
         // Try to show Presentation on external display
         tryShowExternalPresentation()
         updateSbsUi()
@@ -1400,6 +1474,8 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
 
     override fun onDestroy() {
         super.onDestroy()
+        sourceGeneration++
+        extractionJob?.cancel()
         liveInstances.remove(this)
         GlassesStage.unregister(this)
         PcLinkSession.unregister(this)
@@ -1418,6 +1494,14 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         player?.release()
         player = null
         stopPlaybackService()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("playback.playWhenReady",
+            if (pausedForLifecycle) resumePlayWhenReady else player?.playWhenReady ?: resumePlayWhenReady)
+        outState.putLong("playback.position", player?.currentPosition ?: resumePositionMs ?: 0L)
+        outState.putBundle("playback.tracks", player?.trackSelectionParameters?.toBundle() ?: restoredTrackParameters)
+        super.onSaveInstanceState(outState)
     }
 
     // --- Audio gain (LoudnessEnhancer) ---
@@ -1957,6 +2041,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             }
         }
         presentation = pres
+        foldPlayerLayout?.refresh()
         presentationDisplayId = ext.displayId
         try {
             pres.show()
@@ -1987,6 +2072,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             presentation = null
             presentationDisplayId = -1
             // Restore local rendering
+            foldPlayerLayout?.refresh()
             glView?.visibility = View.VISIBLE
             glSurface?.let { player?.setVideoSurface(it) }
             if (isPcLinkMode) updatePcLinkSurface()
@@ -2000,6 +2086,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             presentation = null
             presentationDisplayId = -1
             presentationSurface = null
+            foldPlayerLayout?.refresh()
             // Restore local GL view
             glView?.visibility = View.VISIBLE
             glSurface?.let { player?.setVideoSurface(it) }
@@ -2679,6 +2766,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     // lives in applyRenderMode(), which is layout-driven and targets the active view.
     private fun updateSbsUi() {
         applyRenderMode()
+        foldPlayerLayout?.refresh()
     }
 
     private fun applySbsButtonVisual(btn: MaterialButton) {
@@ -2972,28 +3060,31 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         RemoteControlActivity.currentInstance?.syncControls()
         val gen = lazy3dGen
         lifecycleScope.launch {
+          var startingWorker: DepthFrameWorker? = null
           try {
             // Loading the TFLite model + GPU init takes a couple of seconds — do it off the
             // main thread so the toggle doesn't freeze. GL wiring happens back on the main thread.
-            val estimator = withContext(Dispatchers.IO) {
-                val m = DepthModelManager.activeModel(applicationContext)
-                lazy3dDivergence = LAZY3D_DIVERGENCE * m.divergenceScale
-                DepthEstimator(m.inputSize, m.gpuSafe, m::mapDepth, m.convergencePct)
-                    .apply { if (!init(applicationContext)) close() }
-            }
+            val m = DepthModelManager.activeModel(applicationContext)
+            lazy3dDivergence = LAZY3D_DIVERGENCE * m.divergenceScale
+            val estimator = DepthEstimator(m.inputSize, m.gpuSafe, m::mapDepth, m.convergencePct)
+            val worker = DepthFrameWorker(estimator, applicationContext)
+            startingWorker = worker
+            depthStartingWorker = worker
+            val ready = worker.start()
             if (gen != lazy3dGen) {
                 // stopLazy3d() ran while we were loading (toggle-off, or an off→on restart whose
                 // new startup now owns depthStarting/depthEstimator) — this startup is stale.
                 // Release our estimator and leave the shared state strictly alone.
-                withContext(Dispatchers.IO) { estimator.close() }
+                worker.requestStop()
                 return@launch
             }
             depthStarting = false
-            if (!lazy3dEnabled || !estimator.isReady()) {
-                withContext(Dispatchers.IO) { estimator.close() }
-                if (lazy3dEnabled && !estimator.isReady()) {
+            depthStartingWorker = null
+            if (!lazy3dEnabled || !ready) {
+                worker.requestStop()
+                if (lazy3dEnabled && !ready) {
                     android.util.Log.w("XPlayer2", "Lazy 3D: depth model not loaded on this device")
-                    // No backend could load the model (GPU→NNAPI→CPU; plain CPU only rejects a
+                    // No backend could load the model (NNAPI→GPU→CPU; plain CPU only rejects a
                     // corrupt flatbuffer or OOM). A corrupt cached file would brick Lazy 3D on
                     // every future attempt — it passes the size check, and when its size matches
                     // the remote the update check never replaces it. Delete it so the next enable
@@ -3009,7 +3100,6 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                 return@launch
             }
             depthEstimator = estimator
-            val worker = DepthFrameWorker(estimator).also { it.start() }
             depthWorker = worker
             activeGlView()?.setLazy3dStereoEnabled(true)
             activeGlView()?.setStereoParams(divergence = lazy3dDivergence, convergence = estimator.dynamicConvergence)
@@ -3028,6 +3118,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                 Toast.makeText(this@PlayerActivity, R.string.lazy3d_slow_cpu, Toast.LENGTH_LONG).show()
             }
           } catch (e: Throwable) {
+            startingWorker?.requestStop()
             if (e is kotlinx.coroutines.CancellationException) throw e   // activity going away — not a failure
             // Any failure spinning up depth (OOM on low-RAM devices, an unexpected delegate error)
             // must not crash the app — disable Lazy 3D and restore the normal picture/toggle state.
@@ -3061,7 +3152,10 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
                 // latest-only) → the NPU/GPU duty cycle drops; at PAUSED the readback stops and
                 // the warp keeps using the last depth map (frozen 3D beats a thermal kill).
                 val thermal = depthThermal?.tick() ?: DepthThermalGovernor.Level.FULL
-                activeGlView()?.setDepthReadbackIntervalNanos(thermal.readbackIntervalNanos)
+                activeGlView()?.setDepthReadbackIntervalNanos(maxOf(
+                    thermal.readbackIntervalNanos,
+                    (estimator.avgInferenceMs * 1_000_000).toLong()
+                ))
                 maybeHintThermal(thermal)
                 // Push only NEW inferences (latestDepth is a slot, not a queue — it stays set):
                 // re-uploading the same map re-ran the GL bilateral refine pass at 30 Hz for
@@ -3113,6 +3207,8 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
 
     private fun stopLazy3d() {
         depthStarting = false
+        depthStartingWorker?.requestStop()
+        depthStartingWorker = null
         // Invalidate any in-flight async startup: it compares its captured generation and discards
         // itself (closing its own estimator) instead of racing a later restart into two live
         // estimator/worker pairs (which leaked a GPU delegate per toggle).
@@ -3125,7 +3221,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         depthThermal?.stop(); depthThermal = null
         depthThermalSeen = DepthThermalGovernor.Level.FULL
         val worker = depthWorker; depthWorker = null
-        val estimator = depthEstimator; depthEstimator = null
+        depthEstimator = null
         // Clear lazy3d state on every possible render target (incl. the active one) so the depth
         // split doesn't linger after a display switch or toggle-off.
         for (v in listOfNotNull(glView, presentation?.renderView, activeGlView())) {
@@ -3136,18 +3232,11 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         // --- Slow hardware teardown off the main thread (thread joins + GPU release). A detached
         // thread, not lifecycleScope, so it still completes when stopLazy3d() is called from
         // onDestroy (where the scope is cancelled). ---
-        if (worker != null || estimator != null) {
+        worker?.requestStop()
+        if (worker != null) {
             Thread({
-                val workerExited = try { worker?.stop() ?: true } catch (_: Throwable) { true }
-                if (workerExited) {
-                    try { estimator?.close() } catch (_: Throwable) {}
-                } else {
-                    // The worker thread is wedged inside interp.run() (driver stall / very slow CPU
-                    // frame): closing the interpreter under a live inference is native UB that can
-                    // take the GPU delegate down for the whole process — after which every Lazy 3D
-                    // re-enable fails until the app is killed. Leaking this one estimator is the
-                    // lesser evil; the OS reclaims it with the process.
-                    android.util.Log.w("XPlayer2", "Lazy 3D: depth worker didn't exit in time; leaking estimator (close mid-inference is unsafe)")
+                if (!worker.stop()) {
+                    android.util.Log.w("XPlayer2", "Lazy 3D: worker still busy; it will release its delegate when the native call returns")
                 }
             }, "Lazy3dTeardown").start()
         }

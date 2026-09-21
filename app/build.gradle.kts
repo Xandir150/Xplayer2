@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.teleteh.xplayer2"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.teleteh.xplayer2"
@@ -119,6 +119,7 @@ dependencies {
     implementation(libs.org.jetbrains.kotlinx.coroutines.core)
     implementation(libs.org.jetbrains.kotlinx.coroutines.android)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation("androidx.window:window:1.4.0")
     // Media3: published binaries from Google Maven (see settings.gradle.kts for why we no longer
     // build the external/media3 checkout inside this project).
     implementation(libs.androidx.media3.exoplayer)
@@ -151,10 +152,11 @@ dependencies {
     // stubs org.json (like the rest of the framework) to throw "not mocked" at runtime, so tests
     // exercising JSON parsing (e.g. PcLinkDiscoveryTest) need the actual reference implementation
     // on the test classpath.
-    testImplementation("org.json:json:20260719")
+    testImplementation("org.json:json:20260814")
     // Dispatchers.setMain() for the coroutine-facing unit tests (PcLinkDiscovery reports its
     // results on Dispatchers.Main, which has no Looper in a local unit test).
     testImplementation(libs.org.jetbrains.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation("androidx.window:window-testing:1.4.0")
 }

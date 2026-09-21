@@ -45,10 +45,14 @@ class PcLinkRemoteManifestTest {
     }
 
     @Test
-    fun `the remote is portrait, like the film remote it is a sibling of`() {
-        assertTrue(
-            attributes.contains("""android:screenOrientation="portrait"""")
-        )
+    fun `player and both remotes allow foldable orientations`() {
+        for (name in listOf(".player.PlayerActivity", ".player.RemoteControlActivity", ".ui.pclink.PcLinkRemoteActivity")) {
+            val start = manifest.indexOf(name)
+            assertTrue("$name must be declared", start >= 0)
+            val activity = manifest.substring(manifest.lastIndexOf("<activity", start), manifest.indexOf('>', start))
+            assertTrue("$name must allow user orientations for tabletop and book postures",
+                activity.contains("""android:screenOrientation="fullUser""""))
+        }
     }
 
     @Test

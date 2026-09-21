@@ -3,8 +3,9 @@
      tap/swipe gestures with haptic feedback), and the button rows below it (sighted control /
      D-pad on a TV box driving the glasses as a second screen). Sized to fit one phone screen
      with no scrolling on typical devices; the ScrollView is a safety net for small/old phones. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<com.teleteh.xplayer2.ui.fold.FoldRemoteLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/foldRemoteRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -464,4 +465,4 @@
 
         </LinearLayout>
     </ScrollView>
-</LinearLayout>
+</com.teleteh.xplayer2.ui.fold.FoldRemoteLayout>

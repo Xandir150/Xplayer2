@@ -314,7 +314,8 @@ class OuToSbsGlView @JvmOverloads constructor(
             .allocateDirect(READBACK_SIZE * READBACK_SIZE * 4)
             .order(ByteOrder.nativeOrder())
         private val readbackPixels: IntArray = IntArray(READBACK_SIZE * READBACK_SIZE)
-        private var lastReadbackNanos: Long = 0L
+        private val depthReadbackGate = DepthReadbackGate()
+        private val decoderFrameAvailable = AtomicBoolean(false)
 
         @Volatile private var leftEyeShiftNorm: Float = 0f
         @Volatile private var rightEyeShiftNorm: Float = 0f
@@ -385,6 +386,8 @@ class OuToSbsGlView @JvmOverloads constructor(
             GLES20.glUniform1f(GLES20.glGetUniformLocation(lazy3dProgram, "uDitherAmp"), ditherAmp)
             GLES20.glUseProgram(0)
 
+            decoderFrameAvailable.set(false)
+            depthReadbackGate.reset()
             textureId = createOesTexture()
             surfaceTexture = SurfaceTexture(textureId).also {
                 it.setOnFrameAvailableListener(this)
@@ -568,11 +571,10 @@ class OuToSbsGlView @JvmOverloads constructor(
          * visible draw, so it never delays a real frame more than the readback itself
          * takes (~1 ms at 256x256).
          */
-        private fun maybeReadbackFrame() {
+        private fun maybeReadbackFrame(newDecoderFrame: Boolean) {
             val listener = frameReadbackListener ?: return
             val now = System.nanoTime()
-            if (now - lastReadbackNanos < readbackIntervalNanos) return
-            lastReadbackNanos = now
+            if (!depthReadbackGate.shouldCapture(newDecoderFrame, now, readbackIntervalNanos)) return
 
             // Save the on-screen viewport: rendering into the readback FBO changes the (global)
             // GL viewport to 256×256, and if we don't put it back the following on-screen draw
@@ -686,7 +688,8 @@ class OuToSbsGlView @JvmOverloads constructor(
 
         override fun onDrawFrame(gl: GL10?) {
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-            surfaceTexture?.let {
+            val newDecoderFrame = decoderFrameAvailable.getAndSet(false)
+            if (newDecoderFrame) surfaceTexture?.let {
                 it.updateTexImage()
                 it.getTransformMatrix(texMatrix)
             }
@@ -701,7 +704,7 @@ class OuToSbsGlView @JvmOverloads constructor(
                 // edge-snap thus uses the freshest pixels; on fast motion the ~1-frame guide/depth
                 // offset can slightly mis-snap edges — an accepted real-time trade-off (conservative
                 // disparity + the forgiving luma-range weight keep it minor).
-                maybeReadbackFrame()
+                maybeReadbackFrame(newDecoderFrame)
                 if (consumePendingDepth()) refineDepth()
             }
 
@@ -940,6 +943,7 @@ class OuToSbsGlView @JvmOverloads constructor(
         }
 
         override fun onFrameAvailable(surfaceTexture: SurfaceTexture?) {
+            decoderFrameAvailable.set(true)
             // Called on Binder thread; request render on GL thread
             this@OuToSbsGlView.requestRender()
         }

@@ -42,7 +42,7 @@ class DepthEstimator(
     // [dynamicConvergence]); 0 disables dynamic convergence (stays at the 0.5 screen-middle).
     private val convergencePercentile: Float = 0f,
 ) {
-    private var interpreter: Interpreter? = null
+    @Volatile private var interpreter: Interpreter? = null
     private var nnApiDelegate: NnApiDelegate? = null
     private var gpuDelegate: GpuDelegate? = null
 
@@ -112,7 +112,9 @@ class DepthEstimator(
      * Returns false if neither location has the file or the runtime can't construct an
      * interpreter (e.g. NNAPI rejected the graph).
      */
-    fun init(context: Context): Boolean {
+    fun init(context: Context): Boolean = synchronized(INIT_LOCK) { initModel(context) }
+
+    private fun initModel(context: Context): Boolean {
         if (interpreter != null) return true
         val mgr = DepthModelManager(context)   // resolves the active (user-selected) model
         val buffer = loadModelAsset(context, mgr.model.filename)
@@ -170,7 +172,7 @@ class DepthEstimator(
         //    try/catch, so only attempt it when TFLite says it's safe.
         if (allowGpu) {
             val gpuSupported = try {
-                CompatibilityList().isDelegateSupportedOnThisDevice
+                CompatibilityList().use { it.isDelegateSupportedOnThisDevice }
             } catch (e: Throwable) {
                 Log.w(TAG, "Lazy 3D: GPU compatibility probe failed (${e.message}); skipping GPU")
                 false
@@ -193,11 +195,11 @@ class DepthEstimator(
             true
         } catch (e: Throwable) {
             Log.w(TAG, "Lazy 3D: delegate init failed (${e.message}); trying next")
+            try { interpreter?.close() } catch (_: Throwable) {}
+            interpreter = null
             try { gpuDelegate?.close() } catch (_: Throwable) {}
             try { nnApiDelegate?.close() } catch (_: Throwable) {}
             gpuDelegate = null; nnApiDelegate = null
-            try { interpreter?.close() } catch (_: Throwable) {}
-            interpreter = null
             false
         }
     }
@@ -368,9 +370,10 @@ class DepthEstimator(
 
     private fun loadModelAsset(context: Context, assetPath: String): MappedByteBuffer? {
         return try {
-            val afd = context.assets.openFd(assetPath)
-            FileInputStream(afd.fileDescriptor).use { fis ->
-                fis.channel.map(FileChannel.MapMode.READ_ONLY, afd.startOffset, afd.declaredLength)
+            context.assets.openFd(assetPath).use { afd ->
+                FileInputStream(afd.fileDescriptor).use { fis ->
+                    fis.channel.map(FileChannel.MapMode.READ_ONLY, afd.startOffset, afd.declaredLength)
+                }
             }
         } catch (_: Throwable) {
             // Asset missing — caller will try the cached file path.
@@ -395,6 +398,9 @@ class DepthEstimator(
 
     companion object {
         private const val TAG = "DepthEstimator"
+        // A quick off/on can overlap workers while a native init finishes. Serialize probes so
+        // the second startup cannot mistake the first startup's active canary for a prior crash.
+        private val INIT_LOCK = Any()
         // Canary prefs guarding the (uncatchable) native NNAPI-init crash — see init().
         private const val DELEGATE_PREFS = "lazy3d_delegate"
         private const val KEY_NNAPI_PROBING = "nnapi_probing"

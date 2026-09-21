@@ -29,6 +29,7 @@ class PlaybackService : Service() {
         const val CHANNEL_ID = "xplayer2_playback"
         const val NOTIFICATION_ID = 1
         const val ACTION_STOP = "com.teleteh.xplayer2.STOP_PLAYBACK"
+        const val ACTION_REOPEN = "com.teleteh.xplayer2.REOPEN_PLAYBACK"
     }
 
     private var mediaSession: MediaSession? = null
@@ -110,9 +111,9 @@ class PlaybackService : Service() {
 
     private fun buildNotification(title: String?): Notification {
         // Intent to open PlayerActivity
-        val openIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
-            setClass(this@PlaybackService, PlayerActivity::class.java)
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+        val openIntent = Intent(this, PlayerActivity::class.java).apply {
+            action = ACTION_REOPEN
+            flags = Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         val openPendingIntent = PendingIntent.getActivity(
             this, 0, openIntent,

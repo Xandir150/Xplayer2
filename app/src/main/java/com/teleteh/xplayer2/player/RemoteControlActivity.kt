@@ -93,6 +93,7 @@ class RemoteControlActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         currentInstance = this
         setContentView(R.layout.activity_remote_control)
+        findViewById<com.teleteh.xplayer2.ui.fold.FoldRemoteLayout>(R.id.foldRemoteRoot).observe(this)
         // Keep the *device* awake for the whole session. The glasses are a DisplayPort output, so
         // if the phone times out and sleeps, the goggles lose signal and playback dies. This stops
         // the OS screen-timeout while the remote is up; the phone can still dim to black (below)

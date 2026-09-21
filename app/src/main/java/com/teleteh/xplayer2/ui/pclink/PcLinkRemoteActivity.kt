@@ -159,6 +159,7 @@ class PcLinkRemoteActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         currentInstance = this
         setContentView(R.layout.activity_pc_link_remote)
+        findViewById<com.teleteh.xplayer2.ui.fold.FoldRemoteLayout>(R.id.foldRemoteRoot).observe(this)
         // Same reason as the film remote: the glasses are a DisplayPort output, so a phone that
         // sleeps takes the picture down with it. The screen can still go black (below) and keep
         // feeding them.
