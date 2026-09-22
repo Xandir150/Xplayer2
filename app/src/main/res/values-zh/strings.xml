@@ -126,6 +126,7 @@
 
     <!-- PC-Mirror 标签页：没有会话在进行时的入口 -->
     <string name="pclink_find_pc">查找 PC</string>
+    <string name="pclink_add_pc">添加电脑</string>
     <string name="pclink_disconnect">断开连接</string>
     <string name="pclink_state_connecting">正在连接…</string>
     <string name="pclink_state_streaming">正在串流到眼镜</string>
@@ -164,7 +165,7 @@
     <!-- PC-Mirror 标签页：此手机已经配对过的电脑 -->
     <string name="pclink_paired_label">您的 PC</string>
     <string name="pclink_paired_no_address">尚未记录地址</string>
-    <string name="pclink_paired_empty">暂无 PC — 点按“查找 PC”即可添加</string>
+    <string name="pclink_paired_empty">暂无电脑 — 点按 + 添加</string>
     <string name="pclink_paired_unreachable">无法连接到那台 PC。请确认它正在运行 XPlayer Link。</string>
     <string name="pclink_open_remote">打开遥控器</string>
 

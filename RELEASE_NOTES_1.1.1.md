@@ -10,6 +10,9 @@
 
 ## Phone controls and foldable devices
 
+- Add a Material floating action button for adding computers in PC Link, matching Sources.
+- Make the desktop companion download link easier to notice with an outlined button and an external-link icon.
+
 - Keep video and PC Link remote controls in portrait on phones.
 - Adapt video and control layouts to book and tabletop fold positions.
 - Retain PC Link stereo depth controls, playback controls, performance information, and the corrected half-width stereo display from the beta releases.

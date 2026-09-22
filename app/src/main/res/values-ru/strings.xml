@@ -121,6 +121,7 @@
 
     <!-- Вкладка PC-Mirror: вход, когда ничего не транслируется. -->
     <string name="pclink_find_pc">Найти компьютер</string>
+    <string name="pclink_add_pc">Добавить компьютер</string>
     <string name="pclink_disconnect">Отключиться</string>
     <string name="pclink_state_connecting">Подключение…</string>
     <string name="pclink_state_streaming">Трансляция в очки</string>
@@ -164,7 +165,7 @@
     <string name="pclink_paired_no_address">Адрес ещё не записан</string>
     <!-- Здесь список сопряжений, а не поиск в сети: запуск XPlayer Link на новом компьютере строку
          сюда не добавит — этой фразе место на экране поиска. -->
-    <string name="pclink_paired_empty">Пока нет компьютеров — нажмите «Найти компьютер», чтобы добавить</string>
+    <string name="pclink_paired_empty">Пока нет компьютеров — нажмите +, чтобы добавить</string>
     <string name="pclink_paired_unreachable">Не удалось связаться с этим компьютером. Проверьте, запущен ли на нём XPlayer Link.</string>
     <string name="pclink_open_remote">Открыть пульт</string>
 

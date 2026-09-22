@@ -4,7 +4,7 @@
      Two states, exactly one visible at a time:
        * a session running — a short card saying so, with the way back to its remote;
        * nothing running — the computers this phone is already paired with, one tap each, and
-         "Find your PC" underneath for a new one.
+         a floating add button for a new one.
 
      What a session *is* — frames, bitrate, sound, the debugging door — is not here. That belongs to
      the remote (PcLinkRemoteActivity), which is what the user is holding while it runs; keeping a
@@ -159,7 +159,8 @@
                 android:id="@+id/rvPairedPcs"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:clipToPadding="false" />
+                android:clipToPadding="false"
+                android:paddingBottom="88dp" />
 
             <!-- Not @string/pclink_empty: that one tells the user to start XPlayer Link on the PC
                  and wait, which is true on the connect screen (a discovery list) and impossible
@@ -178,17 +179,21 @@
                 android:text="@string/pclink_paired_empty"
                 android:textSize="13sp"
                 android:textColor="?android:attr/textColorSecondary" />
+            <com.google.android.material.floatingactionbutton.FloatingActionButton
+                android:id="@+id/btnFindPc"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:layout_margin="4dp"
+                android:contentDescription="@string/pclink_add_pc"
+                android:tooltipText="@string/pclink_add_pc"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                app:srcCompat="@drawable/ic_add_24"
+                app:tint="@android:color/white"
+                app:backgroundTint="?attr/colorPrimary" />
         </FrameLayout>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnFindPc"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/pclink_find_pc"
-            android:textAllCaps="false"
-            android:focusable="true"
-            app:icon="@drawable/ic_pclink_24"
-            app:iconGravity="textStart" />
+
     </LinearLayout>
 </LinearLayout>

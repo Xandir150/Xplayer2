@@ -105,7 +105,7 @@ class PcMirrorFragment : Fragment() {
         recycler.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         attachSwipeToForget()
 
-        view.findViewById<MaterialButton>(R.id.btnFindPc).setOnClickListener {
+        view.findViewById<View>(R.id.btnFindPc).setOnClickListener {
             if (!requireGlasses()) return@setOnClickListener
             openConnect(Intent(requireContext(), PcConnectActivity::class.java))
         }

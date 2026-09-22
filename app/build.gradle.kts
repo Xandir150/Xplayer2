@@ -12,7 +12,7 @@ android {
         applicationId = "com.teleteh.xplayer2"
         minSdk = 29
         targetSdk = 36
-        versionCode = 33
+        versionCode = 34
         versionName = "1.1.1"
 
         ndk {

@@ -126,6 +126,7 @@
 
     <!-- La pestaña PC-Mirror: la entrada cuando no hay nada transmitiéndose. -->
     <string name="pclink_find_pc">Buscar su PC</string>
+    <string name="pclink_add_pc">Añadir ordenador</string>
     <string name="pclink_disconnect">Desconectar</string>
     <string name="pclink_state_connecting">Conectando…</string>
     <string name="pclink_state_streaming">Transmitiendo a las gafas</string>
@@ -164,7 +165,7 @@
     <!-- La pestaña PC-Mirror: los equipos con los que este teléfono ya está emparejado. -->
     <string name="pclink_paired_label">Sus equipos</string>
     <string name="pclink_paired_no_address">Dirección aún no registrada</string>
-    <string name="pclink_paired_empty">Aún no hay equipos — toque «Buscar su PC» para añadir uno</string>
+    <string name="pclink_paired_empty">Aún no hay equipos — toca + para añadir uno</string>
     <string name="pclink_paired_unreachable">No se pudo conectar con ese equipo. Compruebe que XPlayer Link esté en ejecución en él.</string>
     <string name="pclink_open_remote">Abrir el control remoto</string>
 
