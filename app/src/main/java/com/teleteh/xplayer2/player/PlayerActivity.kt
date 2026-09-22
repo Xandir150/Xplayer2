@@ -981,6 +981,7 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             android.util.Log.w("XPlayer2", "Player already initialized, skipping")
             return
         }
+        val isYouTube = sourceUri?.let(VideoStreamExtractor::isYouTubeUrl) == true
         val selector = DefaultTrackSelector(this)
         trackSelector = selector
         // MODE_ON: try platform (hardware) renderers first, fall back to extension (FFmpeg)
@@ -1023,7 +1024,14 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             // fast-forward match our own ±10 s seek.
             .setSeekBackIncrementMs(10_000L)
             .setSeekForwardIncrementMs(10_000L)
-        if (isLocalUri) {
+        if (isYouTube) {
+            playerBuilder.setLoadControl(
+                DefaultLoadControl.Builder()
+                    .setBufferDurationsMs(20_000, 60_000, 3_000, 5_000)
+                    .setPrioritizeTimeOverSizeThresholds(true)
+                    .build()
+            )
+        } else if (isLocalUri) {
             // Local reads are essentially free; the default 50-second buffer just inflates
             // RAM use and disk activity. Drop it down to a few seconds for better battery.
             playerBuilder.setLoadControl(
@@ -1038,11 +1046,17 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             )
         }
         player = playerBuilder.build().also { exo ->
-                // For HLS master playlists, force highest quality only on unmetered Wi-Fi —
-                // doing it on cellular costs the user money and burns battery for no good reason.
+                // YouTube must adapt to bandwidth on Wi-Fi too; the glasses need at most 1080p.
                 val ffmpegAvailableForPrefs = try { FfmpegLibrary.isAvailable() } catch (_: Throwable) { false }
                 selector.parameters = selector.buildUponParameters()
-                    .setForceHighestSupportedBitrate(isOnUnmeteredNetwork())
+                    .setForceHighestSupportedBitrate(!isYouTube && isOnUnmeteredNetwork())
+                    .apply {
+                        if (isYouTube) {
+                            setMaxVideoSize(1920, 1080)
+                            setExceedVideoConstraintsIfNecessary(false)
+                            setPreferredVideoMimeTypes(MimeTypes.VIDEO_H264)
+                        }
+                    }
                     // Only prefer AC3/EAC3/DTS when FFmpeg is available. Otherwise prefer common AAC/Opus/Vorbis
                     .setPreferredAudioMimeTypes(
                         *(if (ffmpegAvailableForPrefs) arrayOf(

@@ -354,7 +354,7 @@
         <activity
             android:name=".player.RemoteControlActivity"
             android:exported="false"
-            android:screenOrientation="fullUser"
+            android:screenOrientation="portrait"
             android:launchMode="singleTop"
             android:theme="@style/Theme.XPlayer2" />
 
@@ -364,7 +364,7 @@
         <activity
             android:name=".ui.pclink.PcLinkRemoteActivity"
             android:exported="false"
-            android:screenOrientation="fullUser"
+            android:screenOrientation="portrait"
             android:launchMode="singleTop"
             android:theme="@style/Theme.XPlayer2" />
 

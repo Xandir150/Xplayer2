@@ -37,6 +37,11 @@ internal object YouTubeExtractor {
                 response = player(videoId, visitorData(), headers) ?: return null
             }
             val candidates = parseCandidates(response) ?: return null
+            // Prefer segmented adaptive playback: fixed googlevideo downloads can throttle
+            // after the first few seconds and cannot lower quality when bandwidth drops.
+            candidates.hls?.takeIf { probeHls(it, headers) }?.let {
+                return VideoStreamExtractor.ExtractedStream(it, candidates.title, "Auto", headers = headers)
+            }
             // An OK player response can still contain CDN URLs returning 403. Validate the exact
             // selected video AND audio before handing them to Media3. Read at most 256 bytes.
             val video = candidates.videos.take(3).firstOrNull { probeMedia(it.url, headers) }
@@ -49,9 +54,6 @@ internal object YouTubeExtractor {
             }
             candidates.muxed.take(2).firstOrNull { probeMedia(it.url, headers) }?.let {
                 return VideoStreamExtractor.ExtractedStream(it.url, candidates.title, "${it.height}p", headers = headers)
-            }
-            candidates.hls?.takeIf { probeHls(it, headers) }?.let {
-                return VideoStreamExtractor.ExtractedStream(it, candidates.title, "Auto", headers = headers)
             }
             null
         } catch (_: Exception) {

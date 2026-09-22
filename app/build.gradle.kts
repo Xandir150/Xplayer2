@@ -39,6 +39,14 @@ android {
         }
     }
     buildTypes {
+        // Local device validation without Android's debug-only compatibility dialogs.
+        // Keep the debug certificate so installation preserves existing tester data.
+        create("preview") {
+            initWith(getByName("debug"))
+            isDebuggable = false
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "debug"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
