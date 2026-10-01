@@ -7,7 +7,6 @@
     <string name="tab_recent">Recent</string>
     <string name="tab_files">Files</string>
     <string name="tab_network">Network</string>
-    <string name="tab_sources">Sources</string>
     <!-- PC Link's own tab: finding a PC, and the remote for a running session. -->
     <string name="tab_pc_mirror">PC-Mirror</string>
 
@@ -357,4 +356,5 @@
     <string name="xreal_command_failed">The glasses did not accept the command. Try again.</string>
     <string name="xreal_detail_hd">1080p · %1$d Hz</string>
     <string name="xreal_detail_sbs">3840×1080 · %1$d Hz</string>
+    <string name="files_hint">Pick a video stored on this phone.</string>
 </resources>

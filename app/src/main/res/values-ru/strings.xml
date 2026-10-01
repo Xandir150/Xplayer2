@@ -6,7 +6,6 @@
     <string name="tab_recent">Недавние</string>
     <string name="tab_files">Файлы</string>
     <string name="tab_network">Сеть</string>
-    <string name="tab_sources">Источники</string>
     <!-- Отдельная вкладка PC Link: поиск компьютера и пульт для запущенной сессии. -->
     <string name="tab_pc_mirror">PC-Mirror</string>
 
@@ -339,4 +338,5 @@
     <string name="xreal_command_failed">Очки не приняли команду. Попробуйте ещё раз.</string>
     <string name="xreal_detail_hd">1080p · %1$d Гц</string>
     <string name="xreal_detail_sbs">3840×1080 · %1$d Гц</string>
+    <string name="files_hint">Выберите видео, сохранённое на этом телефоне.</string>
 </resources>

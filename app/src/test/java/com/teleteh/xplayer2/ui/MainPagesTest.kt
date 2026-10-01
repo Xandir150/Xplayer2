@@ -20,7 +20,8 @@ class MainPagesTest {
         val order = Regex("""(\d+|else) -> (\w+)Fragment\(\)""").findAll(source)
             .associate { it.groupValues[1] to it.groupValues[2] }
         assertEquals("Recent", order[MainPages.RECENT.toString()])
-        assertEquals("Network", order[MainPages.SOURCES.toString()])
+        assertEquals("Files", order[MainPages.FILES.toString()])
+        assertEquals("Network", order[MainPages.NETWORK.toString()])
         assertEquals("GlassesControl", order[MainPages.GLASSES.toString()])
         // PC-Mirror is the adapter's `else` branch, and the Glasses page comes after it.
         assertEquals("PcMirror", order["else"])

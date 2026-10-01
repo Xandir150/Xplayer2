@@ -3,6 +3,7 @@ package com.teleteh.xplayer2.ui
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.viewpager2.adapter.FragmentStateAdapter
+import com.teleteh.xplayer2.ui.files.FilesFragment
 import com.teleteh.xplayer2.ui.glasses.GlassesControlFragment
 import com.teleteh.xplayer2.ui.network.NetworkFragment
 import com.teleteh.xplayer2.ui.pclink.PcMirrorFragment
@@ -20,9 +21,8 @@ class MainPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activi
             notifyDataSetChanged()
         }
 
-    // Three tabs: Recent, Sources (the former Files + Network merged — local-file picker, URL,
-    // Hughey and SMB/DLNA all live in NetworkFragment now) and PC-Mirror (PC Link's own screen:
-    // finding a PC, and the remote for a running session), plus Glasses when they can be
+    // Recent, Files (local picker), Network (URL, Hughey, SMB/DLNA) and PC-Mirror (PC Link's own
+    // screen: finding a PC, and the remote for a running session), plus Glasses when they can be
     // controlled. Anything counting pages should ask the adapter — see MainActivity's tab titles
     // and head-turn paging.
     override fun getItemCount(): Int = if (hasGlassesPage) MainPages.GLASSES + 1 else MainPages.PC_MIRROR + 1
@@ -32,8 +32,9 @@ class MainPagerAdapter(activity: FragmentActivity) : FragmentStateAdapter(activi
 
     override fun createFragment(position: Int): Fragment = when (position) {
         0 -> RecentFragment()
-        1 -> NetworkFragment()
-        3 -> GlassesControlFragment()
+        1 -> FilesFragment()
+        2 -> NetworkFragment()
+        4 -> GlassesControlFragment()
         else -> PcMirrorFragment()
     }
 }

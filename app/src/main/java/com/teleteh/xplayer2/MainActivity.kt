@@ -240,7 +240,8 @@ class MainActivity : AppCompatActivity() {
 
     private val navPages = mapOf(
         R.id.nav_recent to MainPages.RECENT,
-        R.id.nav_sources to MainPages.SOURCES,
+        R.id.nav_files to MainPages.FILES,
+        R.id.nav_network to MainPages.NETWORK,
         R.id.nav_pc_mirror to MainPages.PC_MIRROR,
         R.id.nav_glasses to MainPages.GLASSES,
     )
@@ -592,7 +593,8 @@ class MainActivity : AppCompatActivity() {
      */
     private fun tabTitle(position: Int): String = when (position) {
         0 -> getString(R.string.tab_recent)
-        1 -> getString(R.string.tab_sources)
+        MainPages.FILES -> getString(R.string.tab_files)
+        MainPages.NETWORK -> getString(R.string.tab_network)
         MainPages.GLASSES -> getString(R.string.tab_glasses)
         else -> getString(R.string.tab_pc_mirror)
     }
@@ -632,7 +634,7 @@ class MainActivity : AppCompatActivity() {
             if (idx < 0 && glassesRows.isNotEmpty()) idx = 0
             pres.render(title, glassesRows, idx)
         } else {
-            // Sources and PC-Mirror: reflect the tab's focusable items (Open File / URL / Hughey +
+            // Files, Network, PC-Mirror and Glasses: reflect the tab's focusable items (Open File / URL / Hughey +
             // DLNA/SMB list; connect / details / sound / disconnect) by walking the live view tree,
             // so it covers buttons + dynamically-discovered rows without knowing either layout.
             glassesTab = tab
@@ -926,7 +928,7 @@ class MainActivity : AppCompatActivity() {
         const val EXTRA_TAB = "com.teleteh.xplayer2.extra.TAB"
 
         /** PC Link's own page, third in [com.teleteh.xplayer2.ui.MainPagerAdapter]. */
-        const val TAB_PC_MIRROR = 2
+        const val TAB_PC_MIRROR = MainPages.PC_MIRROR
 
         /**
          * Exposed for [com.teleteh.xplayer2.player.PlayerActivity] / RemoteControlActivity so

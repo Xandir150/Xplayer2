@@ -10,9 +10,10 @@ package com.teleteh.xplayer2.ui
  */
 object MainPages {
     const val RECENT = 0
-    const val SOURCES = 1
-    const val PC_MIRROR = 2
+    const val FILES = 1
+    const val NETWORK = 2
+    const val PC_MIRROR = 3
 
     /** Present only while the glasses can be controlled (see [MainPagerAdapter.hasGlassesPage]). */
-    const val GLASSES = 3
+    const val GLASSES = 4
 }

@@ -6,7 +6,6 @@
     <string name="tab_recent">最近</string>
     <string name="tab_files">文件</string>
     <string name="tab_network">网络</string>
-    <string name="tab_sources">来源</string>
     <!-- PC Link 自己的标签页：查找电脑，以及正在进行的会话的遥控器 -->
     <string name="tab_pc_mirror">PC-Mirror</string>
 
@@ -329,4 +328,5 @@
     <string name="xreal_command_failed">眼镜没有接受该命令，请重试。</string>
     <string name="xreal_detail_hd">1080p · %1$d Hz</string>
     <string name="xreal_detail_sbs">3840×1080 · %1$d Hz</string>
+    <string name="files_hint">选择保存在此手机上的视频。</string>
 </resources>

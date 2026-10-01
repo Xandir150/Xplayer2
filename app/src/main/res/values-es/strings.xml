@@ -6,7 +6,6 @@
     <string name="tab_recent">Recientes</string>
     <string name="tab_files">Archivos</string>
     <string name="tab_network">Red</string>
-    <string name="tab_sources">Fuentes</string>
     <!-- Pestaña propia de PC Link: buscar un PC y el mando de una sesión en curso. -->
     <string name="tab_pc_mirror">PC-Mirror</string>
 
@@ -330,4 +329,5 @@
     <string name="xreal_command_failed">Las gafas no aceptaron el comando. Inténtalo de nuevo.</string>
     <string name="xreal_detail_hd">1080p · %1$d Hz</string>
     <string name="xreal_detail_sbs">3840×1080 · %1$d Hz</string>
+    <string name="files_hint">Elige un vídeo guardado en este teléfono.</string>
 </resources>

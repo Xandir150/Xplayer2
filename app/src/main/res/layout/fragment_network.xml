@@ -36,7 +36,7 @@
                 android:focusableInTouchMode="true" />
         </LinearLayout>
 
-        <!-- Source shortcuts: open a local file (system picker) + the Hughey 3D-films shortcut
+        <!-- Source shortcut: the Hughey 3D-films shortcut
              (Hughey shows by default only on RU; other locales reveal it by typing `hughey`
              into the URL field, which persists the choice — see NetworkFragment). -->
         <LinearLayout
@@ -44,18 +44,6 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:layout_marginTop="4dp">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnOpenFile"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:text="@string/file_picker_open"
-                android:textAllCaps="false"
-                android:focusable="true"
-                app:icon="@drawable/ic_folder_24px"
-                app:iconGravity="textStart" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnHughey"
