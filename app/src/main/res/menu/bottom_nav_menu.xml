@@ -12,7 +12,7 @@
         android:title="@string/tab_files" />
     <item
         android:id="@+id/nav_network"
-        android:icon="@drawable/ic_dlna_24"
+        android:icon="@drawable/ic_language_24"
         android:title="@string/tab_network" />
     <item
         android:id="@+id/nav_pc_mirror"
