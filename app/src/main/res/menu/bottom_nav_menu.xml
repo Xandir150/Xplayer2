@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bottom navigation of the main screen on phones (TVs keep the tab strip). One item per page of
+     MainPagerAdapter; the Glasses item is visible only while the glasses can be controlled. -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_recent"
+        android:icon="@drawable/ic_history_24"
+        android:title="@string/tab_recent" />
+    <item
+        android:id="@+id/nav_sources"
+        android:icon="@drawable/ic_folder_24"
+        android:title="@string/tab_sources" />
+    <item
+        android:id="@+id/nav_pc_mirror"
+        android:icon="@drawable/ic_pclink_24"
+        android:title="@string/tab_pc_mirror" />
+    <item
+        android:id="@+id/nav_glasses"
+        android:icon="@drawable/ic_glasses"
+        android:title="@string/tab_glasses"
+        android:visible="false" />
+</menu>

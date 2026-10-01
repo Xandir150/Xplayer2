@@ -27,6 +27,7 @@ import com.google.android.material.tabs.TabLayoutMediator
 import com.teleteh.xplayer2.data.depth.DepthModelManager
 import com.teleteh.xplayer2.data.glasses.GlassesController
 import com.teleteh.xplayer2.ui.MainPages
+import com.teleteh.xplayer2.ui.util.TvFocus
 import com.teleteh.xplayer2.data.glasses.GlassesProtocol
 import com.teleteh.xplayer2.data.glasses.XrealOneController
 import com.teleteh.xplayer2.databinding.ActivityMainBinding
@@ -187,10 +188,26 @@ class MainActivity : AppCompatActivity() {
         // Start on Recent (page 0), where swipe-to-delete lives — so paging-by-swipe is off there.
         viewPager.isUserInputEnabled = true
 
-        TabLayoutMediator(binding.tabLayout, viewPager) { tab, position ->
-            tab.text = tabTitle(position)
-            tab.contentDescription = null
-        }.attach()
+        // Phones reach the pages from a bottom navigation bar; TVs and boxes (D-pad, no touch) keep
+        // the tab strip, which their focus handling is built around.
+        useBottomNav = !TvFocus.isTelevision(this)
+        if (useBottomNav) {
+            binding.tabLayout.visibility = View.GONE
+            binding.bottomNav.visibility = View.VISIBLE
+            binding.bottomNav.setOnItemSelectedListener { item ->
+                val page = navPages[item.itemId] ?: return@setOnItemSelectedListener false
+                if (viewPager.currentItem != page) viewPager.setCurrentItem(page, false)
+                true
+            }
+            viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+                override fun onPageSelected(position: Int) = syncBottomNav(position)
+            })
+        } else {
+            TabLayoutMediator(binding.tabLayout, viewPager) { tab, position ->
+                tab.text = tabTitle(position)
+                tab.contentDescription = null
+            }.attach()
+        }
 
         // The Glasses tab exists only while the glasses answer on their control channel.
         val xrealOne = XrealOneController.get(this)
@@ -198,6 +215,9 @@ class MainActivity : AppCompatActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 xrealOne.state.map { it.available }.distinctUntilChanged().collect { available ->
                     pagerAdapter.hasGlassesPage = available
+                    binding.bottomNav.menu.findItem(R.id.nav_glasses).isVisible = available
+                    // The page is gone: the pager falls back to the last one, so the bar must too.
+                    syncBottomNav(binding.viewPager.currentItem)
                 }
             }
         }
@@ -214,6 +234,22 @@ class MainActivity : AppCompatActivity() {
         // instance that survives rather than a fresh one — the tab request arrives here.
         setIntent(intent)
         selectTabFromIntent(intent)
+    }
+
+    private var useBottomNav = false
+
+    private val navPages = mapOf(
+        R.id.nav_recent to MainPages.RECENT,
+        R.id.nav_sources to MainPages.SOURCES,
+        R.id.nav_pc_mirror to MainPages.PC_MIRROR,
+        R.id.nav_glasses to MainPages.GLASSES,
+    )
+
+    /** Highlights the bottom-bar item of page [position] (no-op when the bar is not in use). */
+    private fun syncBottomNav(position: Int) {
+        if (!useBottomNav) return
+        val id = navPages.entries.firstOrNull { it.value == position }?.key ?: return
+        if (binding.bottomNav.selectedItemId != id) binding.bottomNav.selectedItemId = id
     }
 
     /**
@@ -315,6 +351,7 @@ class MainActivity : AppCompatActivity() {
         supportFragmentManager.findFragmentByTag("f${binding.viewPager.currentItem}")?.view
 
     private fun focusActiveTab() {
+        if (useBottomNav) return
         val index = binding.viewPager.currentItem.coerceAtLeast(0)
         binding.tabLayout.getTabAt(index)?.view?.takeIf { it !== currentFocus }?.requestFocus()
     }
@@ -422,8 +459,8 @@ class MainActivity : AppCompatActivity() {
         // For navigation bar, we apply padding to the ViewPager
         ViewCompat.setOnApplyWindowInsetsListener(binding.viewPager) { view, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-            // Apply bottom padding for navigation bar
-            view.updatePadding(bottom = insets.bottom)
+            // Apply bottom padding for navigation bar; the bottom bar, when shown, pads for it itself
+            view.updatePadding(bottom = if (binding.bottomNav.visibility == View.VISIBLE) 0 else insets.bottom)
             // Return insets so other views can also consume them
             windowInsets
         }

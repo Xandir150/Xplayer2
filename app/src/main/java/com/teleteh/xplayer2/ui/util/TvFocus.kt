@@ -14,6 +14,13 @@ import com.teleteh.xplayer2.R
  */
 object TvFocus {
 
+    /** A TV or a box driven by remote/D-pad rather than touch. */
+    fun isTelevision(context: android.content.Context): Boolean {
+        val ui = context.getSystemService(android.content.Context.UI_MODE_SERVICE) as? android.app.UiModeManager
+        return ui?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION ||
+            !context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN)
+    }
+
     /** Draw a bright focus ring (foreground) over a control so D-pad selection is obvious. */
     fun ring(v: View) {
         v.foreground = ContextCompat.getDrawable(v.context, R.drawable.tv_focus_ring)
