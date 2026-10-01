@@ -6,4 +6,22 @@
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">22%</item>
     </style>
+
+    <!-- Outlined card of the Glasses tab (same look as the PC-Mirror tab's). -->
+    <style name="Widget.XPlayer.GlassesCard" parent="Widget.MaterialComponents.CardView">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="cardCornerRadius">14dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="strokeColor">?attr/colorControlHighlight</item>
+    </style>
+
+    <style name="Widget.XPlayer.GlassesSection" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">?android:attr/textColorPrimary</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
 </resources>

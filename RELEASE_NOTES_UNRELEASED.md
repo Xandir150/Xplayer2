@@ -10,6 +10,8 @@
 - Kept Lazy 3D initialization, inference, and cleanup on its worker thread. Processing remains latest-frame-only, with NPU → GPU → CPU fallback priority.
 - Reduced unnecessary GPU readback and depth work when no new video frame is available. Readback pacing now accounts for inference time and thermal limits.
 - Updated the compile SDK to 37 and the JVM JSON test dependency.
+- Added a **Glasses** tab for XREAL One, One Pro and One S (1S) glasses: screen mode (2D at 60/90/120 Hz, 3D 3840×1080), brightness 0–9 and dimming. The tab appears only when the glasses answer on their control port (169.254.2.1:52999, over the USB network adapter). It does not appear for Air-series glasses or other brands. The glasses do not report brightness or dimming, so the tab shows the last value set in the app.
+- **Experimental:** this control protocol comes from public research (0xcaff/xr-tools) and has not been verified on real One, One Pro or 1S glasses. It needs a phone whose Android brings up the USB network adapter (CDC-NCM); some phones may need USB Ethernet or tethering mode.
 
 ## Validation
 

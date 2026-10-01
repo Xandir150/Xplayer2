@@ -313,4 +313,21 @@
     <string name="pclink_media_volume_up">Subir el volumen del PC</string>
     <string name="pclink_media_mute">Silenciar el PC</string>
     <string name="pclink_get_desktop_app">¿Necesitas la aplicación de escritorio? Descárgala en xplayer2.app/#pclink</string>
+
+    <!-- XREAL One glasses control (Glasses tab) -->
+    <string name="tab_glasses">Gafas</string>
+    <string name="xreal_connected">Conectadas</string>
+    <string name="xreal_screen_mode">Modo de pantalla</string>
+    <string name="xreal_screen_mode_hint">3D muestra ambos ojos en una pantalla de 3840×1080. Para vídeo normal elige 2D.</string>
+    <string name="xreal_brightness">Brillo</string>
+    <string name="xreal_brightness_value">%1$d / %2$d</string>
+    <string name="xreal_dimmer">Atenuación</string>
+    <string name="xreal_dimmer_lightest">Mínima</string>
+    <string name="xreal_dimmer_middle">Media</string>
+    <string name="xreal_dimmer_dimmest">Máxima</string>
+    <string name="xreal_last_value_note">Las gafas no informan de su brillo ni de su atenuación. Se muestra el último valor establecido en esta app.</string>
+    <string name="xreal_id_label">Identificador: %1$s</string>
+    <string name="xreal_command_failed">Las gafas no aceptaron el comando. Inténtalo de nuevo.</string>
+    <string name="xreal_detail_hd">1080p · %1$d Hz</string>
+    <string name="xreal_detail_sbs">3840×1080 · %1$d Hz</string>
 </resources>

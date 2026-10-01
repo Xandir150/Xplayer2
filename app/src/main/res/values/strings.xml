@@ -340,4 +340,21 @@
     <string name="mailru_title">Mail.ru Cloud</string>
     <string name="mailru_empty">No videos here</string>
     <string name="mailru_error">Couldn\'t open this Mail.ru Cloud link</string>
+
+    <!-- XREAL One glasses control (Glasses tab) -->
+    <string name="tab_glasses">Glasses</string>
+    <string name="xreal_connected">Connected</string>
+    <string name="xreal_screen_mode">Screen mode</string>
+    <string name="xreal_screen_mode_hint">3D shows both eyes on one 3840×1080 screen. Choose 2D for ordinary video.</string>
+    <string name="xreal_brightness">Brightness</string>
+    <string name="xreal_brightness_value">%1$d / %2$d</string>
+    <string name="xreal_dimmer">Dimming</string>
+    <string name="xreal_dimmer_lightest">Lowest</string>
+    <string name="xreal_dimmer_middle">Medium</string>
+    <string name="xreal_dimmer_dimmest">Highest</string>
+    <string name="xreal_last_value_note">The glasses do not report their brightness or dimming. The last value set in this app is shown.</string>
+    <string name="xreal_id_label">ID: %1$s</string>
+    <string name="xreal_command_failed">The glasses did not accept the command. Try again.</string>
+    <string name="xreal_detail_hd">1080p · %1$d Hz</string>
+    <string name="xreal_detail_sbs">3840×1080 · %1$d Hz</string>
 </resources>

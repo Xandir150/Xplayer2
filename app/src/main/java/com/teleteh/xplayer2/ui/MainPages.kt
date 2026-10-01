@@ -12,4 +12,7 @@ object MainPages {
     const val RECENT = 0
     const val SOURCES = 1
     const val PC_MIRROR = 2
+
+    /** Present only while the glasses can be controlled (see [MainPagerAdapter.hasGlassesPage]). */
+    const val GLASSES = 3
 }

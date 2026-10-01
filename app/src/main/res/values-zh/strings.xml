@@ -312,4 +312,21 @@
     <string name="pclink_media_volume_up">调高 PC 音量</string>
     <string name="pclink_media_mute">PC 静音</string>
     <string name="pclink_get_desktop_app">需要电脑端程序？请前往 xplayer2.app/#pclink 下载</string>
+
+    <!-- XREAL One glasses control (Glasses tab) -->
+    <string name="tab_glasses">眼镜</string>
+    <string name="xreal_connected">已连接</string>
+    <string name="xreal_screen_mode">屏幕模式</string>
+    <string name="xreal_screen_mode_hint">3D 会把双眼画面显示在一块 3840×1080 的屏幕上。普通视频请选择 2D。</string>
+    <string name="xreal_brightness">亮度</string>
+    <string name="xreal_brightness_value">%1$d / %2$d</string>
+    <string name="xreal_dimmer">调光</string>
+    <string name="xreal_dimmer_lightest">最低</string>
+    <string name="xreal_dimmer_middle">中等</string>
+    <string name="xreal_dimmer_dimmest">最高</string>
+    <string name="xreal_last_value_note">眼镜不会报告当前的亮度和调光。这里显示的是本应用最后一次设置的值。</string>
+    <string name="xreal_id_label">标识: %1$s</string>
+    <string name="xreal_command_failed">眼镜没有接受该命令，请重试。</string>
+    <string name="xreal_detail_hd">1080p · %1$d Hz</string>
+    <string name="xreal_detail_sbs">3840×1080 · %1$d Hz</string>
 </resources>

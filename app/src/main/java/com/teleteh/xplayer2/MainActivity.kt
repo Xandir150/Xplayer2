@@ -16,7 +16,9 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.updatePadding
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
@@ -24,7 +26,9 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.tabs.TabLayoutMediator
 import com.teleteh.xplayer2.data.depth.DepthModelManager
 import com.teleteh.xplayer2.data.glasses.GlassesController
+import com.teleteh.xplayer2.ui.MainPages
 import com.teleteh.xplayer2.data.glasses.GlassesProtocol
+import com.teleteh.xplayer2.data.glasses.XrealOneController
 import com.teleteh.xplayer2.databinding.ActivityMainBinding
 import com.teleteh.xplayer2.player.PlayerActivity
 import com.teleteh.xplayer2.player.StereoEyeSwap
@@ -36,6 +40,8 @@ import com.teleteh.xplayer2.player.MenuMirrorPresentation
 import com.teleteh.xplayer2.ui.MainPagerAdapter
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import android.view.KeyEvent
@@ -176,7 +182,8 @@ class MainActivity : AppCompatActivity() {
         loadToolbarLogoAsync(toolbar)
 
         val viewPager: ViewPager2 = binding.viewPager
-        viewPager.adapter = MainPagerAdapter(this)
+        val pagerAdapter = MainPagerAdapter(this)
+        viewPager.adapter = pagerAdapter
         // Start on Recent (page 0), where swipe-to-delete lives — so paging-by-swipe is off there.
         viewPager.isUserInputEnabled = true
 
@@ -184,6 +191,16 @@ class MainActivity : AppCompatActivity() {
             tab.text = tabTitle(position)
             tab.contentDescription = null
         }.attach()
+
+        // The Glasses tab exists only while the glasses answer on their control channel.
+        val xrealOne = XrealOneController.get(this)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                xrealOne.state.map { it.available }.distinctUntilChanged().collect { available ->
+                    pagerAdapter.hasGlassesPage = available
+                }
+            }
+        }
 
         setupTvFocusNavigation()
         prefetchDepthModelIfNeeded()
@@ -539,6 +556,7 @@ class MainActivity : AppCompatActivity() {
     private fun tabTitle(position: Int): String = when (position) {
         0 -> getString(R.string.tab_recent)
         1 -> getString(R.string.tab_sources)
+        MainPages.GLASSES -> getString(R.string.tab_glasses)
         else -> getString(R.string.tab_pc_mirror)
     }
 

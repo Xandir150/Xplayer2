@@ -21,8 +21,14 @@ class MainPagesTest {
             .associate { it.groupValues[1] to it.groupValues[2] }
         assertEquals("Recent", order[MainPages.RECENT.toString()])
         assertEquals("Network", order[MainPages.SOURCES.toString()])
-        // The last page is the adapter's `else` branch, and there are three of them.
+        assertEquals("GlassesControl", order[MainPages.GLASSES.toString()])
+        // PC-Mirror is the adapter's `else` branch, and the Glasses page comes after it.
         assertEquals("PcMirror", order["else"])
-        assertTrue(source.contains("getItemCount(): Int = ${MainPages.PC_MIRROR + 1}"))
+        assertEquals(MainPages.PC_MIRROR + 1, MainPages.GLASSES)
+        assertTrue(
+            source.contains(
+                "getItemCount(): Int = if (hasGlassesPage) MainPages.GLASSES + 1 else MainPages.PC_MIRROR + 1"
+            )
+        )
     }
 }

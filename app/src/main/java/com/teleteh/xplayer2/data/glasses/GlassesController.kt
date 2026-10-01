@@ -931,6 +931,18 @@ class GlassesController(private val appContext: Context) {
             }
         } catch (_: Throwable) { false }
 
+        /**
+         * Models of the known glasses plugged in right now, keyed by brand. Empty when the USB
+         * identity is not readable or no known pair is attached; an unknown pair (a plain DisplayPort
+         * dongle, newer hardware) does not show up here.
+         */
+        fun attachedModels(context: Context): Map<Brand, String> = try {
+            val usb = context.getSystemService(Context.USB_SERVICE) as UsbManager
+            usb.deviceList.values.mapNotNull { d ->
+                SUPPORTED_DEVICES.firstOrNull { it.vid == d.vendorId && it.pid == d.productId }
+            }.associate { it.brand to it.model }
+        } catch (_: Throwable) { emptyMap() }
+
         // VID/PID list mirrored from wheaney/XRLinuxDriver (covers every model that ships at the time
         // of writing). Brand identification is exposed via [currentBrand]; remote 2D/3D switching is
         // implemented for XREAL (HID MCU) and VITURE (bundled VITURE One SDK — see VitureController).

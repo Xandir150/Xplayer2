@@ -322,4 +322,21 @@
     <string name="mailru_empty">Здесь нет видео</string>
     <string name="mailru_error">Не удалось открыть ссылку Облака Mail.ru</string>
     <string name="pclink_get_desktop_app">Нужна программа для компьютера? Скачайте на xplayer2.app/#pclink</string>
+
+    <!-- XREAL One glasses control (Glasses tab) -->
+    <string name="tab_glasses">Очки</string>
+    <string name="xreal_connected">Подключено</string>
+    <string name="xreal_screen_mode">Режим экрана</string>
+    <string name="xreal_screen_mode_hint">3D показывает оба глаза на одном экране 3840×1080. Для обычного видео выберите 2D.</string>
+    <string name="xreal_brightness">Яркость</string>
+    <string name="xreal_brightness_value">%1$d / %2$d</string>
+    <string name="xreal_dimmer">Затемнение</string>
+    <string name="xreal_dimmer_lightest">Минимум</string>
+    <string name="xreal_dimmer_middle">Средний</string>
+    <string name="xreal_dimmer_dimmest">Максимум</string>
+    <string name="xreal_last_value_note">Очки не сообщают яркость и затемнение. Показано последнее значение, заданное в этом приложении.</string>
+    <string name="xreal_id_label">Идентификатор: %1$s</string>
+    <string name="xreal_command_failed">Очки не приняли команду. Попробуйте ещё раз.</string>
+    <string name="xreal_detail_hd">1080p · %1$d Гц</string>
+    <string name="xreal_detail_sbs">3840×1080 · %1$d Гц</string>
 </resources>
