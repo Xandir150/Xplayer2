@@ -66,6 +66,10 @@ class XrealImuReader(
     }
 
     private val running = AtomicBoolean(false)
+
+    /** Set by [stop] so a [start] still calibrating (up to ~2 s) does not go live afterwards. */
+    @Volatile
+    private var stopRequested = false
     private var readerThread: Thread? = null
     private var commandEndpoint: UsbEndpoint? = null
     private var commandInterfaceIndex: Int = -1
@@ -88,6 +92,7 @@ class XrealImuReader(
      */
     fun start(listener: Listener): Boolean {
         if (running.get()) return true
+        stopRequested = false
         val (intf, endpoint) = findImuEndpoint() ?: run {
             Log.w(TAG, "No IMU IN endpoint (HID + addr 0x84) on device ${device.deviceName}")
             return false
@@ -106,6 +111,13 @@ class XrealImuReader(
             Log.w(TAG, "IMU start command rejected by glasses; reader not started")
             return false
         }
+        if (stopRequested) {
+            // stop() arrived while we were calibrating; it saw `running == false` and did nothing,
+            // so nobody else will halt the stream we just switched on.
+            try { sendImuStreamControl(enable = false) } catch (_: Throwable) { }
+            Log.i(TAG, "IMU start cancelled by stop()")
+            return false
+        }
         Log.i(
             TAG,
             "IMU stream starting on interface ${intf.id} endpoint 0x${endpoint.address.toString(16)}, " +
@@ -120,6 +132,7 @@ class XrealImuReader(
      * Stop the reader and tell the glasses to halt the IMU stream. Safe to call multiple times.
      */
     fun stop() {
+        stopRequested = true
         if (!running.compareAndSet(true, false)) return
         try { readerThread?.join(500) } catch (_: InterruptedException) { }
         readerThread = null

@@ -307,7 +307,7 @@ class GlassesController(private val appContext: Context) {
     fun setDisplayMode(mode: Int, callback: ((Boolean) -> Unit)? = null) {
         val brand = currentBrand()
         Thread({
-            val ok = when (brand) {
+            val ok = try { when (brand) {
                 // XREAL: HID MCU "write display mode".
                 Brand.XREAL -> sendMcuCommand(GlassesProtocol.MCU_MSG_W_DISP_MODE, byteArrayOf(mode.toByte()))
                 // VITURE: SDK binary 2D/3D toggle — any SBS mode means "3D on".
@@ -320,6 +320,10 @@ class GlassesController(private val appContext: Context) {
                 // Rokid: open vendor control transfer — any SBS mode means "3D on".
                 Brand.ROKID -> sendRokidDisplayMode(GlassesProtocol.is3DMode(mode))
                 else -> false
+            } } catch (e: Throwable) {
+                // A vendor SDK or USB failure on this bare thread would otherwise kill the process.
+                Log.w(TAG, "setDisplayMode failed", e)
+                false
             }
             mainHandler.post {
                 if (ok) {
