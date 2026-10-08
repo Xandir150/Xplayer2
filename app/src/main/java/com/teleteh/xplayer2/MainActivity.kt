@@ -183,6 +183,7 @@ class MainActivity : AppCompatActivity() {
         //  contributing to ANR via MessageQueue.nativePollOnce).
         loadToolbarLogoAsync(toolbar)
         requestNotificationPermissionOnce()
+        requestLocalNetworkPermissionIfEnforced()
 
         val viewPager: ViewPager2 = binding.viewPager
         val pagerAdapter = MainPagerAdapter(this)
@@ -478,6 +479,23 @@ class MainActivity : AppCompatActivity() {
                             View.SYSTEM_UI_FLAG_FULLSCREEN
                     )
         }
+    }
+
+    private val localNetworkPermissionLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
+
+    /**
+     * ACCESS_LOCAL_NETWORK exists from Android 17 and is enforced only for apps targeting SDK 37+;
+     * below that LAN access is implicit and the platform docs say not to request it. So this is a
+     * no-op until the target moves, and then asks (at most once per launch) on devices that enforce
+     * it. PC Link, DLNA/SSDP and SMB all need it; a denial just leaves them unable to reach the LAN.
+     */
+    private fun requestLocalNetworkPermissionIfEnforced() {
+        if (Build.VERSION.SDK_INT < 37 || applicationInfo.targetSdkVersion < 37) return
+        val perm = "android.permission.ACCESS_LOCAL_NETWORK"
+        if (ContextCompat.checkSelfPermission(this, perm) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED) return
+        localNetworkPermissionLauncher.launch(perm)
     }
 
     private val notificationPermissionLauncher =

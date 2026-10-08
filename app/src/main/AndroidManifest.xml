@@ -36,6 +36,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Android 17+: local network access (PC Link, DLNA/SSDP, SMB). Enforced only for apps that
+         target SDK 37 or higher; below that the system grants it implicitly. Requested at runtime
+         by MainActivity once targetSdk reaches 37 (the docs forbid asking earlier). -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
     <application
         android:name=".XPlayerApp"
