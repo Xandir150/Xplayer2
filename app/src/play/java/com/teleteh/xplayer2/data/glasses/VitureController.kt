@@ -32,5 +32,8 @@ class VitureController(@Suppress("UNUSED_PARAMETER") appContext: Context) {
 
     companion object {
         const val INIT_IDLE = Int.MIN_VALUE
+
+        /** No SDK in this flavor, so VITURE glasses are detected but can never be switched. */
+        const val SWITCHING_AVAILABLE = false
     }
 }

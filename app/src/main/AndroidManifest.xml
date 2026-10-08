@@ -386,6 +386,7 @@
         <activity
             android:name=".ui.network.PcConnectActivity"
             android:screenOrientation="nosensor"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:exported="false"
             android:theme="@style/Theme.XPlayer2" />
 

@@ -118,5 +118,8 @@ class VitureController(private val appContext: Context) {
         private const val TAG = "VitureController"
         /** Sentinel for "init never attempted" (distinct from any Constants.ERROR_INIT_* value). */
         const val INIT_IDLE = Int.MIN_VALUE
+
+        /** The SDK is bundled in this flavor. */
+        const val SWITCHING_AVAILABLE = true
     }
 }

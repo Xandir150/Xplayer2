@@ -252,6 +252,10 @@ class GlassesController(private val appContext: Context) {
     }
 
     fun currentState(): ConnectionState = when {
+        // Without the SDK (play flavor) there is nothing to grant or wait for; "present" is all we
+        // can say, the same as for RayNeo, instead of sitting in NeedsPermission forever.
+        currentBrand() == Brand.VITURE && !VitureController.SWITCHING_AVAILABLE ->
+            if (device != null) ConnectionState.Connected else ConnectionState.Disconnected
         currentBrand() == Brand.VITURE -> when {
             viture?.isReady() == true -> ConnectionState.Connected
             device != null -> ConnectionState.NeedsPermission
@@ -286,7 +290,8 @@ class GlassesController(private val appContext: Context) {
      * false there.
      */
     fun supportsRemoteSwitch(): Boolean =
-        currentBrand() == Brand.XREAL || currentBrand() == Brand.VITURE ||
+        currentBrand() == Brand.XREAL ||
+            (currentBrand() == Brand.VITURE && VitureController.SWITCHING_AVAILABLE) ||
             currentBrand() == Brand.ROKID || rayneoToggleCapable()
 
     /**

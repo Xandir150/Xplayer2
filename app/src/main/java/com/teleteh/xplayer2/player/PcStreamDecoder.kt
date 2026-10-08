@@ -244,6 +244,7 @@ class PcStreamDecoder(private val listener: Listener) {
     private val queue = PcAuDropPolicy()
     private val freeInputBuffers = ArrayDeque<Int>()
     private var lastIdrNudgeNs = 0L
+    private var lastCreateRetryNs = 0L
 
     /** Frames released to the surface since construction. */
     @Volatile var framesRendered: Long = 0L
@@ -311,6 +312,16 @@ class PcStreamDecoder(private val listener: Listener) {
                 if (m != null) {
                     csd = PcAnnexB.extractCsd(frame.payload, m)
                     if (csd != null && surface != null && codec == null) createCodecLocked()
+                }
+            }
+            // A codec that failed to start (decoder busy, vendor error) used to stay dead until the
+            // stream's format changed. Try again on later frames, at most once a second, so one
+            // transient failure does not leave the glasses black for the whole session.
+            if (csd != null && surface != null && codec == null) {
+                val now = System.nanoTime()
+                if (now - lastCreateRetryNs >= CREATE_RETRY_INTERVAL_NS) {
+                    lastCreateRetryNs = now
+                    createCodecLocked()
                 }
             }
             requestIdr = queue.offer(frame)
@@ -526,6 +537,7 @@ class PcStreamDecoder(private val listener: Listener) {
 
         /** Minimum gap between "still stuck, please send a sync frame" nudges. */
         const val IDR_NUDGE_INTERVAL_NS = 1_000_000_000L
+        const val CREATE_RETRY_INTERVAL_NS = 1_000_000_000L
 
         val VENDOR_LOW_LATENCY_KEYS = arrayOf(
             "vendor.qti-ext-dec-low-latency.enable",   // Qualcomm
