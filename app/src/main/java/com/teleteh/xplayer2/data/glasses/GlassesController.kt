@@ -37,7 +37,7 @@ import androidx.core.content.ContextCompat
  *     distributed as an AAR from viture.com/developer).
  *   - Rokid: plain EP0 USB vendor control transfers — Rokid's own documented command set,
  *     open (see [GlassesProtocol]'s Rokid section), no vendor SDK/interface claim needed.
- *   - TCL/RayNeo: closed-source SDK; one model (Air 3s Pro) has a reverse-engineered HID toggle.
+ *   - TCL/RayNeo: closed-source SDK; Air 3s Pro / Air 4 Pro and GT have a reverse-engineered HID toggle.
  *
  * To enable VITURE switching: drop `VITURE-SDK-x.y.z.aar` under `app/libs/`,
  * add it as a flavor-scoped dependency and wire a separate brand-specific
@@ -785,9 +785,10 @@ class GlassesController(private val appContext: Context) {
             frame[0] = GlassesProtocol.RAYNEO_SEND_MAGIC
             frame[1] = if (on) GlassesProtocol.RAYNEO_CMD_DISPLAY_3D else GlassesProtocol.RAYNEO_CMD_DISPLAY_2D
             // frame[2] (value) and the remaining 61 bytes stay 0.
-            val hid = (0 until dev.interfaceCount)
-                .map { dev.getInterface(it) }
-                .firstOrNull { it.interfaceClass == UsbConstants.USB_CLASS_HID }
+            val interfaces = (0 until dev.interfaceCount).map { dev.getInterface(it) }
+            val wanted = currentMatched()?.hidInterface
+            val hid = interfaces.firstOrNull { wanted != null && it.id == wanted }
+                ?: interfaces.firstOrNull { it.interfaceClass == UsbConstants.USB_CLASS_HID }
             if (hid == null) {
                 Log.w(TAG, "RayNeo: no HID interface to send display toggle")
                 return false
@@ -888,6 +889,9 @@ class GlassesController(private val appContext: Context) {
         val brand: Brand,
         val model: String,
         val rayneoToggle: Boolean = false,
+        // USB interface that takes the toggle command, when the model needs one in particular
+        // (the RayNeo GT does: interface 5). Null = the first HID interface.
+        val hidInterface: Int? = null,
     )
 
     companion object {
@@ -980,7 +984,12 @@ class GlassesController(private val appContext: Context) {
             // accepts a reverse-engineered HID display-mode toggle (verncat/RayNeo-Air-3S-Pro-OpenVR,
             // MIT) which we drive from [sendRayneoDisplayMode] — flagged per-PID so it's the ONLY
             // RayNeo we ever send that command to. Other RayNeo PIDs stay passive (detect + hint).
-            SupportedDevice(0x1bbb, 0xaf50, Brand.RAYNEO, "Air 3s Pro", rayneoToggle = true),
+            // The Air 4 Pro shares this VID/PID with the Air 3s Pro (verncat's device table), so the
+            // two cannot be told apart here; the name says both.
+            SupportedDevice(0x1bbb, 0xaf50, Brand.RAYNEO, "Air 3s Pro / Air 4 Pro", rayneoToggle = true),
+            // RayNeo GT: same command as the Air line, sent on interface 5 (verncat PR #3, tested
+            // by its author on GT hardware: 2D/3D ACKs).
+            SupportedDevice(0x3941, 0xaf50, Brand.RAYNEO, "GT", rayneoToggle = true, hidInterface = 5),
 
             // Rokid — 2D/3D switching via a plain USB vendor control-transfer command (Rokid's own
             // documented request scheme, mirrored via badicsalex/ar-drivers-rs +
