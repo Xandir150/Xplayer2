@@ -408,8 +408,8 @@ sealed class PcInputAvailability {
 
     companion object {
         /**
-         * The whole client-side rule, in one place: the server's `config.input` decides, and this
-         * phone's own knowledge of whether the link is sealed explains an absence.
+         * The whole client-side rule, in one place: the server's `config.input` decides, but only
+         * on a sealed link; on a plaintext one input is always off, offer or not.
          *
          * Deliberately reads `encrypted` from the link rather than from anything the server said:
          * the server does not report why it withheld the offer, and it must not have to — the phone
@@ -417,8 +417,10 @@ sealed class PcInputAvailability {
          * the fact that separates the two answers.
          */
         fun of(offer: PcInputOffer?, encrypted: Boolean): PcInputAvailability = when {
-            offer != null -> Live(offer)
+            // An offer on a plaintext session is a server breaking §2.19, or a peer injecting one:
+            // honouring it would send keystrokes and IME text in clear to that peer.
             !encrypted -> Off(PcInputUnavailable.NOT_ENCRYPTED)
+            offer != null -> Live(offer)
             else -> Off(PcInputUnavailable.OPERATOR_OFF)
         }
     }

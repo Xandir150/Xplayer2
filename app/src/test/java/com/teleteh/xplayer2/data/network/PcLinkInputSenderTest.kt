@@ -382,15 +382,14 @@ class PcLinkInputSenderTest {
     }
 
     /**
-     * A `config.input` that arrived on an unencrypted session would be a server breaking §2.19, and
-     * the client still reads it as live: the encryption state is only ever consulted to *explain an
-     * absence*, never to second-guess a grant. Second-guessing it would mean two gates that can
-     * disagree, and the structural one is the server's.
+     * A `config.input` that arrives on an unencrypted session is ignored: input would travel in
+     * clear to a peer that cannot be authenticated. The reason shown is the same as for an absent
+     * offer, because the fix is the same (re-pair so the session is sealed).
      */
     @Test
-    fun `the offer is authoritative when it is present`() {
+    fun `an offer on a plaintext session is not honoured`() {
         assertEquals(
-            PcInputAvailability.Live(everything),
+            PcInputAvailability.Off(PcInputUnavailable.NOT_ENCRYPTED),
             PcInputAvailability.of(everything, encrypted = false)
         )
     }

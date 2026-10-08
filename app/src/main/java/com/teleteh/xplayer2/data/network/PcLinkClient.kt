@@ -1572,8 +1572,10 @@ class PcLinkClient(
      *   session is not dying; without this, a Ctrl held at the moment the switch flipped stays down
      *   on that desktop for as long as the PC is up.
      */
-    private fun applyInputOffer(offer: PcInputOffer?) {
-        inputAvailability = PcInputAvailability.of(offer, link.isEncrypted)
+    private fun applyInputOffer(received: PcInputOffer?) {
+        inputAvailability = PcInputAvailability.of(received, link.isEncrypted)
+        // Never feed input to a plaintext session, whatever the config claimed.
+        val offer = (inputAvailability as? PcInputAvailability.Live)?.offer
         if (offer == null) {
             if (inputLive) {
                 inputLive = false
