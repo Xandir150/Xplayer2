@@ -144,7 +144,25 @@ class DlnaBrowser {
         if (gt < 0) return null
         val end = block.indexOf("</$tag>", gt + 1)
         if (end < 0) return null
-        return block.substring(gt + 1, end).trim()
+        return xmlUnescape(block.substring(gt + 1, end).trim())
+    }
+
+    /**
+     * The DIDL is XML inside the SOAP envelope's own XML text, so it is escaped twice. The first
+     * pass (in [parseDidlFromSoap]) restores the DIDL markup; what is left in a value, such as the
+     * `&amp;` between URL parameters, is the DIDL's own escaping and has to be undone here.
+     */
+    private fun xmlUnescape(v: String): String {
+        if (!v.contains('&')) return v
+        val numeric = Regex("&#(x[0-9a-fA-F]+|[0-9]+);")
+        return numeric.replace(v) {
+            val n = it.groupValues[1]
+            val cp = (if (n.startsWith("x")) n.drop(1).toIntOrNull(16) else n.toIntOrNull()) ?: return@replace it.value
+            if (Character.isValidCodePoint(cp)) String(Character.toChars(cp)) else it.value
+        }
+            .replace("&lt;", "<").replace("&gt;", ">")
+            .replace("&quot;", "\"").replace("&apos;", "'")
+            .replace("&amp;", "&")
     }
 
     private fun extractTagCI(block: String, tag: String): String? {
@@ -161,7 +179,7 @@ class DlnaBrowser {
         val attrs = block.substring(start, gt + 1)
         val end = block.indexOf("</$tag>", gt + 1)
         if (end < 0) return null
-        val value = block.substring(gt + 1, end).trim()
+        val value = xmlUnescape(block.substring(gt + 1, end).trim())
         return attrs to value
     }
 

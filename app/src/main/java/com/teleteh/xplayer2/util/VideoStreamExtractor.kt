@@ -18,6 +18,7 @@ import java.util.regex.Pattern
 object VideoStreamExtractor {
 
     private const val TAG = "VideoStreamExtractor"
+    private const val MAX_REDIRECTS = 5
 
     /**
      * One selectable quality of a stream. [label] is human-readable ("1080p", "Auto", "HD"),
@@ -44,14 +45,17 @@ object VideoStreamExtractor {
         val headers: Map<String, String>? = null,
     )
 
+    /** [host] is [domain] or one of its subdomains; a substring match also took `book.ru` for `ok.ru`. */
+    private fun hostIs(host: String, domain: String) = host == domain || host.endsWith(".$domain")
+
     /**
      * Checks if the given URI is from a supported video hosting service.
      */
     fun isSupported(uri: Uri, youtubeEnabled: Boolean = false): Boolean {
         val host = uri.host?.lowercase() ?: return false
-        return host.contains("ok.ru") ||
-                host.contains("vkvideo.ru") ||
-                (host.contains("vk.com") && uri.path?.contains("video") == true) ||
+        return hostIs(host, "ok.ru") ||
+                hostIs(host, "vkvideo.ru") ||
+                (hostIs(host, "vk.com") && uri.path?.contains("video") == true) ||
                 (youtubeEnabled && isYouTubeUrl(uri))
     }
 
@@ -64,9 +68,9 @@ object VideoStreamExtractor {
         val host = uri.host?.lowercase() ?: return@withContext null
         try {
             val result = when {
-                host.contains("ok.ru") -> extractOkRu(uri)
-                host.contains("vkvideo.ru") -> extractVkVideo(uri)
-                host.contains("vk.com") && uri.path?.contains("video") == true -> extractVkVideo(uri)
+                hostIs(host, "ok.ru") -> extractOkRu(uri)
+                hostIs(host, "vkvideo.ru") -> extractVkVideo(uri)
+                hostIs(host, "vk.com") && uri.path?.contains("video") == true -> extractVkVideo(uri)
                 youtubeEnabled && isYouTubeUrl(uri) -> extractYouTube(uri)
                 else -> null
             }
@@ -777,7 +781,7 @@ object VideoStreamExtractor {
     // (with params/hls) only for desktop clients; a mobile UA yields a stripped response.
     private const val API_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
 
-    private fun fetchPage(urlStr: String): String? {
+    private fun fetchPage(urlStr: String, redirects: Int = 0): String? {
         return try {
             val url = URL(urlStr)
             val conn = (url.openConnection() as HttpURLConnection).apply {
@@ -807,8 +811,10 @@ object VideoStreamExtractor {
             } else if (code in 300..399) {
                 // Handle redirect manually if needed
                 val location = conn.getHeaderField("Location")
-                if (!location.isNullOrBlank()) {
-                    fetchPage(location)
+                // Bounded: a loop (e.g. http<->https) would otherwise recurse until StackOverflowError,
+                // which `catch (e: Exception)` does not stop.
+                if (!location.isNullOrBlank() && redirects < MAX_REDIRECTS) {
+                    fetchPage(location, redirects + 1)
                 } else {
                     null
                 }

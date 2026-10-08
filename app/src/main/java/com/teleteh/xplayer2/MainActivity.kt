@@ -297,15 +297,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun isUnmeteredNetwork(): Boolean = try {
-        val cm = getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
-        val net = cm.activeNetwork ?: return false
-        val caps = cm.getNetworkCapabilities(net) ?: return false
-        caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-    } catch (_: Throwable) {
-        false
-    }
-
     // --- Android TV / D-pad keyboard navigation ---
     private fun setupTvFocusNavigation() {
         binding.tabLayout.isFocusable = true

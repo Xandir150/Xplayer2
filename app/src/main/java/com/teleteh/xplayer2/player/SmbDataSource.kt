@@ -28,8 +28,14 @@ class SmbDataSource(private val client: SmbClient) : BaseDataSource(/* isNetwork
             val smb = client.open(dataSpec.uri.toString())
             val length = smb.length()
             val raf = smb.openRandomAccess("r")
-            if (dataSpec.position > length) throw IOException("Position beyond end of file")
-            raf.seek(dataSpec.position)
+            try {
+                if (dataSpec.position > length) throw IOException("Position beyond end of file")
+                raf.seek(dataSpec.position)
+            } catch (e: Throwable) {
+                // `file` is not assigned yet, so close() would never see this handle.
+                try { raf.close() } catch (_: Throwable) { }
+                throw e
+            }
             file = raf
             remaining = if (dataSpec.length != C.LENGTH_UNSET.toLong()) dataSpec.length
             else length - dataSpec.position

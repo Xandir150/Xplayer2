@@ -1035,6 +1035,9 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
             // fast-forward match our own ±10 s seek.
             .setSeekBackIncrementMs(10_000L)
             .setSeekForwardIncrementMs(10_000L)
+            // Pause when the audio route drops (headphones or glasses audio unplugged) instead of
+            // blasting the film out of the phone speaker.
+            .setHandleAudioBecomingNoisy(true)
         if (isYouTube) {
             playerBuilder.setLoadControl(
                 DefaultLoadControl.Builder()
