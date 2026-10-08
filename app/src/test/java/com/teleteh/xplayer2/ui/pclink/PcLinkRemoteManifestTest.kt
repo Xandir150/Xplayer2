@@ -44,14 +44,28 @@ class PcLinkRemoteManifestTest {
         )
     }
 
+    private fun activityAttributes(name: String): String {
+        val start = manifest.indexOf(name)
+        assertTrue("$name must be declared", start >= 0)
+        return manifest.substring(manifest.lastIndexOf("<activity", start), manifest.indexOf('>', start))
+    }
+
     @Test
-    fun `player and both remotes allow foldable orientations`() {
-        for (name in listOf(".player.PlayerActivity", ".player.RemoteControlActivity", ".ui.pclink.PcLinkRemoteActivity")) {
-            val start = manifest.indexOf(name)
-            assertTrue("$name must be declared", start >= 0)
-            val activity = manifest.substring(manifest.lastIndexOf("<activity", start), manifest.indexOf('>', start))
-            assertTrue("$name must allow user orientations for tabletop and book postures",
-                activity.contains("""android:screenOrientation="fullUser""""))
+    fun `the player follows the device posture`() {
+        assertTrue(
+            "PlayerActivity must allow user orientations for tabletop and book postures",
+            activityAttributes(".player.PlayerActivity").contains("""android:screenOrientation="fullUser"""")
+        )
+    }
+
+    @Test
+    fun `both remotes stay in portrait, since they are held like a phone`() {
+        // Locked on purpose (d026bcf): the remotes are the handheld half of the glasses setup.
+        for (name in listOf(".player.RemoteControlActivity", ".ui.pclink.PcLinkRemoteActivity")) {
+            assertTrue(
+                "$name must stay in portrait",
+                activityAttributes(name).contains("""android:screenOrientation="portrait"""")
+            )
         }
     }
 
