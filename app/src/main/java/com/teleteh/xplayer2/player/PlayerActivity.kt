@@ -3466,6 +3466,10 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         // player when the intent landed here, but a fresh instance reaches this by another road.
         GlassesStage.claim(this)
         stopLocalPlayback()
+        // Lazy 3D is the phone's own 2D→3D conversion of a local film. With the film gone it would
+        // keep depth-warping the desktop frames (the GL view gives it priority over every other
+        // draw path). The PC's own depth (§2.20, pcLinkDepth) is a separate path and is untouched.
+        if (lazy3dEnabled) setLazy3dEnabled(false)
         pcLinkHost = host
         // A new session even when it is the same PC at the same address: whatever a reader has
         // collected describes the one that just ended, and splicing the two would draw a minute
