@@ -215,7 +215,7 @@ class VirtualDesktopGlView @JvmOverloads constructor(
     private inner class DesktopRenderer : Renderer, SurfaceTexture.OnFrameAvailableListener {
         private var textureId = 0
         private var surfaceTexture: SurfaceTexture? = null
-        var surface: Surface? = null
+        @Volatile var surface: Surface? = null
             private set
         var onSurfaceReady: ((Surface) -> Unit)? = null
 
@@ -289,6 +289,10 @@ class VirtualDesktopGlView @JvmOverloads constructor(
             projForWidth = 0; projForHeight = 0
 
             textureId = createOesTexture()
+            // A new EGL context means the previous texture is gone, so the old pair is dead; free
+            // its BufferQueue instead of waiting for GC (this runs on every pause/resume).
+            runCatching { surface?.release() }
+            runCatching { surfaceTexture?.release() }
             surfaceTexture = SurfaceTexture(textureId).also {
                 it.setOnFrameAvailableListener(this)
             }

@@ -571,7 +571,15 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
 
         // Handle system back via dispatcher to move app back to primary display
         onBackPressedDispatcher.addCallback(this) {
-            navigateBackToPrimary()
+            // Close the track menu / controller first. With predictive back (the default for
+            // targetSdk 36) the BACK key never reaches onKeyDown, so this has to live here.
+            val overlay = playerView.findViewById<android.widget.FrameLayout>(androidx.media3.ui.R.id.exo_overlay)
+            when {
+                audioMenuRoot?.visibility == View.VISIBLE -> hideTrackMenu()
+                overlay?.visibility == View.VISIBLE || playerView.isControllerFullyVisible ->
+                    playerView.hideController()
+                else -> navigateBackToPrimary()
+            }
         }
         
         playerView = findViewById(R.id.playerView)
@@ -2884,8 +2892,11 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
 
     fun seekRelative(deltaMs: Long) {
         player?.let { exo ->
-            val newPos = (exo.currentPosition + deltaMs).coerceIn(0, exo.duration.coerceAtLeast(0))
-            exo.seekTo(newPos)
+            // duration is C.TIME_UNSET (negative) for live streams and while buffering: no upper
+            // bound then, or every relative seek would clamp to 0.
+            val dur = exo.duration
+            val target = (exo.currentPosition + deltaMs).coerceAtLeast(0)
+            exo.seekTo(if (dur != C.TIME_UNSET && dur > 0) target.coerceAtMost(dur) else target)
         }
         flashGlassesOsd()
     }

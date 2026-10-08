@@ -226,8 +226,11 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
                 }
             } else {
                 // Not handling, let system handle default back
+                // Disabled only for this one dispatch: staying disabled would stop Back from going
+                // up a folder in a share or DLNA server the next time one is opened.
                 isEnabled = false
                 requireActivity().onBackPressedDispatcher.onBackPressed()
+                isEnabled = true
             }
         }
 

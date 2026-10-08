@@ -7,6 +7,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.hardware.display.DisplayManager
 import android.os.Build
+import androidx.core.content.ContextCompat
 import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
@@ -181,6 +182,7 @@ class MainActivity : AppCompatActivity() {
         // (large PNG decode + scale can stall main thread for hundreds of ms on slow devices,
         //  contributing to ANR via MessageQueue.nativePollOnce).
         loadToolbarLogoAsync(toolbar)
+        requestNotificationPermissionOnce()
 
         val viewPager: ViewPager2 = binding.viewPager
         val pagerAdapter = MainPagerAdapter(this)
@@ -485,6 +487,26 @@ class MainActivity : AppCompatActivity() {
                             View.SYSTEM_UI_FLAG_FULLSCREEN
                     )
         }
+    }
+
+    private val notificationPermissionLauncher =
+        registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
+
+    /**
+     * Android 13+ hides notifications until POST_NOTIFICATIONS is granted, and the playback
+     * notification carries the only Stop control outside the app. Asked once: a refusal is final
+     * (the system stops showing the dialog after two denials anyway) and must not nag.
+     */
+    private fun requestNotificationPermissionOnce() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = ContextCompat.checkSelfPermission(
+            this, android.Manifest.permission.POST_NOTIFICATIONS
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (granted) return
+        val prefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
+        if (prefs.getBoolean("notif_permission_asked", false)) return
+        prefs.edit().putBoolean("notif_permission_asked", true).apply()
+        notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {

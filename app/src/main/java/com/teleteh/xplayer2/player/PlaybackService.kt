@@ -58,8 +58,18 @@ class PlaybackService : Service() {
         // player), so a slow start — e.g. a VK/OK link still in stream extraction, player == null
         // — blew the deadline. Promote immediately with a placeholder notification instead;
         // startForegroundPlayback() re-issues it with the MediaSession once playback is real.
-        promoteToForeground(buildNotification(null))
-        return START_STICKY
+        try {
+            promoteToForeground(buildNotification(null))
+        } catch (e: Exception) {
+            // Android 12+ refuses a foreground start from the background (a system restart of this
+            // service is exactly that). Nothing to keep alive without an activity, so just stop.
+            android.util.Log.w("PlaybackService", "Cannot start foreground; stopping", e)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        // Not sticky: after the process dies there is no player to rebuild, and a restart would only
+        // post an orphan "playing" notification that nothing manages.
+        return START_NOT_STICKY
     }
 
     /** startForeground with the right FGS type for this API level. Safe to call repeatedly. */
