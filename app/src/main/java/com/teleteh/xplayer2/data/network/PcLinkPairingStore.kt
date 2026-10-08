@@ -134,7 +134,6 @@ class PcLinkPairingStore internal constructor(
                     ?.let { return it }
                 if (attempt < IDENTITY_OPEN_ATTEMPTS - 1) Thread.sleep(IDENTITY_OPEN_RETRY_MS)
             }
-            Log.w(TAG, "Stored identity did not open after $IDENTITY_OPEN_ATTEMPTS attempts; replacing it")
         }
 
         val fresh = PcLinkPairingCrypto.generateIdentity()
