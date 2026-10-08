@@ -11,6 +11,7 @@ import java.util.regex.Pattern
 class DlnaBrowser {
     suspend fun resolveContentDirectoryControlUrl(deviceDescriptionUrl: String): String? =
         withContext(Dispatchers.IO) {
+            if (!NetLimits.isHttpUrl(deviceDescriptionUrl)) return@withContext null
             try {
                 val xml = fetchText(deviceDescriptionUrl) ?: return@withContext null
                 // Extract optional base URL (URLBase/baseURL)
@@ -31,6 +32,7 @@ class DlnaBrowser {
                     if (isContentDir) {
                         val controlRel = extractTagCI(block, "controlURL") ?: continue
                         return@withContext resolveControl(deviceDescriptionUrl, base, controlRel)
+                            .takeIf { NetLimits.isHttpUrl(it) }
                     }
                 }
                 null
@@ -57,6 +59,7 @@ class DlnaBrowser {
               </s:Body>
             </s:Envelope>
         """.trimIndent()
+            if (!NetLimits.isHttpUrl(controlUrl)) return@withContext BrowseResult(emptyList(), emptyList())
             var conn: HttpURLConnection? = null
             try {
                 val url = URL(controlUrl)
@@ -72,9 +75,9 @@ class DlnaBrowser {
                     OutputStreamWriter(os, Charsets.UTF_8).use { it.write(envelope) }
                 }
                 val body = try {
-                    conn.inputStream.bufferedReader().use(BufferedReader::readText)
+                    conn.inputStream.use { NetLimits.readTextLimited(it) }
                 } catch (e: Exception) {
-                    conn.errorStream?.bufferedReader()?.use(BufferedReader::readText)
+                    conn.errorStream?.use { runCatching { NetLimits.readTextLimited(it) }.getOrNull() }
                         ?: return@withContext BrowseResult(emptyList(), emptyList())
                 }
                 parseDidlFromSoap(body)
@@ -126,7 +129,7 @@ class DlnaBrowser {
             val block = itemMatcher.group(1)
             val title = extractTag(block, "dc:title") ?: extractTag(block, "title") ?: "Item"
             val resBlock = extractTagRaw(block, "res")
-            val url = resBlock?.second ?: continue
+            val url = resBlock?.second?.takeIf { NetLimits.isHttpUrl(it) } ?: continue
             val mime = extractAttr(resBlock.first, "protocolInfo")?.let { proto ->
                 // protocolInfo like: http-get:*:video/mp4:*
                 val parts = proto.split(":")
@@ -243,7 +246,7 @@ class DlnaBrowser {
                 setRequestProperty("Accept", "application/xml, text/xml, */*;q=0.8")
                 setRequestProperty("User-Agent", "XPlayer2/1.0 (Android)")
             }
-            conn.inputStream.bufferedReader().use { it.readText() }
+            conn.inputStream.use { NetLimits.readTextLimited(it) }
         } catch (_: Exception) {
             null
         } finally {

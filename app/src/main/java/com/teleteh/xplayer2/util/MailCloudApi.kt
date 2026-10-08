@@ -95,9 +95,9 @@ object MailCloudApi {
         val body = stream?.let { BufferedReader(InputStreamReader(it)).use { r -> r.readText() } }
         conn.disconnect()
         if (code in 200..299 && body != null) JSONObject(body)
-        else { Log.w(TAG, "GET $urlStr -> HTTP $code: ${body?.take(200)}"); null }
+        else { Log.w(TAG, "GET ${redactUrl(urlStr)} -> HTTP $code: ${body?.take(200)}"); null }
     } catch (e: Exception) {
-        Log.e(TAG, "GET $urlStr failed", e); null
+        Log.e(TAG, "GET ${redactUrl(urlStr)} failed", e); null
     }
 
     private val VIDEO_EXTS = setOf(

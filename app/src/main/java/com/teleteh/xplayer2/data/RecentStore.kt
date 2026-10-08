@@ -9,10 +9,10 @@ import org.json.JSONObject
 class RecentStore(private val context: Context) {
     private val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun getAll(): List<RecentEntry> {
+    fun getAll(): List<RecentEntry> = synchronized(LOCK) {
         val json = prefs.getString(KEY_ITEMS, "")?.trim().orEmpty()
-        if (json.isEmpty()) return emptyList()
-        return try {
+        if (json.isEmpty()) return@synchronized emptyList()
+        try {
             val arr = JSONArray(json)
             val raw = (0 until arr.length()).mapNotNull { idx ->
                 arr.optJSONObject(idx)?.toEntry()
@@ -37,7 +37,7 @@ class RecentStore(private val context: Context) {
         }
     }
 
-    fun upsert(newEntry: RecentEntry, maxItems: Int = 50) {
+    fun upsert(newEntry: RecentEntry, maxItems: Int = 50) = synchronized(LOCK) {
         val current = getAll().toMutableList()
         val existingIdx = current.indexOfFirst { it.uri == newEntry.uri }
         if (existingIdx >= 0) current.removeAt(existingIdx)
@@ -50,7 +50,7 @@ class RecentStore(private val context: Context) {
 
     fun find(uri: String): RecentEntry? = getAll().firstOrNull { it.uri == uri }
 
-    fun delete(uri: String) {
+    fun delete(uri: String) = synchronized(LOCK) {
         val current = getAll().toMutableList()
         val idx = current.indexOfFirst { it.uri == uri }
         if (idx >= 0) {
@@ -61,7 +61,7 @@ class RecentStore(private val context: Context) {
         }
     }
 
-    fun clear() {
+    fun clear() = synchronized(LOCK) {
         prefs.edit().putString(KEY_ITEMS, JSONArray().toString()).apply()
     }
 
@@ -131,6 +131,12 @@ class RecentStore(private val context: Context) {
     }
 
     companion object {
+        /**
+         * One monitor for every instance: callers build a fresh RecentStore wherever they need one,
+         * and the list is rewritten whole (read, change, write), so the player's progress save and
+         * the Recent tab's refresh could otherwise interleave and drop an update.
+         */
+        private val LOCK = Any()
         private const val PREFS = "recent_store"
         private const val KEY_ITEMS = "items"
     }

@@ -40,7 +40,7 @@ class DlnaDiscovery {
                         socket.receive(resp)
                         val text = String(resp.data, 0, resp.length, Charset.forName("UTF-8"))
                         val headers = parseHeaders(text)
-                        val location = headers["location"] ?: continue
+                        val location = headers["location"]?.takeIf { NetLimits.isHttpUrl(it) } ?: continue
                         val usn = headers["usn"]
                         val key = (usn ?: location).lowercase(Locale.US)
                         if (seen.add(key)) {
@@ -91,13 +91,7 @@ class DlnaDiscovery {
             conn.connectTimeout = 5000
             conn.readTimeout = 5000
             conn.getInputStream().use { input ->
-                val reader = BufferedReader(InputStreamReader(input))
-                val sb = StringBuilder()
-                var line: String?
-                while (reader.readLine().also { line = it } != null) {
-                    sb.append(line)
-                }
-                val xml = sb.toString()
+                val xml = NetLimits.readTextLimited(input)
                 val name = run {
                     val start = xml.indexOf("<friendlyName>")
                     val end = xml.indexOf("</friendlyName>")
@@ -114,10 +108,11 @@ class DlnaDiscovery {
                         val uEnd = block.indexOf("</url>")
                         if (uStart >= 0 && uEnd > uStart) {
                             val rel = block.substring(uStart + 5, uEnd).trim()
+                            // Only a real http(s) URL is ever handed to the image loader.
                             try {
-                                URL(URL(location), rel).toString()
+                                URL(URL(location), rel).toString().takeIf { NetLimits.isHttpUrl(it) }
                             } catch (_: Exception) {
-                                rel
+                                null
                             }
                         } else null
                     } else null

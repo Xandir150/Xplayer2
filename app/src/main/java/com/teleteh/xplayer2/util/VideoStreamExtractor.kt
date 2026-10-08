@@ -77,13 +77,13 @@ object VideoStreamExtractor {
             if (result != null) {
                 Log.i(TAG, "Successfully extracted: ${result.url} (title=${result.title}, quality=${result.quality})")
             } else {
-                Log.w(TAG, "Failed to extract stream from $uri")
+                Log.w(TAG, "Failed to extract stream from ${redactUrl(uri)}")
             }
             result
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to extract stream from $uri", e)
+            Log.e(TAG, "Failed to extract stream from ${redactUrl(uri)}", e)
             null
         }
     }
@@ -101,7 +101,7 @@ object VideoStreamExtractor {
      */
     private suspend fun extractOkRu(uri: Uri): ExtractedStream? = withContext(Dispatchers.IO) {
         val videoId = extractOkRuVideoId(uri) ?: run {
-            Log.w(TAG, "Could not extract video ID from ok.ru URL: $uri")
+            Log.w(TAG, "Could not extract video ID from ok.ru URL: ${redactUrl(uri)}")
             return@withContext null
         }
 
@@ -306,7 +306,7 @@ object VideoStreamExtractor {
      */
     private suspend fun extractVkVideo(uri: Uri): ExtractedStream? = withContext(Dispatchers.IO) {
         val videoId = extractVkVideoId(uri) ?: run {
-            Log.w(TAG, "Could not extract video ID from VK URL: $uri")
+            Log.w(TAG, "Could not extract video ID from VK URL: ${redactUrl(uri)}")
             return@withContext null
         }
 
@@ -819,11 +819,11 @@ object VideoStreamExtractor {
                     null
                 }
             } else {
-                Log.w(TAG, "HTTP $code for $urlStr")
+                Log.w(TAG, "HTTP $code for ${redactUrl(urlStr)}")
                 null
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to fetch $urlStr", e)
+            Log.e(TAG, "Failed to fetch ${redactUrl(urlStr)}", e)
             null
         }
     }

@@ -85,9 +85,9 @@ object YaDiskApi {
         val body = stream?.let { BufferedReader(InputStreamReader(it)).use { r -> r.readText() } }
         conn.disconnect()
         if (code in 200..299 && body != null) JSONObject(body)
-        else { Log.w(TAG, "GET $urlStr -> HTTP $code: ${body?.take(200)}"); null }
+        else { Log.w(TAG, "GET ${redactUrl(urlStr)} -> HTTP $code: ${body?.take(200)}"); null }
     } catch (e: Exception) {
-        Log.e(TAG, "GET $urlStr failed", e); null
+        Log.e(TAG, "GET ${redactUrl(urlStr)} failed", e); null
     }
 
     private val VIDEO_EXTS = setOf(
@@ -240,7 +240,7 @@ object YaDiskApi {
         conn.disconnect()
         if (body != null) PageResult(body, cookies) else null
     } catch (e: Exception) {
-        Log.w(TAG, "GET page $urlStr failed", e); null
+        Log.w(TAG, "GET page ${redactUrl(urlStr)} failed", e); null
     }
 
     private fun httpPostJson(urlStr: String, body: String, referer: String, cookies: String): JSONObject? = try {
@@ -262,6 +262,6 @@ object YaDiskApi {
         conn.disconnect()
         if (txt != null) JSONObject(txt) else null
     } catch (e: Exception) {
-        Log.w(TAG, "POST $urlStr failed", e); null
+        Log.w(TAG, "POST ${redactUrl(urlStr)} failed", e); null
     }
 }
