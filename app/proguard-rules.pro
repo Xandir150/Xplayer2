@@ -32,3 +32,12 @@
 -dontwarn jcifs.**
 -dontwarn org.slf4j.**
 -dontwarn org.bouncycastle.**
+
+# Release builds drop informational logging: every Log.v/d/i call (and the string building feeding
+# it) is removed by R8. Warnings and errors stay, they are the only trace of a field failure.
+# The rule applies to libraries too; debug builds are not minified and keep all logs.
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}
