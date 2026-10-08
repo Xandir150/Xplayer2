@@ -26,3 +26,9 @@
 # doesn't include this dependency at all, so the rule is a harmless no-op there.
 -keep class com.viture.sdk.** { *; }
 -dontwarn com.viture.sdk.**
+
+# SMB client (jcifs-ng): loads its providers and config classes by name.
+-keep class jcifs.** { *; }
+-dontwarn jcifs.**
+-dontwarn org.slf4j.**
+-dontwarn org.bouncycastle.**

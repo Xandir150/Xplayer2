@@ -126,7 +126,7 @@ class RecentFragment : Fragment(R.layout.fragment_recent) {
 
     /** Long-press delete (touch or D-pad) — a confirm dialog, since there's no swipe-undo for it. */
     private fun confirmDelete(entry: RecentEntry) {
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+        com.teleteh.xplayer2.ui.Sbs3dDialog.builder(requireContext())
             .setTitle(R.string.recent_delete_confirm)
             .setMessage(entry.title)
             .setPositiveButton(R.string.delete) { _, _ -> removeRecent(entry, withUndo = false) }

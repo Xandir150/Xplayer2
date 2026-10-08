@@ -70,6 +70,7 @@
     <string name="glasses_brand_unsupported">Смена режима очков требует проприетарного SDK %1$s, который не включён в поставку. Используйте физическое меню очков.</string>
     <string name="glasses_rayneo_manual">RayNeo Air переключает 2D/3D на самих очках: одновременно нажмите кнопку громкости (левая дужка) и кнопку яркости (правая дужка). При отключении 3D выключается автоматически.</string>
     <string name="glasses_not_connected">Поддерживаемые XR-очки не обнаружены. Подключите очки (XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S) и разрешите доступ USB.</string>
+    <string name="glasses_not_connected_companion">XPlayer2 не может управлять этими очками по USB. Для устройств-компаньонов, например Pocket TV, где очки служат экраном самого устройства, это нормально. Переключайте 2D/3D кнопками на очках. Если экран 32:9, интерфейс показывается рядом для обоих глаз.</string>
     <!-- Заголовок диалога, когда подключённые очки не сообщают марку/модель (MainActivity) -->
     <string name="glasses_fallback_name">Очки</string>
 
@@ -94,6 +95,11 @@
     <string name="network_add_share">Добавить шару</string>
     <string name="network_smb_name">Имя</string>
     <string name="network_smb_uri">SMB URI (например smb://server/share)</string>
+    <string name="network_smb_user">Логин (пусто = гость)</string>
+    <string name="network_smb_password">Пароль</string>
+    <string name="network_smb_domain">Домен (необязательно)</string>
+    <string name="smb_login_title">Вход на %s</string>
+    <string name="smb_open_failed">Не удалось открыть шару: %s</string>
     <string name="network_enter_url_error">Введите ссылку</string>
     <string name="network_url_invalid">Некорректная ссылка</string>
     <string name="network_open_failed">Не удалось открыть: %1$s</string>

@@ -220,7 +220,7 @@ class PcMirrorFragment : Fragment() {
      */
     private fun requireGlasses(): Boolean {
         if (GlassesPresence.present(requireContext())) return true
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+        com.teleteh.xplayer2.ui.Sbs3dDialog.builder(requireContext())
             .setTitle(R.string.pclink_needs_glasses_title)
             .setMessage(R.string.pclink_needs_glasses_body)
             .setPositiveButton(android.R.string.ok, null)
@@ -288,7 +288,7 @@ class PcMirrorFragment : Fragment() {
             getString(R.string.pclink_paired_no_address),
             ::relativeSeen
         )
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+        com.teleteh.xplayer2.ui.Sbs3dDialog.builder(requireContext())
             .setTitle(getString(R.string.pclink_forget_title, pairing.name))
             .setMessage("$subtitle\n\n${getString(R.string.pclink_forget_body)}")
             .setPositiveButton(R.string.pclink_forget) { _, _ -> forget(pairing, withUndo = false) }

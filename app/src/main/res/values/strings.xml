@@ -73,6 +73,7 @@
     <string name="glasses_brand_unsupported">Switching glasses display mode requires the closed-source %1$s SDK, which is not bundled. Please use the glasses\' physical menu to change mode for now.</string>
     <string name="glasses_rayneo_manual">RayNeo Air switches 2D/3D on the glasses themselves: press the Volume button (left temple) and the Brightness button (right temple) at the same time. 3D turns off automatically when you disconnect.</string>
     <string name="glasses_not_connected">No supported XR glasses detected on USB. Plug the goggles in (XREAL Air / Air 2 / Air 2 Pro / Air 2 Ultra / One / One Pro / One S) and grant USB permission when prompted.</string>
+    <string name="glasses_not_connected_companion">XPlayer2 cannot control these glasses over USB. This is normal for companion devices such as Pocket TV, where the glasses are the screen of the device. Switch 2D/3D with the buttons on the glasses. When the screen is 32:9, the interface is shown side by side for both eyes.</string>
     <!-- Fallback dialog title when the connected glasses report no brand/model name (MainActivity) -->
     <string name="glasses_fallback_name">Glasses</string>
 
@@ -106,6 +107,11 @@
     <string name="network_add_share">Add share</string>
     <string name="network_smb_name">Name</string>
     <string name="network_smb_uri">SMB URI (e.g. smb://server/share)</string>
+    <string name="network_smb_user">Username (empty = guest)</string>
+    <string name="network_smb_password">Password</string>
+    <string name="network_smb_domain">Domain (optional)</string>
+    <string name="smb_login_title">Sign in to %s</string>
+    <string name="smb_open_failed">Cannot open the share: %s</string>
     <string name="network_enter_url_error">Enter a URL first</string>
     <string name="network_url_invalid">Invalid URL</string>
     <string name="network_open_failed">Failed to open: %1$s</string>

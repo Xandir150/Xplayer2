@@ -137,6 +137,10 @@ dependencies {
     implementation(libs.androidx.media3.session)
     // Image loading for device icons and thumbnails (Coil 3: network loading is a separate artifact)
     implementation(libs.coil)
+    // SMB client for network shares (browsing + playback). Pure Java; jcifs-ng speaks SMB1-3.
+    implementation("eu.agno3.jcifs:jcifs-ng:2.1.10")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+    implementation("org.slf4j:slf4j-nop:1.7.36")
     implementation(libs.coil.network.okhttp)
     // Media3 FFmpeg audio decoder: Google never publishes this module, so it's an AAR built once
     // from the external/media3 checkout at the SAME media3 version (BUILDING.md). It's pure

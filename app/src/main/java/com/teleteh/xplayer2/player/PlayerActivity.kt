@@ -964,14 +964,14 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         getSharedPreferences("youtube", MODE_PRIVATE)
             .getBoolean("enabled", BuildConfig.YOUTUBE_ENABLED_DEFAULT)
 
-    private fun mediaDataSourceFactory(): DefaultDataSource.Factory {
+    private fun mediaDataSourceFactory(): androidx.media3.datasource.DataSource.Factory {
         val headers = extractedHeaders.orEmpty()
         val http = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
             .setDefaultRequestProperties(headers)
         headers["User-Agent"]?.let { http.setUserAgent(it) }
         // DefaultDataSource keeps file/content playback working as well as HTTP streams.
-        return DefaultDataSource.Factory(this, http)
+        return SmbAwareDataSourceFactory(this, DefaultDataSource.Factory(this, http))
     }
 
     private fun initializePlayer() {

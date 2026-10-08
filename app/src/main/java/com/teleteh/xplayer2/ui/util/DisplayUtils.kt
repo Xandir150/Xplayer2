@@ -12,6 +12,16 @@ import android.content.pm.PackageManager
 object DisplayUtils {
     private const val ULTRAWIDE_RATIO = 3.2f // ~32:10..32:9
 
+    /**
+     * True when the device's own screen is already the 3D panel. This is the case for companion
+     * devices (Pocket TV and similar) whose only display is the glasses: they have no second
+     * display and no phone, so a pair in 3D mode shows up as a 32:9 default display.
+     */
+    fun isPrimaryUltraWide(context: Context): Boolean {
+        val m = context.resources.displayMetrics
+        return m.heightPixels > 0 && m.widthPixels.toFloat() / m.heightPixels >= ULTRAWIDE_RATIO
+    }
+
     fun findUltraWideExternalDisplay(context: Context): Display? {
         val dm = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         // Prefer presentation displays

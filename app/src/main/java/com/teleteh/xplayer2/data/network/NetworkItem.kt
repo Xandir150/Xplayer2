@@ -6,6 +6,17 @@ sealed class NetworkItem {
         val uri: String
     ) : NetworkItem()
 
+    /** A folder or file inside an SMB share being browsed. */
+    data class SmbEntryItem(
+        val title: String,
+        val uri: String,
+        val isDirectory: Boolean,
+        val size: Long
+    ) : NetworkItem()
+
+    /** Row that goes one level up while browsing an SMB share. */
+    object SmbUp : NetworkItem()
+
     data class DlnaDevice(
         val friendlyName: String,
         val location: String,

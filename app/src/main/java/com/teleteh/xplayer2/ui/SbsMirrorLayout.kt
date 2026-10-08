@@ -30,6 +30,11 @@ class SbsMirrorLayout @JvmOverloads constructor(
 
     override fun onFinishInflate() {
         super.onFinishInflate()
+        attachOverlay()
+    }
+
+    /** Adds the mirror overlay. Inflation does it; code that builds this layout calls it once the content is in. */
+    fun attachOverlay() {
         if (overlay == null) {
             overlay = MirrorOverlayView(context)
             addView(overlay, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))

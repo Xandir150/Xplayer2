@@ -783,6 +783,10 @@ class MainActivity : AppCompatActivity() {
                 (if (GlassesProtocol.is3DMode(glasses.lastMode())) "3D" else "2D")
             else GlassesProtocol.shortModeName(glasses.lastMode())
             tv.visibility = View.VISIBLE
+        } else if (DisplayUtils.isPrimaryUltraWide(this)) {
+            // No control channel, but the screen itself is 32:9: the glasses are in 3D mode.
+            tv.text = "3D"
+            tv.visibility = View.VISIBLE
         } else {
             tv.visibility = View.GONE
         }
@@ -825,9 +829,12 @@ class MainActivity : AppCompatActivity() {
                 return
             }
             GlassesController.ConnectionState.Disconnected -> {
-                AlertDialog.Builder(this)
+                // A companion device (Pocket TV and similar) has the glasses as its own screen and
+                // may expose no USB control channel for them, so "not found" would be misleading.
+                val companion = TvFocus.isTelevision(this) || DisplayUtils.isPrimaryUltraWide(this)
+                com.teleteh.xplayer2.ui.Sbs3dDialog.builder(this)
                     .setTitle(R.string.glasses_mode_title)
-                    .setMessage(R.string.glasses_not_connected)
+                    .setMessage(if (companion) R.string.glasses_not_connected_companion else R.string.glasses_not_connected)
                     .setPositiveButton(android.R.string.ok, null)
                     .show()
                 return
@@ -843,7 +850,7 @@ class MainActivity : AppCompatActivity() {
             val message = if (glasses.currentBrand() == GlassesController.Brand.RAYNEO)
                 getString(R.string.glasses_rayneo_manual)
             else getString(R.string.glasses_brand_unsupported, brand)
-            AlertDialog.Builder(this)
+            com.teleteh.xplayer2.ui.Sbs3dDialog.builder(this)
                 .setTitle("$brand $model".trim())
                 .setMessage(message)
                 .setPositiveButton(android.R.string.ok, null)
@@ -878,7 +885,7 @@ class MainActivity : AppCompatActivity() {
         // Title shows the CURRENT mode; the list items just send commands — no per-item selection
         // dots (some glasses lack certain modes, and we don't keep a remembered selection any more).
         val currentLabel = items.firstOrNull { it.first == glasses.lastMode() }?.second
-        AlertDialog.Builder(this)
+        com.teleteh.xplayer2.ui.Sbs3dDialog.builder(this)
             .setTitle(currentLabel?.let { getString(R.string.glasses_mode_current, it) }
                 ?: getString(R.string.glasses_mode_title))
             .setItems(labels) { dialog, which ->

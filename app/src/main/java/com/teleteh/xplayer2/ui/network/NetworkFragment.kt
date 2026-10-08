@@ -27,6 +27,9 @@ import com.teleteh.xplayer2.R
 import com.teleteh.xplayer2.data.network.DlnaBrowser
 import com.teleteh.xplayer2.data.network.DlnaDiscovery
 import com.teleteh.xplayer2.data.network.NetworkItem
+import com.teleteh.xplayer2.data.network.SmbClient
+import com.teleteh.xplayer2.data.network.SmbCredentials
+import com.teleteh.xplayer2.data.network.SmbLoginRequired
 import com.teleteh.xplayer2.data.network.SmbStorage
 import com.teleteh.xplayer2.data.network.WebSourceStore
 import com.teleteh.xplayer2.data.network.WebSourceType
@@ -37,6 +40,8 @@ import com.teleteh.xplayer2.ui.YaDiskActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import com.teleteh.xplayer2.util.WebSourceClassifier
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class NetworkFragment : Fragment(R.layout.fragment_network) {
 
@@ -51,6 +56,9 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
     private var currentDlnaControlUrl: String? = null
     private var currentDlnaDeviceLocation: String? = null
     private val dlnaBackStack = ArrayDeque<String>() // container IDs
+    private val smbClient by lazy { SmbClient(requireContext()) }
+    private var currentSmbUri: String? = null
+    private val smbBackStack = ArrayDeque<String>() // parent folder URIs
     private val discoveredDevices = mutableListOf<NetworkItem.DlnaDevice>()
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -201,7 +209,9 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
 
         // Back navigation within DLNA
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner) {
-            if (currentDlnaControlUrl != null) {
+            if (currentSmbUri != null) {
+                smbUp()
+            } else if (currentDlnaControlUrl != null) {
                 val control = currentDlnaControlUrl
                 if (control != null && dlnaBackStack.isNotEmpty()) {
                     val parentId = dlnaBackStack.removeLast()
@@ -229,8 +239,8 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
         // A web source (YaDisk folder, VK playlist/group) can be saved while we're away — notably
         // YaDiskActivity persists a folder only AFTER it confirms the listing, i.e. after we've
         // already returned from tryOpen(). Rebuild on return so the new row shows up. Skip while
-        // browsing a DLNA device so we don't drop out of that view.
-        if (currentDlnaControlUrl == null) {
+        // browsing a DLNA device or an SMB share so we don't drop out of that view.
+        if (currentDlnaControlUrl == null && currentSmbUri == null) {
             rebuildInitialList()
         }
     }
@@ -243,8 +253,19 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
     private fun onItemClick(item: NetworkItem) {
         when (item) {
             is NetworkItem.SmbShare -> {
-                // For now, just copy URI to URL field so user can try open (later: SMB browser)
-                view?.findViewById<EditText>(R.id.etUrl)?.setText(item.uri)
+                smbBackStack.clear()
+                browseSmb(item.uri)
+            }
+
+            is NetworkItem.SmbUp -> smbUp()
+
+            is NetworkItem.SmbEntryItem -> {
+                if (item.isDirectory) {
+                    currentSmbUri?.let { smbBackStack.addLast(it) }
+                    browseSmb(item.uri)
+                } else {
+                    playMediaUrl(item.uri, item.title)
+                }
             }
 
             is NetworkItem.DlnaUp -> {
@@ -320,38 +341,117 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
         rebuildInitialList()
     }
 
-    private fun showAddSmbDialog() {
+    /** A vertical form of labelled text fields; returns the container and the fields in order. */
+    private fun smbForm(vararg specs: Pair<Int, Int>): Pair<View, List<EditText>> {
         val ctx = requireContext()
+        val pad = (16 * resources.displayMetrics.density).toInt()
         val container = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(32, 16, 32, 0)
+            setPadding(pad, pad / 2, pad, 0)
         }
-        val etName = EditText(ctx).apply {
-            hint = getString(R.string.network_smb_name)
-            inputType = InputType.TYPE_CLASS_TEXT
+        val fields = specs.map { (hint, type) ->
+            EditText(ctx).apply {
+                setHint(hint)
+                inputType = type
+                setSingleLine()
+                container.addView(this)
+            }
         }
-        val etUri = EditText(ctx).apply {
-            hint = getString(R.string.network_smb_uri)
-            inputType = InputType.TYPE_TEXT_VARIATION_URI
-        }
-        container.addView(etName)
-        container.addView(etUri)
+        return android.widget.ScrollView(ctx).apply { addView(container) } to fields
+    }
 
-        AlertDialog.Builder(ctx)
+    private fun showAddSmbDialog() {
+        val ctx = requireContext()
+        val text = InputType.TYPE_CLASS_TEXT
+        val (form, f) = smbForm(
+            R.string.network_smb_name to text,
+            R.string.network_smb_uri to InputType.TYPE_TEXT_VARIATION_URI,
+            R.string.network_smb_user to text,
+            R.string.network_smb_password to (text or InputType.TYPE_TEXT_VARIATION_PASSWORD),
+            R.string.network_smb_domain to text,
+        )
+        com.teleteh.xplayer2.ui.Sbs3dDialog.builder(ctx)
             .setTitle(R.string.network_add_share)
-            .setView(container)
+            .setView(form)
             .setNegativeButton(R.string.common_cancel, null)
             .setPositiveButton(R.string.common_add) { _, _ ->
-                val name = etName.text?.toString()?.trim().orEmpty()
-                val uri = etUri.text?.toString()?.trim().orEmpty()
+                val name = f[0].text?.toString()?.trim().orEmpty()
+                val uri = f[1].text?.toString()?.trim().orEmpty()
                 if (name.isBlank() || !uri.startsWith("smb://", true)) {
                     Toast.makeText(ctx, R.string.error_invalid_input, Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 smbStorage.addOrUpdate(name, uri)
+                val host = SmbStorage.hostOf(uri)
+                val user = f[2].text?.toString()?.trim().orEmpty()
+                if (host != null && user.isNotEmpty()) {
+                    smbStorage.saveCredentials(
+                        host,
+                        SmbCredentials(user, f[3].text?.toString().orEmpty(), f[4].text?.toString()?.trim().orEmpty())
+                    )
+                }
                 reloadShares()
             }
             .show()
+    }
+
+    /** Ask for a login for [host], save it, and call [retry]. */
+    private fun promptSmbLogin(host: String, retry: () -> Unit) {
+        val text = InputType.TYPE_CLASS_TEXT
+        val (form, f) = smbForm(
+            R.string.network_smb_user to text,
+            R.string.network_smb_password to (text or InputType.TYPE_TEXT_VARIATION_PASSWORD),
+            R.string.network_smb_domain to text,
+        )
+        val saved = smbStorage.credentialsFor(host)
+        f[0].setText(saved.user)
+        f[2].setText(saved.domain)
+        com.teleteh.xplayer2.ui.Sbs3dDialog.builder(requireContext())
+            .setTitle(getString(R.string.smb_login_title, host))
+            .setView(form)
+            .setNegativeButton(R.string.common_cancel, null)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                smbStorage.saveCredentials(
+                    host,
+                    SmbCredentials(
+                        f[0].text?.toString()?.trim().orEmpty(),
+                        f[1].text?.toString().orEmpty(),
+                        f[2].text?.toString()?.trim().orEmpty()
+                    )
+                )
+                retry()
+            }
+            .show()
+    }
+
+    private fun browseSmb(uri: String) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val entries = withContext(Dispatchers.IO) { smbClient.list(uri) }
+                currentSmbUri = uri
+                val rows = mutableListOf<NetworkItem>(NetworkItem.SmbUp)
+                entries.filter { it.isDirectory || SmbClient.isMedia(it.name) }
+                    .mapTo(rows) { NetworkItem.SmbEntryItem(it.name, it.uri, it.isDirectory, it.size) }
+                items.clear()
+                items.addAll(rows)
+                adapter.submitList(items.toList())
+            } catch (e: SmbLoginRequired) {
+                // Stay where we were; the retry re-enters this folder with the new login.
+                promptSmbLogin(e.host) { browseSmb(uri) }
+            } catch (t: Throwable) {
+                if (smbBackStack.isNotEmpty() && currentSmbUri != null) smbBackStack.removeLast()
+                Toast.makeText(requireContext(), getString(R.string.smb_open_failed, t.message ?: t.javaClass.simpleName), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun smbUp() {
+        if (smbBackStack.isNotEmpty()) {
+            browseSmb(smbBackStack.removeLast())
+        } else {
+            currentSmbUri = null
+            rebuildInitialList()
+        }
     }
 
     private fun startDiscovery() {
@@ -364,7 +464,7 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
                 discoveredDevices.add(device)
                 // Only update list if we are not browsing a DLNA device. Rebuild (rather than a bare
                 // append) so the order stays SMB + DLNA, then web sources at the end.
-                if (currentDlnaControlUrl == null) {
+                if (currentDlnaControlUrl == null && currentSmbUri == null) {
                     rebuildInitialList()
                 }
             }
@@ -372,6 +472,8 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
     }
 
     private fun rebuildInitialList() {
+        currentSmbUri = null
+        smbBackStack.clear()
         // Order: SMB shares + discovered DLNA devices, remembered web sources appended at the end.
         // PC Link used to be pinned to the top here as a static row; it has its own tab now
         // (PC-Mirror), which is both the way in and the remote for a running session — so this

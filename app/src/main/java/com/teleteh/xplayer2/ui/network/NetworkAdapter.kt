@@ -27,6 +27,7 @@ class NetworkAdapter(
 ) : ListAdapter<NetworkItem, NetworkAdapter.VH>(DIFF) {
 
     companion object {
+        private val AUDIO_EXT = setOf("mp3", "flac", "m4a", "aac", "ogg", "opus", "wav")
         private val DIFF = object : DiffUtil.ItemCallback<NetworkItem>() {
             override fun areItemsTheSame(oldItem: NetworkItem, newItem: NetworkItem): Boolean {
                 return when {
@@ -39,6 +40,8 @@ class NetworkAdapter(
                         oldItem.url == newItem.url
 
                     oldItem is NetworkItem.DlnaUp && newItem is NetworkItem.DlnaUp -> true
+                    oldItem is NetworkItem.SmbUp && newItem is NetworkItem.SmbUp -> true
+                    oldItem is NetworkItem.SmbEntryItem && newItem is NetworkItem.SmbEntryItem -> oldItem.uri == newItem.uri
                     oldItem is NetworkItem.WebSource && newItem is NetworkItem.WebSource -> oldItem.url == newItem.url
                     else -> false
                 }
@@ -124,6 +127,30 @@ class NetworkAdapter(
                     iconBg.setImageResource(R.drawable.bg_circle_smb)
                     icon.setImageResource(R.drawable.ic_smb_24)
                     deleteButton?.visibility = View.VISIBLE
+                }
+
+                is NetworkItem.SmbUp -> {
+                    title.text = "…"
+                    sub.text = sub.context.getString(R.string.dlna_up_subtitle)
+                    iconBg.setImageResource(R.drawable.bg_circle_smb)
+                    icon.setImageResource(R.drawable.ic_folder_24)
+                    deleteButton?.visibility = View.GONE
+                }
+
+                is NetworkItem.SmbEntryItem -> {
+                    title.text = item.title
+                    sub.text = if (item.isDirectory) sub.context.getString(R.string.dlna_folder_subtitle)
+                    else android.text.format.Formatter.formatShortFileSize(sub.context, item.size)
+                    iconBg.setImageResource(R.drawable.bg_circle_smb)
+                    icon.dispose()
+                    icon.setImageResource(
+                        when {
+                            item.isDirectory -> R.drawable.ic_folder_24
+                            item.title.substringAfterLast('.', "").lowercase() in AUDIO_EXT -> R.drawable.ic_audio_24
+                            else -> R.drawable.ic_video_24
+                        }
+                    )
+                    deleteButton?.visibility = View.GONE
                 }
 
                 is NetworkItem.DlnaDevice -> {
