@@ -122,10 +122,20 @@ class PcLinkPairingStore internal constructor(
      */
     @Synchronized
     fun identity(): PcLinkPairingCrypto.Identity {
-        val stored = identityBacking.get(KEY_SECRET_KEY)
-            ?.let { cipher.open(it) }
-            ?.let { PcLinkPairingCrypto.identityFromPrivateKey(it) }
-        if (stored != null) return stored
+        val sealed = identityBacking.get(KEY_SECRET_KEY)
+        // A record that exists but will not open is usually a transient Keystore error, not a lost
+        // key. Replacing it on the first miss would change this phone's fingerprint and make every
+        // PC answer `unknown_client`, so retry a few times before giving up on it. A key that is
+        // really gone (restored backup, wiped Keystore) never opens, and then a fresh identity is
+        // the only way forward.
+        if (sealed != null) {
+            repeat(IDENTITY_OPEN_ATTEMPTS) { attempt ->
+                cipher.open(sealed)?.let { PcLinkPairingCrypto.identityFromPrivateKey(it) }
+                    ?.let { return it }
+                if (attempt < IDENTITY_OPEN_ATTEMPTS - 1) Thread.sleep(IDENTITY_OPEN_RETRY_MS)
+            }
+            Log.w(TAG, "Stored identity did not open after $IDENTITY_OPEN_ATTEMPTS attempts; replacing it")
+        }
 
         val fresh = PcLinkPairingCrypto.generateIdentity()
         identityBacking.put(KEY_SECRET_KEY, cipher.seal(fresh.privateKey))
@@ -416,6 +426,8 @@ class PcLinkPairingStore internal constructor(
         internal const val PREFS_IDENTITY = "pc_link_identity"
         internal const val PREFS_PAIRINGS = "pc_link_pairings"
         internal const val KEY_SECRET_KEY = "secretKey"
+        private const val IDENTITY_OPEN_ATTEMPTS = 3
+        private const val IDENTITY_OPEN_RETRY_MS = 150L
 
         internal const val FIELD_NAME = "name"
         internal const val FIELD_LTK = "ltk"

@@ -698,7 +698,8 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         val incomingUri = sourceFromIntent(intent)
-        val hasPcHost = !intent.getStringExtra(PcConnectActivity.EXTRA_PCLINK_HOST).isNullOrBlank()
+        val hasPcHost = InternalLaunch.isInternal(intent) &&
+            !intent.getStringExtra(PcConnectActivity.EXTRA_PCLINK_HOST).isNullOrBlank()
         if (incomingUri == null && !hasPcHost) {
             showRemoteControlFront()
             return
@@ -765,7 +766,9 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
     private fun loadFromIntent(intent: Intent?) {
         // PC Link hands us a host instead of a URI. Checked first: such an intent carries no data
         // URI at all, which everything below would read as "nothing to play" and finish().
-        val pcHost = intent?.getStringExtra(PcConnectActivity.EXTRA_PCLINK_HOST)?.takeIf { it.isNotBlank() }
+        // Exported activity: the host is honoured only from an intent this app built (see InternalLaunch).
+        val pcHost = intent?.takeIf { InternalLaunch.isInternal(it) }
+            ?.getStringExtra(PcConnectActivity.EXTRA_PCLINK_HOST)?.takeIf { it.isNotBlank() }
         if (pcHost != null) {
             startPcLink(intent, pcHost)
             return
@@ -1495,6 +1498,12 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
         PcLinkSession.unregister(this)
         saveProgress()
         exitPcLink()
+        // A Presentation has no activity token, so the system does not remove it with the activity:
+        // on Android 12+ onStop no longer dismisses it, and without this a finished or recreated
+        // activity leaves its last frame frozen on the glasses (or a second one stacked on top).
+        presentation?.let { runCatching { it.dismiss() } }
+        presentation = null
+        presentationSurface = null
         if (lazy3dEnabled) stopLazy3d()
         unregisterDisplayListener()
         getSystemService(android.media.AudioManager::class.java)
@@ -2036,6 +2045,10 @@ class PlayerActivity : AppCompatActivity(), GlassesStage.Occupant, PcLinkSession
 
         // Create Presentation and route video there
         val pres = ExternalPlayerPresentation(this, ext, wantWorldFixed, hostsExoPlayer = !isPcLinkMode) { surface ->
+            // The GL thread reports asynchronously, so this can land after the presentation was
+            // dismissed (display removed, show() failed). Acting then would point the player at a
+            // dead surface, or clear the local one dismissPresentation() just restored.
+            if (presentation == null) return@ExternalPlayerPresentation
             presentationSurface = surface
             if (isPcLinkMode) {
                 // PC Link has no ExoPlayer to re-target: the decoder takes the new surface (and

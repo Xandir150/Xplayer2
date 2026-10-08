@@ -34,6 +34,7 @@ import com.teleteh.xplayer2.data.network.PcLinkDiscovery
 import com.teleteh.xplayer2.data.network.PcLinkPairingStore
 import com.teleteh.xplayer2.data.network.PcLinkPhoneResponder
 import com.teleteh.xplayer2.data.network.PcLinkServer
+import com.teleteh.xplayer2.player.InternalLaunch
 import com.teleteh.xplayer2.player.PlayerActivity
 import com.teleteh.xplayer2.ui.util.DisplayUtils
 import kotlinx.coroutines.Dispatchers
@@ -707,6 +708,8 @@ class PcConnectActivity : AppCompatActivity() {
             return
         }
         val intent = Intent(this, PlayerActivity::class.java).apply {
+            // PlayerActivity is exported; it honours the host only from an intent marked as ours.
+            InternalLaunch.mark(this)
             putExtra(EXTRA_PCLINK_HOST, server.host)
             putExtra(EXTRA_PCLINK_CONTROL_PORT, server.controlPort)
             putExtra(EXTRA_PCLINK_VIDEO_PORT, server.videoPort)

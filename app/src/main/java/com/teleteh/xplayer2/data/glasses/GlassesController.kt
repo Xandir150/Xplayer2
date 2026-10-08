@@ -502,8 +502,10 @@ class GlassesController(private val appContext: Context) {
 
     /** Fire the system USB-permission prompt for [dev]; the grant comes back to [receiver]. */
     private fun requestUsbPermission(dev: UsbDevice) {
+        // Must be mutable on 31+: the system fills in EXTRA_DEVICE / EXTRA_PERMISSION_GRANTED
+        // when the user answers the dialog. The intent is explicit (setPackage), so this is safe.
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         else PendingIntent.FLAG_UPDATE_CURRENT
         val pi = PendingIntent.getBroadcast(
             appContext, 0,
