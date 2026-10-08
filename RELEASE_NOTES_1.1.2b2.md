@@ -20,6 +20,11 @@
 - The glasses button now explains that these glasses have no USB control channel.
 - On a 32:9 screen the button shows "3D".
 
+## RayNeo
+
+- RayNeo GT is supported (2D/3D from the app). It is not tested on a real GT yet.
+- RayNeo Air 4 Pro uses the same entry as the Air 3s Pro.
+
 ## Not fixed yet
 
 - Subtitles in 3D may still break. We need a description of the problem to fix it.

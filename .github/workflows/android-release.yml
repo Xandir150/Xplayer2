@@ -26,6 +26,12 @@ jobs:
           java-version: '21'
           cache: 'gradle'
 
+      - name: Use the installed JDK for the Gradle daemon
+        # gradle/gradle-daemon-jvm.properties asks for a JetBrains JDK 21 that Gradle downloads from
+        # foojay on every run. That download fails on the runners at times. The Temurin 21 set up
+        # above builds the same code, so skip the requirement here (local builds keep it).
+        run: rm -f gradle/gradle-daemon-jvm.properties
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
