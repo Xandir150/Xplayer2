@@ -14,11 +14,21 @@ import java.nio.charset.Charset
 import java.util.Locale
 
 class DlnaDiscovery {
-    fun discover(scope: CoroutineScope, onDevice: (NetworkItem.DlnaDevice) -> Unit) {
+    /**
+     * Searches for [WINDOW_MS], reporting each device once through [onDevice] (main thread).
+     * [onSearchEnded] runs on the search thread when the listening window closes, however it ends,
+     * so the caller can drop the multicast lock the moment replies can no longer arrive.
+     */
+    fun discover(
+        scope: CoroutineScope,
+        onSearchEnded: () -> Unit = {},
+        onDevice: (NetworkItem.DlnaDevice) -> Unit
+    ) {
         scope.launch(Dispatchers.IO) {
             val socket = try {
                 DatagramSocket().apply { soTimeout = 2000 }
             } catch (_: Exception) {
+                onSearchEnded()
                 return@launch
             }
             try {
@@ -34,7 +44,14 @@ class DlnaDiscovery {
                 val buf = ByteArray(8192)
                 val seen = HashSet<String>()
                 val start = System.currentTimeMillis()
-                while (System.currentTimeMillis() - start < 5000) {
+                var resent = false
+                while (System.currentTimeMillis() - start < WINDOW_MS) {
+                    // UDP has no retry, and one lost datagram otherwise means a device that never
+                    // shows up. A second search mid-window is cheap; `seen` filters the repeats.
+                    if (!resent && System.currentTimeMillis() - start >= RESEND_AFTER_MS) {
+                        resent = true
+                        try { socket.send(packet) } catch (_: Exception) { }
+                    }
                     try {
                         val resp = DatagramPacket(buf, buf.size)
                         socket.receive(resp)
@@ -68,8 +85,14 @@ class DlnaDiscovery {
                 // ignore
             } finally {
                 try { socket.close() } catch (_: Exception) { }
+                onSearchEnded()
             }
         }
+    }
+
+    private companion object {
+        const val WINDOW_MS = 5000L
+        const val RESEND_AFTER_MS = 1500L
     }
 
     private fun parseHeaders(raw: String): Map<String, String> {

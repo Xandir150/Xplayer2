@@ -117,6 +117,7 @@
     <string name="network_open_failed">Failed to open: %1$s</string>
     <string name="dlna_not_found">DLNA: ContentDirectory not found</string>
     <string name="dlna_browse_failed">DLNA browse failed: %1$s</string>
+    <string name="dlna_list_truncated">Folder is too large; showing the first entries only</string>
 
     <!-- PC Link (PC -> glasses desktop streaming) -->
     <string name="pclink_title">PC Link</string>

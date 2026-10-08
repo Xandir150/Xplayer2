@@ -105,6 +105,7 @@
     <string name="network_open_failed">Не удалось открыть: %1$s</string>
     <string name="dlna_not_found">DLNA: ContentDirectory не найден</string>
     <string name="dlna_browse_failed">Ошибка DLNA browse: %1$s</string>
+    <string name="dlna_list_truncated">Папка слишком большая, показаны только первые записи</string>
 
     <!-- PC Link (стриминг рабочего стола ПК в очки) -->
     <string name="pclink_title">PC Link</string>

@@ -214,10 +214,7 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
             } else if (currentDlnaControlUrl != null) {
                 val control = currentDlnaControlUrl
                 if (control != null && dlnaBackStack.isNotEmpty()) {
-                    val parentId = dlnaBackStack.removeLast()
-                    viewLifecycleOwner.lifecycleScope.launch {
-                        browseAndShow(control, parentId)
-                    }
+                    dlnaUp(control)
                 } else {
                     // Exit DLNA browsing: restore initial list
                     currentDlnaControlUrl = null
@@ -239,6 +236,12 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
 
     override fun onResume() {
         super.onResume()
+        // The search runs once per view otherwise, so a lost datagram or a device switched on later
+        // would stay invisible until the screen is rebuilt. Look again when the tab comes back,
+        // unless the last search was moments ago (onViewCreated starts one just before this runs).
+        if (android.os.SystemClock.elapsedRealtime() - lastDiscoveryAt > REDISCOVERY_MIN_INTERVAL_MS) {
+            startDiscovery()
+        }
         // A web source (YaDisk folder, VK playlist/group) can be saved while we're away — notably
         // YaDiskActivity persists a folder only AFTER it confirms the listing, i.e. after we've
         // already returned from tryOpen(). Rebuild on return so the new row shows up. Skip while
@@ -274,10 +277,7 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
             is NetworkItem.DlnaUp -> {
                 val control = currentDlnaControlUrl
                 if (control != null && dlnaBackStack.isNotEmpty()) {
-                    val parentId = dlnaBackStack.removeLast()
-                    viewLifecycleOwner.lifecycleScope.launch {
-                        browseAndShow(control, parentId)
-                    }
+                    dlnaUp(control)
                 } else {
                     // No parent – exit DLNA to device list
                     currentDlnaControlUrl = null
@@ -457,9 +457,20 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
         }
     }
 
+    @Volatile private var discovering = false
+    private var lastDiscoveryAt = 0L
+
     private fun startDiscovery() {
+        if (discovering) return
+        discovering = true
+        lastDiscoveryAt = android.os.SystemClock.elapsedRealtime()
         acquireMulticast()
-        discovery.discover(viewLifecycleOwner.lifecycleScope) { device ->
+        // The lock is only needed while replies can arrive; hold it for the search window and no
+        // longer (it keeps the Wi-Fi radio out of its multicast-filtering power save).
+        discovery.discover(viewLifecycleOwner.lifecycleScope, onSearchEnded = {
+            releaseMulticast()
+            discovering = false
+        }) { device ->
             // Append if not already present
             val exists =
                 discoveredDevices.any { it.location == device.location }
@@ -521,31 +532,63 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
                 ).show()
                 return@launch
             }
-            currentDlnaControlUrl = control
-            try {
-                browseAndShow(control, "0")
-            } catch (t: Throwable) {
-                Toast.makeText(
-                    requireContext(),
-                    getString(R.string.dlna_browse_failed, t.message),
-                    Toast.LENGTH_SHORT
-                ).show()
+            browseAndShow(control, "0") {
+                // Committed only once the root has loaded: a failed browse leaves the device list
+                // as it was instead of an empty "inside the device" view.
+                currentDlnaControlUrl = control
+                dlnaBackStack.clear()
             }
         }
     }
 
     private fun browseDlnaContainer(container: NetworkItem.DlnaContainer) {
         val control = currentDlnaControlUrl ?: container.controlUrl
-        // Push current id to backstack if present
-        dlnaBackStack.addLast(container.parentId ?: "0")
+        val here = container.parentId ?: "0"
         viewLifecycleOwner.lifecycleScope.launch {
-            browseAndShow(control, container.id)
+            // The current folder goes on the back stack only if the child opens; otherwise Up would
+            // lead to a folder we never left.
+            browseAndShow(control, container.id) { dlnaBackStack.addLast(here) }
         }
     }
 
-    private fun browseAndShow(controlUrl: String, objectId: String) {
+    /** Goes to the folder on top of the back stack; the stack is popped only if it loads. */
+    private fun dlnaUp(control: String) {
+        val parentId = dlnaBackStack.lastOrNull() ?: return
         viewLifecycleOwner.lifecycleScope.launch {
-            val res = dlnaBrowser.browse(controlUrl, objectId)
+            browseAndShow(control, parentId) { dlnaBackStack.removeLast() }
+        }
+    }
+
+    /** Bumped on every navigation, so an answer that arrives after a newer tap is dropped. */
+    private var dlnaNavSeq = 0
+
+    /**
+     * Browses [objectId] and shows it. [commit] updates the navigation state and runs only when this
+     * is still the latest navigation and the browse succeeded, right before the list is built.
+     * Errors are shown to the user, never turned into an empty folder.
+     */
+    private suspend fun browseAndShow(controlUrl: String, objectId: String, commit: () -> Unit) {
+        val seq = ++dlnaNavSeq
+        run {
+            val res = try {
+                dlnaBrowser.browse(controlUrl, objectId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (seq == dlnaNavSeq && isAdded) {
+                    Toast.makeText(
+                        requireContext(),
+                        getString(R.string.dlna_browse_failed, e.message ?: e.javaClass.simpleName),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                return
+            }
+            if (seq != dlnaNavSeq || !isAdded) return
+            commit()
+            if (res.truncated) {
+                Toast.makeText(requireContext(), R.string.dlna_list_truncated, Toast.LENGTH_SHORT).show()
+            }
             // Replace current DLNA list: show containers then items
             // Keep SMB shares at top
             val shares = smbStorage.getAll()
@@ -599,6 +642,7 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
         }
     }
 
+    @Synchronized
     private fun acquireMulticast() {
         if (multicastLock == null) {
             val wifi =
@@ -610,6 +654,7 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
         }
     }
 
+    @Synchronized
     private fun releaseMulticast() {
         multicastLock?.let {
             if (it.isHeld) it.release()
@@ -636,3 +681,6 @@ class NetworkFragment : Fragment(R.layout.fragment_network) {
         }
     }
 }
+
+/** A search this recent makes another one on resume pointless (the first is still listening). */
+private const val REDISCOVERY_MIN_INTERVAL_MS = 8_000L

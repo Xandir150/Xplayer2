@@ -104,6 +104,7 @@
     <string name="network_open_failed">无法打开：%1$s</string>
     <string name="dlna_not_found">DLNA：未找到ContentDirectory</string>
     <string name="dlna_browse_failed">DLNA浏览失败：%1$s</string>
+    <string name="dlna_list_truncated">文件夹过大，仅显示前面的条目</string>
 
     <!-- PC Link（将电脑投放到眼镜上） -->
     <string name="pclink_title">PC Link</string>

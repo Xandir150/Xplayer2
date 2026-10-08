@@ -9,6 +9,13 @@ import java.net.URL
 import java.util.regex.Pattern
 
 class DlnaBrowser {
+    companion object {
+        const val PAGE_SIZE = 200
+        /** Hard stops, so a server that never ends its paging cannot loop or exhaust memory. */
+        const val MAX_PAGES = 50
+        const val MAX_ENTRIES = 10_000
+    }
+
     suspend fun resolveContentDirectoryControlUrl(deviceDescriptionUrl: String): String? =
         withContext(Dispatchers.IO) {
             if (!NetLimits.isHttpUrl(deviceDescriptionUrl)) return@withContext null
@@ -41,10 +48,48 @@ class DlnaBrowser {
             }
         }
 
+    /**
+     * Lists the children of [objectId], following the server's paging until it has them all.
+     *
+     * A server returns at most the page we ask for, and `TotalMatches` says how many exist, so a
+     * single request silently drops everything past the first page of a big folder. Failures are
+     * thrown as [DlnaBrowseException] rather than turned into an empty list: an unreachable server,
+     * a SOAP fault and a truly empty folder must not look the same to the person looking at the
+     * screen. [BrowseResult.truncated] is set when the safety cap was hit.
+     */
+    @Throws(DlnaBrowseException::class)
     suspend fun browse(controlUrl: String, objectId: String): BrowseResult =
         withContext(Dispatchers.IO) {
-            val soapAction = "\"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\""
-            val envelope = """
+            if (!NetLimits.isHttpUrl(controlUrl)) throw DlnaBrowseException("Bad control URL")
+            val containers = mutableListOf<Container>()
+            val items = mutableListOf<Item>()
+            var start = 0
+            var pages = 0
+            var truncated = false
+            while (true) {
+                val page = browsePage(controlUrl, objectId, start, PAGE_SIZE)
+                containers += page.result.containers
+                items += page.result.items
+                start += page.numberReturned
+                pages++
+                val done = page.numberReturned == 0 ||
+                    (page.totalMatches in 1..start) ||
+                    // Some servers report TotalMatches=0 ("unknown"): stop on a short page.
+                    (page.totalMatches <= 0 && page.numberReturned < PAGE_SIZE)
+                if (done) break
+                if (pages >= MAX_PAGES || containers.size + items.size >= MAX_ENTRIES) {
+                    truncated = true
+                    break
+                }
+            }
+            BrowseResult(containers, items, truncated)
+        }
+
+    private class Page(val result: BrowseResult, val numberReturned: Int, val totalMatches: Int)
+
+    private fun browsePage(controlUrl: String, objectId: String, start: Int, count: Int): Page {
+        val soapAction = "\"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\""
+        val envelope = """
             <?xml version="1.0" encoding="utf-8"?>
             <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
               <s:Body>
@@ -52,46 +97,75 @@ class DlnaBrowser {
                   <ObjectID>${escapeXml(objectId)}</ObjectID>
                   <BrowseFlag>BrowseDirectChildren</BrowseFlag>
                   <Filter>*</Filter>
-                  <StartingIndex>0</StartingIndex>
-                  <RequestedCount>200</RequestedCount>
+                  <StartingIndex>$start</StartingIndex>
+                  <RequestedCount>$count</RequestedCount>
                   <SortCriteria></SortCriteria>
                 </u:Browse>
               </s:Body>
             </s:Envelope>
         """.trimIndent()
-            if (!NetLimits.isHttpUrl(controlUrl)) return@withContext BrowseResult(emptyList(), emptyList())
-            var conn: HttpURLConnection? = null
-            try {
-                val url = URL(controlUrl)
-                conn = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    connectTimeout = 8000
-                    readTimeout = 15000
-                    doOutput = true
-                    setRequestProperty("Content-Type", "text/xml; charset=utf-8")
-                    setRequestProperty("SOAPAction", soapAction)
-                }
-                conn.outputStream.use { os ->
-                    OutputStreamWriter(os, Charsets.UTF_8).use { it.write(envelope) }
-                }
-                val body = try {
-                    conn.inputStream.use { NetLimits.readTextLimited(it) }
-                } catch (e: Exception) {
-                    conn.errorStream?.use { runCatching { NetLimits.readTextLimited(it) }.getOrNull() }
-                        ?: return@withContext BrowseResult(emptyList(), emptyList())
-                }
-                parseDidlFromSoap(body)
-            } catch (_: Exception) {
-                BrowseResult(emptyList(), emptyList())
-            } finally {
-                try { conn?.disconnect() } catch (_: Exception) { }
+        var conn: HttpURLConnection? = null
+        try {
+            conn = (URL(controlUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 8000
+                readTimeout = 15000
+                doOutput = true
+                setRequestProperty("Content-Type", "text/xml; charset=utf-8")
+                setRequestProperty("SOAPAction", soapAction)
             }
+            conn.outputStream.use { os ->
+                OutputStreamWriter(os, Charsets.UTF_8).use { it.write(envelope) }
+            }
+            val code = conn.responseCode
+            if (code !in 200..299) {
+                // A SOAP fault arrives as HTTP 500 with the reason in the body.
+                val body = conn.errorStream?.use { runCatching { NetLimits.readTextLimited(it) }.getOrNull() }
+                throw DlnaBrowseException(faultText(body) ?: "HTTP $code")
+            }
+            val body = conn.inputStream.use { NetLimits.readTextLimited(it) }
+            if (!body.contains("<Result>")) {
+                throw DlnaBrowseException(faultText(body) ?: "No result in server answer")
+            }
+            return Page(
+                parseDidlFromSoap(body),
+                intTag(body, "NumberReturned") ?: 0,
+                intTag(body, "TotalMatches") ?: 0
+            )
+        } catch (e: DlnaBrowseException) {
+            throw e
+        } catch (e: java.io.IOException) {
+            throw DlnaBrowseException(e.message ?: e.javaClass.simpleName, e)
+        } finally {
+            try { conn?.disconnect() } catch (_: Exception) { }
         }
+    }
+
+    private fun intTag(soap: String, tag: String): Int? =
+        Regex("<(?:\\w+:)?$tag>\\s*(\\d+)\\s*</").find(soap)?.groupValues?.get(1)?.toIntOrNull()
+
+    /** The UPnP `errorDescription`/`errorCode` of a SOAP fault, or null if [body] has none. */
+    private fun faultText(body: String?): String? {
+        if (body == null) return null
+        val desc = Regex("<errorDescription>(.*?)</errorDescription>", RegexOption.DOT_MATCHES_ALL)
+            .find(body)?.groupValues?.get(1)?.trim()
+        val code = Regex("<errorCode>(.*?)</errorCode>").find(body)?.groupValues?.get(1)?.trim()
+        return when {
+            !desc.isNullOrEmpty() && !code.isNullOrEmpty() -> "$desc ($code)"
+            !desc.isNullOrEmpty() -> desc
+            !code.isNullOrEmpty() -> "UPnP error $code"
+            else -> null
+        }
+    }
 
     data class BrowseResult(
         val containers: List<Container>,
-        val items: List<Item>
+        val items: List<Item>,
+        /** True when the folder was cut off at the safety cap, not because it ended. */
+        val truncated: Boolean = false
     )
+
+    class DlnaBrowseException(message: String, cause: Throwable? = null) : java.io.IOException(message, cause)
 
     data class Container(val id: String, val parentId: String?, val title: String)
     data class Item(val title: String, val resUrl: String, val mime: String?)

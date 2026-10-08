@@ -104,6 +104,7 @@
     <string name="network_open_failed">No se pudo abrir: %1$s</string>
     <string name="dlna_not_found">DLNA: ContentDirectory no encontrado</string>
     <string name="dlna_browse_failed">Error DLNA browse: %1$s</string>
+    <string name="dlna_list_truncated">La carpeta es demasiado grande; se muestran solo las primeras entradas</string>
 
     <!-- PC Link (transmisión del escritorio del PC a las gafas) -->
     <string name="pclink_title">PC Link</string>
