@@ -67,6 +67,15 @@ object Sbs3dDialog {
             setNegativeButton(context.getString(resId), l)
         fun setOnDismissListener(l: DialogInterface.OnDismissListener?) = apply { onDismiss = l }
 
+        private fun hasEditText(v: View): Boolean =
+            v is android.widget.EditText || (v is ViewGroup && (0 until v.childCount).any { hasEditText(v.getChildAt(it)) })
+
+        private fun firstEditText(v: View): View? {
+            if (v is android.widget.EditText) return v
+            if (v is ViewGroup) for (i in 0 until v.childCount) firstEditText(v.getChildAt(i))?.let { return it }
+            return null
+        }
+
         fun show(): Dialog = if (isUltraWide(context)) showMirrored() else showSystem()
 
         private fun showSystem(): Dialog {
@@ -116,9 +125,18 @@ object Sbs3dDialog {
                 })
             }
             var firstFocus: View? = null
+            // A form with text fields gets the keyboard drawn into the dialog: the system one is
+            // a separate window that would stretch across both eyes.
+            var keyboard: SbsKeyboard? = null
             view?.let { v ->
                 (v.parent as? ViewGroup)?.removeView(v)
-                card.addView(v, LinearLayout.LayoutParams(-1, -2))
+                if (hasEditText(v)) {
+                    keyboard = SbsKeyboard(context).also { it.attachTo(v) }
+                    card.addView(v, LinearLayout.LayoutParams(-1, 0, 1f))
+                    card.addView(keyboard, LinearLayout.LayoutParams(-1, -2))
+                } else {
+                    card.addView(v, LinearLayout.LayoutParams(-1, -2))
+                }
             }
             items?.let { labels ->
                 val list = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
@@ -171,7 +189,11 @@ object Sbs3dDialog {
             val frame = FrameLayout(context)
             frame.addView(
                 card,
-                FrameLayout.LayoutParams((eyeWidth * 0.8f).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER)
+                FrameLayout.LayoutParams(
+                    (eyeWidth * 0.8f).toInt(),
+                    if (keyboard != null) (dm.heightPixels * 0.94f).toInt() else ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.CENTER
+                )
             )
             val mirror = SbsMirrorLayout(context)
             mirror.addView(frame, ViewGroup.LayoutParams(-1, -1))
@@ -184,7 +206,7 @@ object Sbs3dDialog {
             dialog.setCanceledOnTouchOutside(true)
             dialog.setOnDismissListener(onDismiss)
             dialog.show()
-            firstFocus?.requestFocus()
+            (firstFocus ?: view?.let { firstEditText(it) })?.requestFocus()
             return dialog
         }
     }
